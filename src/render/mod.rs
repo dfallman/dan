@@ -1,0 +1,271 @@
+use crossterm::{
+    cursor,
+    style::{self, Color, SetBackgroundColor, SetForegroundColor},
+    QueueableCommand,
+};
+use std::io::{self, Write};
+
+use crate::editor::Editor;
+
+/// Viewport dimensions, cached from the Editor.
+pub struct Viewport {
+    pub width: u16,
+    pub height: u16,
+}
+
+impl Viewport {
+    /// Build from the Editor's cached terminal size — no syscall.
+    pub fn from_editor(editor: &Editor) -> Self {
+        Self {
+            width: editor.terminal_width,
+            height: editor.terminal_height,
+        }
+    }
+
+    /// Height available for text (total height - status bar - help bar).
+    pub fn text_height(&self) -> u16 {
+        self.height.saturating_sub(2)
+    }
+}
+
+/// A reusable buffer of spaces for padding lines — avoids allocating
+/// a new `String` every time we need to pad.
+const PAD_CHUNK: &str = "                                                                                                                                                                                                                                                                ";
+
+/// Write `n` space characters by repeatedly printing from PAD_CHUNK.
+fn write_spaces<W: Write>(w: &mut W, n: usize) -> io::Result<()> {
+    let mut remaining = n;
+    while remaining > 0 {
+        let chunk = remaining.min(PAD_CHUNK.len());
+        w.queue(style::Print(&PAD_CHUNK[..chunk]))?;
+        remaining -= chunk;
+    }
+    Ok(())
+}
+
+/// Render the full editor frame to the terminal.
+pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
+    let vp = Viewport::from_editor(editor);
+    let text_height = vp.text_height() as usize;
+
+    // Adjust scroll to keep cursor visible
+    let cursor_line = editor.cursors.cursor().line;
+    if cursor_line < editor.scroll_y {
+        editor.scroll_y = cursor_line;
+    }
+    if cursor_line >= editor.scroll_y + text_height {
+        editor.scroll_y = cursor_line - text_height + 1;
+    }
+
+    w.queue(cursor::Hide)?;
+    w.queue(cursor::MoveTo(0, 0))?;
+
+    // -- Render text lines --
+    let line_count = editor.buffer().line_count();
+    let gutter_width = line_number_width(line_count);
+
+    // Get selection range for highlighting
+    let sel_range = editor.selection_range();
+
+    for row in 0..text_height {
+        let line_idx = editor.scroll_y + row;
+        w.queue(cursor::MoveTo(0, row as u16))?;
+
+        // Track how many columns we've written so we can space-pad the rest.
+        let mut cols_written: usize = 0;
+
+        if line_idx < line_count {
+            // Line number gutter (batch-printed as one string)
+            let line_num = format!("{:>width$} ", line_idx + 1, width = gutter_width);
+            cols_written += line_num.len();
+            w.queue(SetForegroundColor(Color::DarkGrey))?;
+            w.queue(style::Print(&line_num))?;
+            w.queue(SetForegroundColor(Color::Reset))?;
+
+            // Line text — iterate RopeSlice chars directly (zero-alloc)
+            let line_slice = editor.buffer().text.line_slice(line_idx);
+            let max_text_width = (vp.width as usize).saturating_sub(gutter_width + 1);
+            let line_start_pos = editor.buffer().text.line_to_char(line_idx);
+
+            let mut batch = String::new();
+            let mut in_sel = false;
+            let mut col = 0;
+
+            for ch in line_slice.chars() {
+                if col >= max_text_width {
+                    break;
+                }
+                if ch == '\n' || ch == '\r' {
+                    continue;
+                }
+
+                let char_pos = line_start_pos + col;
+                let want_sel = if let Some((sel_start, sel_end)) = sel_range {
+                    char_pos >= sel_start && char_pos < sel_end
+                } else {
+                    false
+                };
+
+                // If the selection state changes, flush the accumulated batch.
+                if want_sel != in_sel {
+                    if !batch.is_empty() {
+                        w.queue(style::Print(&batch))?;
+                        batch.clear();
+                    }
+                    if want_sel {
+                        w.queue(SetBackgroundColor(Color::Rgb {
+                            r: 70,
+                            g: 130,
+                            b: 180,
+                        }))?;
+                        w.queue(SetForegroundColor(Color::White))?;
+                    } else {
+                        w.queue(SetBackgroundColor(Color::Reset))?;
+                        w.queue(SetForegroundColor(Color::Reset))?;
+                    }
+                    in_sel = want_sel;
+                }
+
+                batch.push(ch);
+                col += 1;
+            }
+            // Flush remaining batch
+            if !batch.is_empty() {
+                w.queue(style::Print(&batch))?;
+            }
+            if in_sel {
+                w.queue(SetBackgroundColor(Color::Reset))?;
+                w.queue(SetForegroundColor(Color::Reset))?;
+            }
+            cols_written += col;
+        } else {
+            // Past end of file — show dimmed line number in gutter.
+            let line_num = format!("{:>width$} ", line_idx + 1, width = gutter_width);
+            cols_written += line_num.len();
+            w.queue(SetForegroundColor(Color::DarkGrey))?;
+            w.queue(style::Print(&line_num))?;
+            w.queue(SetForegroundColor(Color::Reset))?;
+        }
+
+        // Pad with spaces to overwrite any stale content — uses static buffer.
+        let remaining = (vp.width as usize).saturating_sub(cols_written);
+        if remaining > 0 {
+            write_spaces(w, remaining)?;
+        }
+    }
+
+    // -- Render status bar --
+    render_status_bar(editor, w, &vp, gutter_width)?;
+
+    // -- Render help bar (pico-style) --
+    render_help_bar(editor, w, &vp)?;
+
+    // -- Position the cursor --
+    let cursor_pos = editor.cursors.cursor();
+    let screen_y = cursor_pos.line.saturating_sub(editor.scroll_y) as u16;
+    let screen_x = (gutter_width + 1 + cursor_pos.col) as u16;
+    w.queue(cursor::MoveTo(screen_x, screen_y))?;
+    w.queue(cursor::Show)?;
+
+    // Pico-style: always use a steady bar cursor (like a normal text editor)
+    w.queue(cursor::SetCursorStyle::SteadyBlock)?;
+
+    w.flush()?;
+    Ok(())
+}
+
+/// Render the status bar.
+fn render_status_bar<W: Write>(
+    editor: &Editor,
+    w: &mut W,
+    vp: &Viewport,
+    _gutter_width: usize,
+) -> io::Result<()> {
+    let status_y = vp.height.saturating_sub(2);
+    w.queue(cursor::MoveTo(0, status_y))?;
+
+    // Mode indicator
+    let (r, g, b) = editor.mode.color();
+    w.queue(SetBackgroundColor(Color::Rgb { r, g, b }))?;
+    w.queue(SetForegroundColor(Color::Black))?;
+    w.queue(style::Print(format!(" {} ", editor.mode.label())))?;
+    w.queue(SetBackgroundColor(Color::DarkGrey))?;
+    w.queue(SetForegroundColor(Color::White))?;
+
+    // File name
+    let name = editor.buffer().display_name();
+    let dirty = if editor.buffer().dirty { " [+]" } else { "" };
+    w.queue(style::Print(format!(" {}{} ", name, dirty)))?;
+
+    // Status message (if any)
+    if let Some(ref msg) = editor.status_msg {
+        w.queue(SetForegroundColor(Color::Rgb {
+            r: 255,
+            g: 220,
+            b: 100,
+        }))?;
+        w.queue(style::Print(format!(" {} ", msg)))?;
+        w.queue(SetForegroundColor(Color::White))?;
+    }
+
+    // Right side: cursor position
+    let c = editor.cursors.cursor();
+    let right = format!(" Ln {}, Col {} ", c.line + 1, c.col + 1);
+    let used_approx = editor.mode.label().len() + 2 + name.len() + dirty.len() + 2 + 20;
+    let padding = (vp.width as usize).saturating_sub(used_approx + right.len());
+    write_spaces(w, padding)?;
+    w.queue(style::Print(&right))?;
+
+    w.queue(SetBackgroundColor(Color::Reset))?;
+    w.queue(SetForegroundColor(Color::Reset))?;
+
+    Ok(())
+}
+
+/// Render the pico-style help bar at the bottom of the screen.
+fn render_help_bar<W: Write>(
+    _editor: &Editor,
+    w: &mut W,
+    vp: &Viewport,
+) -> io::Result<()> {
+    let help_y = vp.height.saturating_sub(1);
+    w.queue(cursor::MoveTo(0, help_y))?;
+
+    // Pico/nano-style shortcut hints
+    let shortcuts = [
+        ("^S", "Save"),
+        ("^Q", "Quit"),
+        ("^Z", "Undo"),
+        ("^Y", "Redo"),
+        ("^C", "Copy"),
+        ("^X", "Cut"),
+        ("^V", "Paste"),
+        ("^F", "Find"),
+        ("^K", "Del Ln"),
+        ("^A", "Sel All"),
+    ];
+
+    for (key, label) in &shortcuts {
+        // Key in inverse video
+        w.queue(SetBackgroundColor(Color::White))?;
+        w.queue(SetForegroundColor(Color::Black))?;
+        w.queue(style::Print(key))?;
+        w.queue(SetBackgroundColor(Color::Reset))?;
+        w.queue(SetForegroundColor(Color::DarkGrey))?;
+        w.queue(style::Print(format!(" {} ", label)))?;
+    }
+
+    w.queue(SetForegroundColor(Color::Reset))?;
+    w.queue(SetBackgroundColor(Color::Reset))?;
+
+    Ok(())
+}
+
+/// Calculate the width needed for line numbers.
+fn line_number_width(total_lines: usize) -> usize {
+    if total_lines == 0 {
+        1
+    } else {
+        (total_lines as f64).log10().floor() as usize + 1
+    }
+}

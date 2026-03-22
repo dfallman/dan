@@ -1,0 +1,100 @@
+mod buffer;
+mod config;
+mod editor;
+mod input;
+mod render;
+mod syntax;
+mod utils;
+
+use crossterm::event::{self, Event};
+use crossterm::terminal::{self, EnterAlternateScreen, LeaveAlternateScreen};
+use crossterm::ExecutableCommand;
+
+use std::env;
+use std::io::{self, BufWriter};
+use std::path::Path;
+use std::time::Duration;
+
+use crate::editor::Editor;
+
+fn main() -> io::Result<()> {
+    let args: Vec<String> = env::args().collect();
+    let mut editor = Editor::new();
+
+    // Open file(s) from arguments
+    if args.len() > 1 {
+        let path = Path::new(&args[1]);
+        if path.exists() {
+            editor.open_file(path)?;
+        } else {
+            // Create a new buffer with the target path for saving
+            editor.buffer_mut().file_path = Some(path.to_path_buf());
+            editor.set_status(format!("[New File] {}", args[1]));
+        }
+    } else {
+        editor.set_status("dan — a text editor | Ctrl+Q to quit");
+    }
+
+    // Set up terminal
+    let stdout = io::stdout();
+    let mut writer = BufWriter::with_capacity(64 * 1024, stdout);
+    terminal::enable_raw_mode()?;
+    writer.get_mut().execute(EnterAlternateScreen)?;
+
+    // Enable bracketed paste so the terminal sends paste as a
+    // single Event::Paste(String) instead of individual key events.
+    writer.get_mut().execute(crossterm::event::EnableBracketedPaste)?;
+
+    // Main loop
+    let result = run_loop(&mut editor, &mut writer);
+
+    // Restore terminal
+    writer.get_mut().execute(crossterm::event::DisableBracketedPaste)?;
+    writer.get_mut().execute(LeaveAlternateScreen)?;
+    terminal::disable_raw_mode()?;
+
+    result
+}
+
+fn run_loop(editor: &mut Editor, writer: &mut BufWriter<io::Stdout>) -> io::Result<()> {
+    loop {
+        render::render(editor, writer)?;
+
+        if editor.should_quit {
+            break;
+        }
+
+        // Wait for the first event (blocking).
+        let evt = event::read()?;
+
+        if matches!(evt, Event::Key(_) | Event::Paste(_)) {
+            editor.clear_status();
+        }
+
+        // Handle resize events directly (not routed through Command).
+        if let Event::Resize(w, h) = evt {
+            editor.handle_resize(w, h);
+        }
+
+        let cmd = input::map_event(&evt);
+        editor.execute(cmd);
+
+        // Drain any additional buffered events without re-rendering.
+        // This collapses rapid bursts of key events (e.g. fast typing
+        // or unbatched paste in terminals that don't support bracketed
+        // paste) into a single render pass.
+        while event::poll(Duration::ZERO)? {
+            let evt = event::read()?;
+            if matches!(evt, Event::Key(_) | Event::Paste(_)) {
+                editor.clear_status();
+            }
+            if let Event::Resize(w, h) = evt {
+                editor.handle_resize(w, h);
+            }
+            let cmd = input::map_event(&evt);
+            editor.execute(cmd);
+        }
+    }
+
+    Ok(())
+}

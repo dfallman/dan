@@ -1,0 +1,12 @@
+[package]
+name = "dan"
+version = "0.1.0"
+edition = "2021"
+description = "A modal text editor"
+
+[dependencies]
+crossterm = "0.29"
+ropey = "1.6"
+serde = { version = "1.0", features = ["derive"] }
+dirs = "6.0"
+toml = "1.0"
