@@ -1,2 +1,2 @@
 # dan
-Dan is the friedly, familiar, and fast terminal editor
+Dan is your friendly, familiar, and fast terminal editor
