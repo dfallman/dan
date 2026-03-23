@@ -15,11 +15,25 @@ pub fn map_event(event: &Event) -> Command {
 fn map_key(key: &KeyEvent) -> Command {
     let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
     let shift = key.modifiers.contains(KeyModifiers::SHIFT);
+    let alt = key.modifiers.contains(KeyModifiers::ALT);
 
     // -- Ctrl+Shift shortcuts --
     if ctrl && shift {
         return match key.code {
             KeyCode::Char('c') | KeyCode::Char('C') => Command::Copy,
+            KeyCode::Left  => Command::SelectWordBackward,
+            KeyCode::Right => Command::SelectWordForward,
+            _ => Command::Noop,
+        };
+    }
+
+    // -- Alt+Shift shortcuts (selection by word / line) --
+    if alt && shift {
+        return match key.code {
+            KeyCode::Left  => Command::SelectWordBackward,
+            KeyCode::Right => Command::SelectWordForward,
+            KeyCode::Up    => Command::SelectUp,
+            KeyCode::Down  => Command::SelectDown,
             _ => Command::Noop,
         };
     }
@@ -44,6 +58,17 @@ fn map_key(key: &KeyEvent) -> Command {
             KeyCode::Char('k') => Command::DeleteLine,
             KeyCode::Char('d') => Command::DuplicateLineOrSelection,
             KeyCode::Char('h') => Command::ToggleHelp,
+            _ => Command::Noop,
+        };
+    }
+
+    // -- Alt/Option shortcuts (word jump + line swap) --
+    if alt {
+        return match key.code {
+            KeyCode::Left  => Command::MoveWordBackward,
+            KeyCode::Right => Command::MoveWordForward,
+            KeyCode::Up    => Command::SwapLineUp,
+            KeyCode::Down  => Command::SwapLineDown,
             _ => Command::Noop,
         };
     }
