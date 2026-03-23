@@ -12,6 +12,8 @@ use crate::editor::Editor;
 pub struct Viewport {
     pub width: u16,
     pub height: u16,
+    /// How many chrome rows at the bottom (status bar + optional help bar).
+    pub chrome_rows: u16,
 }
 
 impl Viewport {
@@ -20,15 +22,18 @@ impl Viewport {
         let (w, h) = terminal::size().unwrap_or((editor.terminal_width, editor.terminal_height));
         editor.terminal_width = w;
         editor.terminal_height = h;
+        // 1 row for the status bar, plus 1 more if help legend is shown
+        let chrome = if editor.show_help { 2 } else { 1 };
         Self {
             width: w,
             height: h,
+            chrome_rows: chrome,
         }
     }
 
-    /// Height available for text (total height - status bar - help bar).
+    /// Height available for text (total height minus chrome rows).
     pub fn text_height(&self) -> u16 {
-        self.height.saturating_sub(2)
+        self.height.saturating_sub(self.chrome_rows)
     }
 }
 
@@ -105,20 +110,23 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
             let line_slice = editor.buffer().text.line_slice(line_idx);
             let max_text_width = (vp.width as usize).saturating_sub(gutter_width + 1);
             let line_start_pos = editor.buffer().text.line_to_char(line_idx);
+            let tab_w = editor.config.tab_width;
 
             let mut batch = String::new();
             let mut in_sel = false;
-            let mut col = 0;
+            let mut vcol: usize = 0; // visual column
+            let mut char_idx: usize = 0; // char index within line
 
             for ch in line_slice.chars() {
-                if col >= max_text_width {
+                if vcol >= max_text_width {
                     break;
                 }
                 if ch == '\n' || ch == '\r' {
+                    char_idx += 1;
                     continue;
                 }
 
-                let char_pos = line_start_pos + col;
+                let char_pos = line_start_pos + char_idx;
                 let want_sel = if let Some((sel_start, sel_end)) = sel_range {
                     char_pos >= sel_start && char_pos < sel_end
                 } else {
@@ -145,8 +153,18 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
                     in_sel = want_sel;
                 }
 
-                batch.push(ch);
-                col += 1;
+                // Expand tabs to spaces for correct visual width
+                if ch == '\t' {
+                    let spaces = tab_w - (vcol % tab_w);
+                    for _ in 0..spaces.min(max_text_width - vcol) {
+                        batch.push(' ');
+                    }
+                    vcol += spaces;
+                } else {
+                    batch.push(ch);
+                    vcol += 1;
+                }
+                char_idx += 1;
             }
             // Flush remaining batch
             if !batch.is_empty() {
@@ -156,7 +174,7 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
                 w.queue(SetBackgroundColor(Color::Reset))?;
                 w.queue(SetForegroundColor(Color::Reset))?;
             }
-            cols_written += col;
+            cols_written += vcol;
         } else {
             // Past end of file — show line numbers in dim grey.
             let line_num = format!("{:>width$} ", line_idx + 1, width = gutter_width);
@@ -173,16 +191,37 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
         }
     }
 
-    // -- Render status bar --
-    render_status_bar(editor, w, &vp, gutter_width)?;
+    // -- Render status bar (always the row just after text) --
+    render_status_bar(editor, w, &vp)?;
 
-    // -- Render help bar (pico-style) --
-    render_help_bar(editor, w, &vp)?;
+    // -- Render help bar (only when toggled on with ^H) --
+    if editor.show_help {
+        render_help_bar(editor, w, &vp)?;
+    }
 
     // -- Position the cursor --
+    // Compute visual column by expanding tabs in the cursor's line.
     let cursor_pos = editor.cursors.cursor();
     let screen_y = cursor_pos.line.saturating_sub(editor.scroll_y) as u16;
-    let screen_x = (gutter_width + 1 + cursor_pos.col) as u16;
+    let tab_w = editor.config.tab_width;
+    let visual_col = if cursor_pos.line < line_count {
+        let line_slice = editor.buffer().text.line_slice(cursor_pos.line);
+        let mut vc: usize = 0;
+        for (i, ch) in line_slice.chars().enumerate() {
+            if i >= cursor_pos.col {
+                break;
+            }
+            if ch == '\t' {
+                vc += tab_w - (vc % tab_w);
+            } else {
+                vc += 1;
+            }
+        }
+        vc
+    } else {
+        cursor_pos.col
+    };
+    let screen_x = (gutter_width + 1 + visual_col) as u16;
     w.queue(cursor::MoveTo(screen_x, screen_y))?;
     w.queue(cursor::Show)?;
 
@@ -198,40 +237,44 @@ fn render_status_bar<W: Write>(
     editor: &Editor,
     w: &mut W,
     vp: &Viewport,
-    _gutter_width: usize,
 ) -> io::Result<()> {
-    let status_y = vp.height.saturating_sub(2);
+    let status_y = vp.height.saturating_sub(vp.chrome_rows);
     w.queue(cursor::MoveTo(0, status_y))?;
+
+    let width = vp.width as usize;
+    let mut used: usize = 0;
 
     // Mode indicator
     let (r, g, b) = editor.mode.color();
+    let mode_label = format!(" {} ", editor.mode.label());
     w.queue(SetBackgroundColor(Color::Rgb { r, g, b }))?;
     w.queue(SetForegroundColor(Color::Black))?;
-    w.queue(style::Print(format!(" {} ", editor.mode.label())))?;
-    w.queue(SetBackgroundColor(Color::DarkGrey))?;
-    w.queue(SetForegroundColor(Color::White))?;
+    w.queue(style::Print(&mode_label))?;
+    used += mode_label.len();
+
+    w.queue(SetBackgroundColor(Color::White))?;
+    w.queue(SetForegroundColor(Color::Black))?;
 
     // File name
     let name = editor.buffer().display_name();
     let dirty = if editor.buffer().dirty { " [+]" } else { "" };
-    w.queue(style::Print(format!(" {}{} ", name, dirty)))?;
+    let file_part = format!(" {}{} ", name, dirty);
+    w.queue(style::Print(&file_part))?;
+    used += file_part.len();
 
     // Status message (if any)
     if let Some(ref msg) = editor.status_msg {
-        w.queue(SetForegroundColor(Color::Rgb {
-            r: 255,
-            g: 220,
-            b: 100,
-        }))?;
-        w.queue(style::Print(format!(" {} ", msg)))?;
-        w.queue(SetForegroundColor(Color::White))?;
+        let msg_part = format!(" {} ", msg);
+        w.queue(SetForegroundColor(Color::Blue))?;
+        w.queue(style::Print(&msg_part))?;
+        w.queue(SetForegroundColor(Color::Black))?;
+        used += msg_part.len();
     }
 
-    // Right side: cursor position
+    // Right side: ^H Help toggle + cursor position
     let c = editor.cursors.cursor();
-    let right = format!(" Ln {}, Col {} ", c.line + 1, c.col + 1);
-    let used_approx = editor.mode.label().len() + 2 + name.len() + dirty.len() + 2 + 20;
-    let padding = (vp.width as usize).saturating_sub(used_approx + right.len());
+    let right = format!(" ^H Help  Ln {}, Col {} ", c.line + 1, c.col + 1);
+    let padding = width.saturating_sub(used + right.len());
     write_spaces(w, padding)?;
     w.queue(style::Print(&right))?;
 
@@ -262,8 +305,10 @@ fn render_help_bar<W: Write>(
         ("^F", "Find"),
         ("^K", "Del Ln"),
         ("^A", "Sel All"),
+        ("^H", "Help"),
     ];
 
+    let mut used: usize = 0;
     for (key, label) in &shortcuts {
         // Key in inverse video
         w.queue(SetBackgroundColor(Color::White))?;
@@ -271,7 +316,16 @@ fn render_help_bar<W: Write>(
         w.queue(style::Print(key))?;
         w.queue(SetBackgroundColor(Color::Reset))?;
         w.queue(SetForegroundColor(Color::DarkGrey))?;
-        w.queue(style::Print(format!(" {} ", label)))?;
+        let lbl = format!(" {} ", label);
+        w.queue(style::Print(&lbl))?;
+        used += key.len() + lbl.len();
+    }
+
+    // Pad rest of the line
+    let remaining = (vp.width as usize).saturating_sub(used);
+    if remaining > 0 {
+        w.queue(SetBackgroundColor(Color::Reset))?;
+        write_spaces(w, remaining)?;
     }
 
     w.queue(SetForegroundColor(Color::Reset))?;

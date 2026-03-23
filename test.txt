@@ -1,5 +1,5 @@
 // Core editor state — pico-style modeless editor.
-pub struct Editor {
+	pub struct Editor {
     // All open buffers.
     pub buffers: Vec<Buffer>,
     // Index of the active buffer.
