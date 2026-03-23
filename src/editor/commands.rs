@@ -55,5 +55,6 @@ pub enum Command {
     ForceQuit,
 
     // -- Misc --
+    ToggleHelp,
     Noop,
 }

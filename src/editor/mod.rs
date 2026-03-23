@@ -40,6 +40,8 @@ pub struct Editor {
     /// paste event, preventing double-insert on terminals that send
     /// both Event::Paste and Event::Key(Ctrl+V).
     suppress_next_paste: bool,
+    /// Whether the help legend bar is visible (toggled with ^H).
+    pub show_help: bool,
 }
 
 impl Editor {
@@ -59,6 +61,7 @@ impl Editor {
             terminal_width: tw,
             terminal_height: th,
             suppress_next_paste: false,
+            show_help: false,
         }
     }
 
@@ -264,15 +267,19 @@ impl Editor {
                 if self.has_selection() {
                     self.delete_selection_if_active();
                 } else {
+                    let c = self.cursors.cursor();
                     let pos = self.cursor_char_pos();
                     if pos > 0 {
-                        let c = self.cursors.cursor();
-                        self.buffer_mut().delete_char(pos - 1);
                         if c.col > 0 {
+                            // Deleting a char within the line — simple case
+                            self.buffer_mut().delete_char(pos - 1);
                             self.cursors.primary_mut().head.set_col(c.col - 1);
                         } else if c.line > 0 {
+                            // At column 0: deleting the newline at end of previous line
+                            // to join lines. Capture prev line length BEFORE the delete.
                             let prev_line = c.line - 1;
                             let prev_len = self.line_len_no_newline(prev_line);
+                            self.buffer_mut().delete_char(pos - 1);
                             self.cursors.set_cursor(prev_line, prev_len);
                         }
                     }
@@ -424,6 +431,10 @@ impl Editor {
             }
             Command::ForceQuit => {
                 self.should_quit = true;
+            }
+
+            Command::ToggleHelp => {
+                self.show_help = !self.show_help;
             }
 
             Command::Noop => {}
