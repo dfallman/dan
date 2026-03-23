@@ -10,3 +10,5 @@ ropey = "1.6"
 serde = { version = "1.0", features = ["derive"] }
 dirs = "6.0"
 toml = "1.0"
+unicode-width = "0.2"
+unicode-segmentation = "1.12"

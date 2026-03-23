@@ -7,6 +7,7 @@ use crossterm::{
 use std::io::{self, Write};
 
 use crate::editor::Editor;
+use crate::utils::char_width;
 
 /// Viewport dimensions, cached from the Editor.
 pub struct Viewport {
@@ -162,7 +163,7 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
                     vcol += spaces;
                 } else {
                     batch.push(ch);
-                    vcol += 1;
+                    vcol += char_width(ch, tab_w);
                 }
                 char_idx += 1;
             }
@@ -214,7 +215,7 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
             if ch == '\t' {
                 vc += tab_w - (vc % tab_w);
             } else {
-                vc += 1;
+                vc += char_width(ch, tab_w);
             }
         }
         vc
