@@ -21,7 +21,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             tab_width: 4,
-            expand_tab: true,
+            expand_tab: false,
             line_numbers: true,
             scroll_off: 5,
             theme: "default".to_string(),

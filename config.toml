@@ -1,0 +1,17 @@
+# dan editor configuration
+# Copy to ~/.config/dan/config.toml to customise.
+
+# Tab width in spaces.
+tab_width = 4
+
+# Expand tabs to spaces (true = spaces, false = literal tabs).
+expand_tab = false
+
+# Show line numbers in the gutter.
+line_numbers = true
+
+# Lines of padding to keep above/below the cursor when scrolling.
+scroll_off = 5
+
+# Color theme (currently only "default").
+theme = "default"

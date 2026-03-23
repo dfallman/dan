@@ -42,6 +42,7 @@ fn map_key(key: &KeyEvent) -> Command {
             KeyCode::Home      => Command::MoveBufferTop,
             KeyCode::End       => Command::MoveBufferBottom,
             KeyCode::Char('k') => Command::DeleteLine,
+            KeyCode::Char('d') => Command::DuplicateLineOrSelection,
             _ => Command::Noop,
         };
     }
@@ -55,6 +56,7 @@ fn map_key(key: &KeyEvent) -> Command {
             KeyCode::Down  => Command::SelectDown,
             KeyCode::Home  => Command::SelectLineStart,
             KeyCode::End   => Command::SelectLineEnd,
+            KeyCode::BackTab => Command::Dedent,
             // Shift+char — insert uppercase / shifted character
             KeyCode::Char(ch) => Command::InsertChar(ch),
             _ => Command::Noop,
@@ -76,6 +78,7 @@ fn map_key(key: &KeyEvent) -> Command {
         // Editing — direct insert, no mode switch needed
         KeyCode::Enter     => Command::InsertNewline,
         KeyCode::Tab       => Command::InsertTab,
+        KeyCode::BackTab   => Command::Dedent,
         KeyCode::Backspace => Command::DeleteBackward,
         KeyCode::Delete    => Command::DeleteForward,
         KeyCode::Char(ch)  => Command::InsertChar(ch),
