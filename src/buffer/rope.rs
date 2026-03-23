@@ -104,6 +104,41 @@ impl TextRope {
     pub fn to_string_full(&self) -> String {
         self.rope.to_string()
     }
+
+    /// Find all case-insensitive occurrences of `needle` in the rope.
+    /// Returns `(start_char, end_char)` pairs.
+    pub fn find_all(&self, needle: &str) -> Vec<(usize, usize)> {
+        if needle.is_empty() {
+            return Vec::new();
+        }
+        let needle_lower: String = needle.to_lowercase();
+        let needle_chars: Vec<char> = needle_lower.chars().collect();
+        let needle_len = needle_chars.len();
+        let total = self.rope.len_chars();
+
+        let mut results = Vec::new();
+        let mut i: usize = 0;
+
+        while i + needle_len <= total {
+            let mut matched = true;
+            for j in 0..needle_len {
+                let ch = self.rope.char(i + j);
+                // Compare lowercased (handles basic case folding)
+                let lower_ch = ch.to_lowercase().next().unwrap_or(ch);
+                if lower_ch != needle_chars[j] {
+                    matched = false;
+                    break;
+                }
+            }
+            if matched {
+                results.push((i, i + needle_len));
+                i += needle_len; // skip past this match
+            } else {
+                i += 1;
+            }
+        }
+        results
+    }
 }
 
 impl Default for TextRope {

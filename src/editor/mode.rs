@@ -5,6 +5,8 @@ pub enum Mode {
     Editing,
     /// Selecting text (shift+arrows or Ctrl+A).
     Selecting,
+    /// Incremental search — typing updates the search query.
+    Searching,
 }
 
 impl Mode {
@@ -13,6 +15,7 @@ impl Mode {
         match self {
             Mode::Editing => "EDIT",
             Mode::Selecting => "SELECT",
+            Mode::Searching => "FIND",
         }
     }
 
@@ -21,6 +24,7 @@ impl Mode {
         match self {
             Mode::Editing => (100, 180, 255),   // blue
             Mode::Selecting => (255, 200, 80),  // gold
+            Mode::Searching => (255, 160, 50),  // orange
         }
     }
 }

@@ -7,6 +7,7 @@ use crossterm::{
 use std::io::{self, Write};
 
 use crate::editor::Editor;
+use crate::editor::mode::Mode;
 use crate::utils::char_width;
 
 /// Viewport dimensions, cached from the Editor.
@@ -23,8 +24,15 @@ impl Viewport {
         let (w, h) = terminal::size().unwrap_or((editor.terminal_width, editor.terminal_height));
         editor.terminal_width = w;
         editor.terminal_height = h;
-        // 1 row for the status bar, plus 1 more if help legend is shown
-        let chrome = if editor.show_help { 2 } else { 1 };
+        // 1 row for the status bar, plus 1 more if help legend is shown,
+        // plus 1 more if the search prompt is active.
+        let mut chrome: u16 = 1;
+        if editor.show_help {
+            chrome += 1;
+        }
+        if editor.mode == Mode::Searching {
+            chrome += 1;
+        }
         Self {
             width: w,
             height: h,
@@ -115,6 +123,8 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 
             let mut batch = String::new();
             let mut in_sel = false;
+            let mut prev_in_search = false;
+            let mut prev_is_current = false;
             let mut vcol: usize = 0; // visual column
             let mut char_idx: usize = 0; // char index within line
 
@@ -134,24 +144,55 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
                     false
                 };
 
-                // If the selection state changes, flush the accumulated batch.
-                if want_sel != in_sel {
+                // Check if this char falls inside any search match.
+                let search_hit = editor.search_matches.iter().enumerate().find(
+                    |(_i, &(ms, me))| char_pos >= ms && char_pos < me,
+                );
+                let is_current_match = search_hit
+                    .as_ref()
+                    .map(|(i, _)| *i == editor.search_match_idx)
+                    .unwrap_or(false);
+                let in_search = search_hit.is_some();
+
+                // If highlighting state changes, flush the accumulated batch.
+                let want_state = (want_sel, in_search, is_current_match);
+                let prev_state = (in_sel, prev_in_search, prev_is_current);
+                if want_state != prev_state {
                     if !batch.is_empty() {
                         w.queue(style::Print(&batch))?;
                         batch.clear();
                     }
                     if want_sel {
+                        // Selection highlighting takes priority.
                         w.queue(SetBackgroundColor(Color::Rgb {
                             r: 70,
                             g: 130,
                             b: 180,
                         }))?;
                         w.queue(SetForegroundColor(Color::White))?;
+                    } else if is_current_match {
+                        // Current search match — bright orange.
+                        w.queue(SetBackgroundColor(Color::Rgb {
+                            r: 255,
+                            g: 165,
+                            b: 0,
+                        }))?;
+                        w.queue(SetForegroundColor(Color::Black))?;
+                    } else if in_search {
+                        // Other search matches — dim yellow.
+                        w.queue(SetBackgroundColor(Color::Rgb {
+                            r: 180,
+                            g: 180,
+                            b: 60,
+                        }))?;
+                        w.queue(SetForegroundColor(Color::Black))?;
                     } else {
                         w.queue(SetBackgroundColor(Color::Reset))?;
                         w.queue(SetForegroundColor(Color::Reset))?;
                     }
                     in_sel = want_sel;
+                    prev_in_search = in_search;
+                    prev_is_current = is_current_match;
                 }
 
                 // Expand tabs to spaces for correct visual width
@@ -171,7 +212,7 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
             if !batch.is_empty() {
                 w.queue(style::Print(&batch))?;
             }
-            if in_sel {
+            if in_sel || prev_in_search {
                 w.queue(SetBackgroundColor(Color::Reset))?;
                 w.queue(SetForegroundColor(Color::Reset))?;
             }
@@ -200,34 +241,102 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
         render_help_bar(editor, w, &vp)?;
     }
 
+    // -- Render search prompt (when in search mode) --
+    if editor.mode == Mode::Searching {
+        render_search_bar(editor, w, &vp)?;
+    }
+
     // -- Position the cursor --
-    // Compute visual column by expanding tabs in the cursor's line.
-    let cursor_pos = editor.cursors.cursor();
-    let screen_y = cursor_pos.line.saturating_sub(editor.scroll_y) as u16;
-    let tab_w = editor.config.tab_width;
-    let visual_col = if cursor_pos.line < line_count {
-        let line_slice = editor.buffer().text.line_slice(cursor_pos.line);
-        let mut vc: usize = 0;
-        for (i, ch) in line_slice.chars().enumerate() {
-            if i >= cursor_pos.col {
-                break;
-            }
-            if ch == '\t' {
-                vc += tab_w - (vc % tab_w);
-            } else {
-                vc += char_width(ch, tab_w);
+    if editor.mode == Mode::Searching {
+        // During search, draw an outline cursor in the document at the saved position.
+        if let Some((saved_line, saved_col)) = editor.search_saved_cursor {
+            if saved_line >= editor.scroll_y && saved_line < editor.scroll_y + text_height {
+                let saved_screen_y = (saved_line - editor.scroll_y) as u16;
+                let tab_w = editor.config.tab_width;
+                let saved_visual_col = if saved_line < line_count {
+                    let line_slice = editor.buffer().text.line_slice(saved_line);
+                    let mut vc: usize = 0;
+                    for (i, ch) in line_slice.chars().enumerate() {
+                        if i >= saved_col {
+                            break;
+                        }
+                        if ch == '\t' {
+                            vc += tab_w - (vc % tab_w);
+                        } else {
+                            vc += char_width(ch, tab_w);
+                        }
+                    }
+                    vc
+                } else {
+                    saved_col
+                };
+                let outline_x = (gutter_width + 1 + saved_visual_col) as u16;
+                // Draw the character (or space) at that position with an underline-style outline.
+                w.queue(cursor::MoveTo(outline_x, saved_screen_y))?;
+                w.queue(SetBackgroundColor(Color::DarkGrey))?;
+                w.queue(SetForegroundColor(Color::White))?;
+                w.queue(style::SetAttribute(style::Attribute::Underlined))?;
+                // Print the actual character at the cursor position, or a space if past EOL.
+                let outline_ch = if saved_line < line_count {
+                    let line_slice = editor.buffer().text.line_slice(saved_line);
+                    line_slice.chars().nth(saved_col)
+                        .filter(|c| *c != '\n' && *c != '\r')
+                        .unwrap_or(' ')
+                } else {
+                    ' '
+                };
+                if outline_ch == '\t' {
+                    w.queue(style::Print(" "))?;
+                } else {
+                    w.queue(style::Print(format!("{}", outline_ch)))?;
+                }
+                w.queue(style::SetAttribute(style::Attribute::NoUnderline))?;
+                w.queue(SetBackgroundColor(Color::Reset))?;
+                w.queue(SetForegroundColor(Color::Reset))?;
             }
         }
-        vc
-    } else {
-        cursor_pos.col
-    };
-    let screen_x = (gutter_width + 1 + visual_col) as u16;
-    w.queue(cursor::MoveTo(screen_x, screen_y))?;
-    w.queue(cursor::Show)?;
 
-    // Pico-style: always use a steady bar cursor (like a normal text editor)
-    w.queue(cursor::SetCursorStyle::SteadyBlock)?;
+        // Place the real cursor at the end of the query text in the search bar.
+        let search_y = if editor.show_help {
+            vp.height.saturating_sub(2)
+        } else {
+            vp.height.saturating_sub(1)
+        };
+        let label_len = 7; // " FIND: "
+        let cursor_x = (label_len + 1 + editor.search_query.len()) as u16; // +1 for leading space in query display
+        w.queue(cursor::MoveTo(cursor_x, search_y))?;
+        w.queue(cursor::Show)?;
+        w.queue(cursor::SetCursorStyle::BlinkingBar)?;
+    } else {
+        // Normal / Selecting mode — position cursor in the document.
+        // Compute visual column by expanding tabs in the cursor's line.
+        let cursor_pos = editor.cursors.cursor();
+        let screen_y = cursor_pos.line.saturating_sub(editor.scroll_y) as u16;
+        let tab_w = editor.config.tab_width;
+        let visual_col = if cursor_pos.line < line_count {
+            let line_slice = editor.buffer().text.line_slice(cursor_pos.line);
+            let mut vc: usize = 0;
+            for (i, ch) in line_slice.chars().enumerate() {
+                if i >= cursor_pos.col {
+                    break;
+                }
+                if ch == '\t' {
+                    vc += tab_w - (vc % tab_w);
+                } else {
+                    vc += char_width(ch, tab_w);
+                }
+            }
+            vc
+        } else {
+            cursor_pos.col
+        };
+        let screen_x = (gutter_width + 1 + visual_col) as u16;
+        w.queue(cursor::MoveTo(screen_x, screen_y))?;
+        w.queue(cursor::Show)?;
+
+        // Pico-style: always use a steady block cursor (like a normal text editor)
+        w.queue(cursor::SetCursorStyle::SteadyBlock)?;
+    }
 
     w.flush()?;
     Ok(())
@@ -331,6 +440,79 @@ fn render_help_bar<W: Write>(
 
     w.queue(SetForegroundColor(Color::Reset))?;
     w.queue(SetBackgroundColor(Color::Reset))?;
+
+    Ok(())
+}
+
+/// Render the search prompt bar (appears below the status bar).
+fn render_search_bar<W: Write>(
+    editor: &Editor,
+    w: &mut W,
+    vp: &Viewport,
+) -> io::Result<()> {
+    // Search bar sits just below the status bar.
+    // With help: status_y = h - chrome, help_y = h - 1, search_y = h - chrome + 1
+    // Without help: status_y = h - chrome, search_y = h - 1
+    let search_y = if editor.show_help {
+        vp.height.saturating_sub(2)
+    } else {
+        vp.height.saturating_sub(1)
+    };
+    w.queue(cursor::MoveTo(0, search_y))?;
+
+    let width = vp.width as usize;
+    let mut used: usize = 0;
+
+    // Label
+    w.queue(SetBackgroundColor(Color::Rgb {
+        r: 255,
+        g: 165,
+        b: 0,
+    }))?;
+    w.queue(SetForegroundColor(Color::Black))?;
+    let label = " FIND: ";
+    w.queue(style::Print(label))?;
+    used += label.len();
+
+    // Query text
+    w.queue(SetBackgroundColor(Color::DarkGrey))?;
+    w.queue(SetForegroundColor(Color::White))?;
+    let query_display = format!(" {} ", editor.search_query);
+    w.queue(style::Print(&query_display))?;
+    used += query_display.len();
+
+    // Match count
+    let info = if editor.search_matches.is_empty() {
+        if editor.search_query.is_empty() {
+            String::new()
+        } else {
+            " (no matches)".to_string()
+        }
+    } else {
+        format!(
+            " ({}/{})",
+            editor.search_match_idx + 1,
+            editor.search_matches.len()
+        )
+    };
+    if !info.is_empty() {
+        w.queue(SetForegroundColor(Color::Rgb {
+            r: 200,
+            g: 200,
+            b: 200,
+        }))?;
+        w.queue(style::Print(&info))?;
+        used += info.len();
+    }
+
+    // Pad the rest
+    let remaining = width.saturating_sub(used);
+    if remaining > 0 {
+        write_spaces(w, remaining)?;
+    }
+
+    w.queue(SetBackgroundColor(Color::Reset))?;
+    w.queue(SetForegroundColor(Color::Reset))?;
 
     Ok(())
 }
