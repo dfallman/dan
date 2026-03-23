@@ -86,7 +86,7 @@ Dan uses familiar GUI-style shortcuts. No modes — every key works the same way
 
 | Key                  | Action                              |
 |----------------------|-------------------------------------|
-| `←` `→` `↑` `↓`    | Move cursor                         |
+| `←` `→` `↑` `↓`      | Move cursor                         |
 | `Home`               | Move to start of line               |
 | `End`                | Move to end of line                 |
 | `Ctrl+Home`          | Move to start of file               |
@@ -102,7 +102,7 @@ Dan uses familiar GUI-style shortcuts. No modes — every key works the same way
 
 | Key                    | Action                            |
 |------------------------|-----------------------------------|
-| `Shift+←` `→` `↑` `↓` | Extend selection by character/line |
+| `Shift+←` `→` `↑` `↓`  | Extend selection by character/line |
 | `Shift+Home`           | Select to start of line           |
 | `Shift+End`            | Select to end of line             |
 | `Ctrl+Shift+←`         | Select to previous word           |
@@ -142,6 +142,8 @@ Dan uses familiar GUI-style shortcuts. No modes — every key works the same way
 |----------------------|-------------------------------------|
 | `Ctrl+F`             | Open search prompt                  |
 | `Ctrl+G`             | Jump to next search match           |
+| `Return`             | Select current search result        |
+| `Esc`                | Cancel search                       |
 
 ### File & Misc
 
@@ -149,7 +151,7 @@ Dan uses familiar GUI-style shortcuts. No modes — every key works the same way
 |----------------------|-------------------------------------|
 | `Ctrl+S`             | Save file                           |
 | `Ctrl+Q`             | Quit (prompts if unsaved changes)   |
-| `Ctrl+C`             | Force quit (discards changes)       |
+| `Ctrl+C`             | Force quit (discards any changes)   |
 | `Ctrl+H`             | Toggle help overlay                 |
 
 

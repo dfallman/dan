@@ -29,6 +29,8 @@ pub struct Editor {
     pub should_quit: bool,
     /// Viewport scroll offset (top visible line).
     pub scroll_y: usize,
+    /// Horizontal scroll offset (first visible column, used when wrap_lines=false).
+    pub scroll_x: usize,
     /// Clipboard content.
     pub clipboard: String,
     /// Selection anchor (line, col) — set when shift-selecting begins.
@@ -67,6 +69,7 @@ impl Editor {
             status_msg: None,
             should_quit: false,
             scroll_y: 0,
+            scroll_x: 0,
             clipboard: String::new(),
             select_anchor: None,
             terminal_width: tw,
@@ -544,6 +547,10 @@ impl Editor {
                 self.show_help = !self.show_help;
             }
 
+            Command::ToggleWrap => {
+                self.config.wrap_lines = !self.config.wrap_lines;
+            }
+
             Command::Noop => {}
         }
     }
@@ -695,20 +702,101 @@ impl Editor {
 
     /// Move cursor vertically by `delta` lines.
     fn move_cursor_vertical(&mut self, delta: i32) {
-        let c = self.cursors.cursor();
-        let new_line = if delta < 0 {
-            c.line.saturating_sub((-delta) as usize)
-        } else {
-            let max_line = self.buffer().line_count().saturating_sub(1);
-            (c.line + delta as usize).min(max_line)
-        };
+        if !self.config.wrap_lines {
+            // No-wrap mode: move by buffer lines as before.
+            let c = self.cursors.cursor();
+            let new_line = if delta < 0 {
+                c.line.saturating_sub((-delta) as usize)
+            } else {
+                let max_line = self.buffer().line_count().saturating_sub(1);
+                (c.line + delta as usize).min(max_line)
+            };
 
-        if new_line != c.line {
-            let line_len = self.line_len_no_newline(new_line);
-            let new_col = c.desired_col.min(line_len);
-            self.cursors.primary_mut().head.line = new_line;
-            self.cursors.primary_mut().head.set_col_clamped(new_col);
+            if new_line != c.line {
+                let line_len = self.line_len_no_newline(new_line);
+                let new_col = c.desired_col.min(line_len);
+                self.cursors.primary_mut().head.line = new_line;
+                self.cursors.primary_mut().head.set_col_clamped(new_col);
+            }
+            return;
         }
+
+        // -- Wrap mode: move by visual (screen) rows --
+        let text_area_width = self.text_area_width();
+        if text_area_width == 0 {
+            return;
+        }
+        let tab_w = self.config.tab_width;
+        let c = self.cursors.cursor();
+        let line_count = self.buffer().line_count();
+
+        // Collect current line text so we release the borrow on self.
+        let cur_line_text: String = self.buffer().text.line_slice(c.line).chars().collect();
+        let cur_line_len = self.line_len_no_newline(c.line);
+
+        let rows = visual_rows_for(&cur_line_text, tab_w, text_area_width);
+
+        // Which visual row is the cursor on within its buffer line?
+        let mut cur_vrow: usize = 0;
+        for (i, &(start, end)) in rows.iter().enumerate() {
+            if c.col >= start && (c.col < end || i == rows.len() - 1) {
+                cur_vrow = i;
+                break;
+            }
+        }
+
+        if delta > 0 {
+            // Moving down
+            if cur_vrow + 1 < rows.len() {
+                // Stay on same buffer line, move to next visual row.
+                let next_row = rows[cur_vrow + 1];
+                let new_col = col_in_visual_row_from_text(&cur_line_text, cur_line_len, next_row.0, next_row.1, c.desired_col, tab_w);
+                self.cursors.primary_mut().head.set_col_clamped(new_col);
+            } else {
+                // Move to next buffer line (first visual row).
+                let next_line = c.line + 1;
+                if next_line < line_count {
+                    let next_text: String = self.buffer().text.line_slice(next_line).chars().collect();
+                    let next_len = self.line_len_no_newline(next_line);
+                    let next_rows = visual_rows_for(&next_text, tab_w, text_area_width);
+                    let first = next_rows[0];
+                    let new_col = col_in_visual_row_from_text(&next_text, next_len, first.0, first.1, c.desired_col, tab_w);
+                    self.cursors.primary_mut().head.line = next_line;
+                    self.cursors.primary_mut().head.set_col_clamped(new_col);
+                }
+            }
+        } else {
+            // Moving up
+            if cur_vrow > 0 {
+                // Stay on same buffer line, move to previous visual row.
+                let prev_row = rows[cur_vrow - 1];
+                let new_col = col_in_visual_row_from_text(&cur_line_text, cur_line_len, prev_row.0, prev_row.1, c.desired_col, tab_w);
+                self.cursors.primary_mut().head.set_col_clamped(new_col);
+            } else {
+                // Move to previous buffer line (last visual row).
+                if c.line > 0 {
+                    let prev_line = c.line - 1;
+                    let prev_text: String = self.buffer().text.line_slice(prev_line).chars().collect();
+                    let prev_len = self.line_len_no_newline(prev_line);
+                    let prev_rows = visual_rows_for(&prev_text, tab_w, text_area_width);
+                    let last = prev_rows[prev_rows.len() - 1];
+                    let new_col = col_in_visual_row_from_text(&prev_text, prev_len, last.0, last.1, c.desired_col, tab_w);
+                    self.cursors.primary_mut().head.line = prev_line;
+                    self.cursors.primary_mut().head.set_col_clamped(new_col);
+                }
+            }
+        }
+    }
+
+    /// Compute the text-area width (terminal width minus gutter).
+    fn text_area_width(&self) -> usize {
+        let line_count = self.buffer().line_count();
+        let gutter_width = if self.config.line_numbers {
+            if line_count == 0 { 1 } else { (line_count as f64).log10().floor() as usize + 1 }
+        } else {
+            0
+        };
+        (self.terminal_width as usize).saturating_sub(gutter_width + 1)
     }
 
     /// Move cursor forward one word using UAX #29 word boundaries.
@@ -961,4 +1049,73 @@ impl Default for Editor {
     }
 }
 
+/// Build visual row breaks for a line of text.
+/// Returns a Vec of (start_char_idx, end_char_idx) for each visual row.
+fn visual_rows_for(line_text: &str, tab_w: usize, text_area_width: usize) -> Vec<(usize, usize)> {
+    let mut rows: Vec<(usize, usize)> = Vec::new();
+    let mut row_start: usize = 0;
+    let mut screen_col: usize = 0;
+    let mut char_idx: usize = 0;
 
+    for ch in line_text.chars() {
+        if ch == '\n' || ch == '\r' {
+            char_idx += 1;
+            continue;
+        }
+        let ch_w = if ch == '\t' {
+            tab_w - (screen_col % tab_w)
+        } else {
+            crate::utils::char_width(ch, tab_w)
+        };
+
+        if screen_col + ch_w > text_area_width && screen_col > 0 {
+            rows.push((row_start, char_idx));
+            row_start = char_idx;
+            screen_col = 0;
+        }
+        screen_col += ch_w;
+        char_idx += 1;
+    }
+    rows.push((row_start, char_idx));
+    rows
+}
+
+/// Given a visual row spanning char indices [row_start..row_end) within `line_text`,
+/// find the best char index matching `desired_col`.
+fn col_in_visual_row_from_text(
+    line_text: &str,
+    line_len: usize,
+    row_start: usize,
+    row_end: usize,
+    desired_col: usize,
+    tab_w: usize,
+) -> usize {
+    let mut vcol: usize = 0;
+    let mut best_col = row_start;
+
+    for (i, ch) in line_text.chars().enumerate() {
+        if i < row_start {
+            continue;
+        }
+        if i >= row_end {
+            break;
+        }
+        if ch == '\n' || ch == '\r' {
+            break;
+        }
+
+        if vcol >= desired_col {
+            return i.min(line_len);
+        }
+
+        let ch_w = if ch == '\t' {
+            tab_w - (vcol % tab_w)
+        } else {
+            crate::utils::char_width(ch, tab_w)
+        };
+        vcol += ch_w;
+        best_col = i + 1;
+    }
+
+    best_col.min(line_len)
+}

@@ -86,6 +86,7 @@ fn map_key(key: &KeyEvent) -> Command {
             KeyCode::End       => Command::MoveBufferBottom,
             KeyCode::Char('k') => Command::DeleteLine,
             KeyCode::Char('d') => Command::DuplicateLineOrSelection,
+            KeyCode::Char('w') => Command::ToggleWrap,
             KeyCode::Char('h') => Command::ToggleHelp,
             _ => Command::Noop,
         };

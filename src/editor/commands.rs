@@ -64,5 +64,6 @@ pub enum Command {
 
     // -- Misc --
     ToggleHelp,
+    ToggleWrap,
     Noop,
 }

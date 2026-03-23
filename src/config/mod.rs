@@ -15,6 +15,8 @@ pub struct Config {
     pub scroll_off: usize,
     /// Theme name.
     pub theme: String,
+    /// Wrap long lines (true) or scroll horizontally (false).
+    pub wrap_lines: bool,
 }
 
 impl Default for Config {
@@ -25,6 +27,7 @@ impl Default for Config {
             line_numbers: true,
             scroll_off: 5,
             theme: "default".to_string(),
+            wrap_lines: true,
         }
     }
 }

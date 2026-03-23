@@ -76,10 +76,7 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
         editor.scroll_y = (cursor_line + scroll_off).saturating_sub(text_height) + 1;
     }
 
-    w.queue(cursor::Hide)?;
-    w.queue(cursor::MoveTo(0, 0))?;
-
-    // -- Render text lines --
+    // -- Horizontal scroll adjustment (only when wrap_lines = false) --
     let line_count = editor.buffer().line_count();
     let show_line_numbers = editor.config.line_numbers;
     let gutter_width = if show_line_numbers {
@@ -87,26 +84,57 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
     } else {
         0
     };
+    let text_area_width = (vp.width as usize).saturating_sub(gutter_width + 1);
 
+    if !editor.config.wrap_lines {
+        // Compute the cursor's visual column so we can center scroll_x on it.
+        let cursor_pos = editor.cursors.cursor();
+        let tab_w = editor.config.tab_width;
+        let cursor_vcol = if cursor_pos.line < line_count {
+            let lsl = editor.buffer().text.line_slice(cursor_pos.line);
+            let mut vc: usize = 0;
+            for (i, ch) in lsl.chars().enumerate() {
+                if i >= cursor_pos.col { break; }
+                if ch == '\t' { vc += tab_w - (vc % tab_w); }
+                else { vc += char_width(ch, tab_w); }
+            }
+            vc
+        } else {
+            cursor_pos.col
+        };
+        let h_margin: usize = 5;
+        if cursor_vcol < editor.scroll_x + h_margin {
+            editor.scroll_x = cursor_vcol.saturating_sub(h_margin);
+        }
+        if cursor_vcol >= editor.scroll_x + text_area_width.saturating_sub(h_margin) {
+            editor.scroll_x = cursor_vcol.saturating_sub(text_area_width.saturating_sub(h_margin + 1));
+        }
+    } else {
+        editor.scroll_x = 0;
+    }
+
+    w.queue(cursor::Hide)?;
+    w.queue(cursor::MoveTo(0, 0))?;
+
+    // -- Render text lines --
     // Get selection range for highlighting
     let sel_range = editor.selection_range();
 
-    for row in 0..text_height {
-        let line_idx = editor.scroll_y + row;
-        w.queue(cursor::MoveTo(0, row as u16))?;
-        // Ensure clean color state at the start of each row (Terminal.app compat).
-        w.queue(SetForegroundColor(Color::Reset))?;
-        w.queue(SetBackgroundColor(Color::Reset))?;
+    if editor.config.wrap_lines {
+        // ---- Soft-wrap mode ----
+        // Each buffer line may occupy multiple screen rows.
+        let mut screen_row: usize = 0;
+        let mut buf_line = editor.scroll_y;
 
-        // Track how many columns we've written so we can space-pad the rest.
-        let mut cols_written: usize = 0;
+        while screen_row < text_height && buf_line < line_count {
+            // -- First screen row of this buffer line: draw the real line number --
+            w.queue(cursor::MoveTo(0, screen_row as u16))?;
+            w.queue(SetForegroundColor(Color::Reset))?;
+            w.queue(SetBackgroundColor(Color::Reset))?;
 
-        if line_idx < line_count {
-            // Line number gutter — Cyan for active line, White for others
             if show_line_numbers {
-                let line_num = format!("{:>width$} ", line_idx + 1, width = gutter_width);
-                cols_written += line_num.len();
-                if line_idx == cursor_line {
+                let line_num = format!("{:>width$} ", buf_line + 1, width = gutter_width);
+                if buf_line == cursor_line {
                     w.queue(SetForegroundColor(Color::Blue))?;
                 } else {
                     w.queue(SetForegroundColor(Color::White))?;
@@ -115,46 +143,80 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
                 w.queue(SetForegroundColor(Color::Reset))?;
             }
 
-            // Line text — iterate RopeSlice chars directly (zero-alloc)
-            let line_slice = editor.buffer().text.line_slice(line_idx);
-            let max_text_width = (vp.width as usize).saturating_sub(gutter_width + 1);
-            let line_start_pos = editor.buffer().text.line_to_char(line_idx);
+            let line_slice = editor.buffer().text.line_slice(buf_line);
+            let line_start_pos = editor.buffer().text.line_to_char(buf_line);
             let tab_w = editor.config.tab_width;
 
             let mut batch = String::new();
             let mut in_sel = false;
             let mut prev_in_search = false;
             let mut prev_is_current = false;
-            let mut vcol: usize = 0; // visual column
-            let mut char_idx: usize = 0; // char index within line
+            let mut vcol: usize = 0;
+            let mut char_idx: usize = 0;
+            let mut screen_col: usize = 0; // columns written on current screen row
 
             for ch in line_slice.chars() {
-                if vcol >= max_text_width {
-                    break;
-                }
                 if ch == '\n' || ch == '\r' {
                     char_idx += 1;
                     continue;
                 }
 
+                // Compute the width this char will take
+                let ch_w = if ch == '\t' { tab_w - (vcol % tab_w) } else { char_width(ch, tab_w) };
+
+                // If this char would overflow the current screen row, wrap.
+                if screen_col + ch_w > text_area_width {
+                    // Flush batch
+                    if !batch.is_empty() {
+                        w.queue(style::Print(&batch))?;
+                        batch.clear();
+                    }
+                    if in_sel || prev_in_search {
+                        w.queue(SetBackgroundColor(Color::Reset))?;
+                        w.queue(SetForegroundColor(Color::Reset))?;
+                    }
+                    // Pad rest of this row
+                    let remaining = text_area_width.saturating_sub(screen_col);
+                    if remaining > 0 {
+                        write_spaces(w, remaining)?;
+                    }
+                    screen_row += 1;
+                    if screen_row >= text_height { break; }
+
+                    // Start new screen row — continuation with ↳ gutter
+                    w.queue(cursor::MoveTo(0, screen_row as u16))?;
+                    w.queue(SetForegroundColor(Color::Reset))?;
+                    w.queue(SetBackgroundColor(Color::Reset))?;
+                    if show_line_numbers {
+                        // Right-align ↳ within the gutter width, followed by separator space
+                        let wrap_gutter = format!("{:>width$} ", "↳", width = gutter_width);
+                        if buf_line == cursor_line {
+                            w.queue(SetForegroundColor(Color::Blue))?;
+                        } else {
+                            w.queue(SetForegroundColor(Color::DarkGrey))?;
+                        }
+                        w.queue(style::Print(&wrap_gutter))?;
+                        w.queue(SetForegroundColor(Color::Reset))?;
+                    }
+                    screen_col = 0;
+                    in_sel = false;
+                    prev_in_search = false;
+                    prev_is_current = false;
+                }
+
+                // Highlight logic
                 let char_pos = line_start_pos + char_idx;
                 let want_sel = if let Some((sel_start, sel_end)) = sel_range {
                     char_pos >= sel_start && char_pos < sel_end
                 } else {
                     false
                 };
-
-                // Check if this char falls inside any search match.
                 let search_hit = editor.search_matches.iter().enumerate().find(
                     |(_i, &(ms, me))| char_pos >= ms && char_pos < me,
                 );
-                let is_current_match = search_hit
-                    .as_ref()
-                    .map(|(i, _)| *i == editor.search_match_idx)
-                    .unwrap_or(false);
+                let is_current_match = search_hit.as_ref().map(|(i, _)| *i == editor.search_match_idx).unwrap_or(false);
                 let in_search = search_hit.is_some();
 
-                // If highlighting state changes, flush the accumulated batch.
                 let want_state = (want_sel, in_search, is_current_match);
                 let prev_state = (in_sel, prev_in_search, prev_is_current);
                 if want_state != prev_state {
@@ -163,28 +225,13 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
                         batch.clear();
                     }
                     if want_sel {
-                        // Selection highlighting takes priority.
-                        w.queue(SetBackgroundColor(Color::Rgb {
-                            r: 70,
-                            g: 130,
-                            b: 180,
-                        }))?;
+                        w.queue(SetBackgroundColor(Color::Rgb { r: 70, g: 130, b: 180 }))?;
                         w.queue(SetForegroundColor(Color::White))?;
                     } else if is_current_match {
-                        // Current search match — bright orange.
-                        w.queue(SetBackgroundColor(Color::Rgb {
-                            r: 255,
-                            g: 165,
-                            b: 0,
-                        }))?;
+                        w.queue(SetBackgroundColor(Color::Rgb { r: 255, g: 165, b: 0 }))?;
                         w.queue(SetForegroundColor(Color::Black))?;
                     } else if in_search {
-                        // Other search matches — dim yellow.
-                        w.queue(SetBackgroundColor(Color::Rgb {
-                            r: 180,
-                            g: 180,
-                            b: 60,
-                        }))?;
+                        w.queue(SetBackgroundColor(Color::Rgb { r: 180, g: 180, b: 60 }))?;
                         w.queue(SetForegroundColor(Color::Black))?;
                     } else {
                         w.queue(SetBackgroundColor(Color::Reset))?;
@@ -195,20 +242,20 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
                     prev_is_current = is_current_match;
                 }
 
-                // Expand tabs to spaces for correct visual width
                 if ch == '\t' {
-                    let spaces = tab_w - (vcol % tab_w);
-                    for _ in 0..spaces.min(max_text_width - vcol) {
+                    let spaces = ch_w;
+                    for _ in 0..spaces {
                         batch.push(' ');
                     }
-                    vcol += spaces;
                 } else {
                     batch.push(ch);
-                    vcol += char_width(ch, tab_w);
                 }
+                vcol += ch_w;
+                screen_col += ch_w;
                 char_idx += 1;
             }
-            // Flush remaining batch
+
+            // Flush remaining batch for this buffer line
             if !batch.is_empty() {
                 w.queue(style::Print(&batch))?;
             }
@@ -216,20 +263,170 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
                 w.queue(SetBackgroundColor(Color::Reset))?;
                 w.queue(SetForegroundColor(Color::Reset))?;
             }
-            cols_written += vcol;
-        } else {
-            // Past end of file — show line numbers in dim grey.
-            let line_num = format!("{:>width$} ", line_idx + 1, width = gutter_width);
-            cols_written += line_num.len();
-            w.queue(SetForegroundColor(Color::DarkGrey))?;
-            w.queue(style::Print(&line_num))?;
-            w.queue(SetForegroundColor(Color::Reset))?;
+
+            // Pad rest of the last screen row for this buffer line
+            let cols_used = gutter_width + 1 + screen_col;
+            let remaining = (vp.width as usize).saturating_sub(cols_used);
+            if remaining > 0 {
+                write_spaces(w, remaining)?;
+            }
+
+            screen_row += 1;
+            buf_line += 1;
         }
 
-        // Pad with spaces to overwrite any stale content — uses static buffer.
-        let remaining = (vp.width as usize).saturating_sub(cols_written);
-        if remaining > 0 {
-            write_spaces(w, remaining)?;
+        // Fill remaining screen rows past EOF with tilde gutters
+        while screen_row < text_height {
+            w.queue(cursor::MoveTo(0, screen_row as u16))?;
+            w.queue(SetForegroundColor(Color::Reset))?;
+            w.queue(SetBackgroundColor(Color::Reset))?;
+            let mut cols_written: usize = 0;
+            if show_line_numbers {
+                let tilde_gutter = format!("{:>width$} ", "~", width = gutter_width);
+                w.queue(SetForegroundColor(Color::DarkGrey))?;
+                w.queue(style::Print(&tilde_gutter))?;
+                w.queue(SetForegroundColor(Color::Reset))?;
+                cols_written = gutter_width + 1;
+            }
+            let remaining = (vp.width as usize).saturating_sub(cols_written);
+            if remaining > 0 {
+                write_spaces(w, remaining)?;
+            }
+            screen_row += 1;
+        }
+    } else {
+        // ---- No-wrap mode (horizontal scroll) ----
+        let sx = editor.scroll_x;
+
+        for row in 0..text_height {
+            let line_idx = editor.scroll_y + row;
+            w.queue(cursor::MoveTo(0, row as u16))?;
+            w.queue(SetForegroundColor(Color::Reset))?;
+            w.queue(SetBackgroundColor(Color::Reset))?;
+
+            let mut cols_written: usize = 0;
+
+            if line_idx < line_count {
+                if show_line_numbers {
+                    let line_num = format!("{:>width$} ", line_idx + 1, width = gutter_width);
+                    cols_written += line_num.len();
+                    if line_idx == cursor_line {
+                        w.queue(SetForegroundColor(Color::Blue))?;
+                    } else {
+                        w.queue(SetForegroundColor(Color::White))?;
+                    }
+                    w.queue(style::Print(&line_num))?;
+                    w.queue(SetForegroundColor(Color::Reset))?;
+                }
+
+                let line_slice = editor.buffer().text.line_slice(line_idx);
+                let line_start_pos = editor.buffer().text.line_to_char(line_idx);
+                let tab_w = editor.config.tab_width;
+
+                let mut batch = String::new();
+                let mut in_sel = false;
+                let mut prev_in_search = false;
+                let mut prev_is_current = false;
+                let mut vcol: usize = 0;
+                let mut visible_written: usize = 0;
+                let mut char_idx: usize = 0;
+
+                for ch in line_slice.chars() {
+                    if visible_written >= text_area_width {
+                        break;
+                    }
+                    if ch == '\n' || ch == '\r' {
+                        char_idx += 1;
+                        continue;
+                    }
+
+                    let ch_w = if ch == '\t' { tab_w - (vcol % tab_w) } else { char_width(ch, tab_w) };
+                    let vcol_end = vcol + ch_w;
+
+                    // Skip chars entirely before scroll_x
+                    if vcol_end <= sx {
+                        vcol = vcol_end;
+                        char_idx += 1;
+                        continue;
+                    }
+
+                    // Highlight logic
+                    let char_pos = line_start_pos + char_idx;
+                    let want_sel = if let Some((sel_start, sel_end)) = sel_range {
+                        char_pos >= sel_start && char_pos < sel_end
+                    } else {
+                        false
+                    };
+                    let search_hit = editor.search_matches.iter().enumerate().find(
+                        |(_i, &(ms, me))| char_pos >= ms && char_pos < me,
+                    );
+                    let is_current_match = search_hit.as_ref().map(|(i, _)| *i == editor.search_match_idx).unwrap_or(false);
+                    let in_search = search_hit.is_some();
+
+                    let want_state = (want_sel, in_search, is_current_match);
+                    let prev_state = (in_sel, prev_in_search, prev_is_current);
+                    if want_state != prev_state {
+                        if !batch.is_empty() {
+                            w.queue(style::Print(&batch))?;
+                            batch.clear();
+                        }
+                        if want_sel {
+                            w.queue(SetBackgroundColor(Color::Rgb { r: 70, g: 130, b: 180 }))?;
+                            w.queue(SetForegroundColor(Color::White))?;
+                        } else if is_current_match {
+                            w.queue(SetBackgroundColor(Color::Rgb { r: 255, g: 165, b: 0 }))?;
+                            w.queue(SetForegroundColor(Color::Black))?;
+                        } else if in_search {
+                            w.queue(SetBackgroundColor(Color::Rgb { r: 180, g: 180, b: 60 }))?;
+                            w.queue(SetForegroundColor(Color::Black))?;
+                        } else {
+                            w.queue(SetBackgroundColor(Color::Reset))?;
+                            w.queue(SetForegroundColor(Color::Reset))?;
+                        }
+                        in_sel = want_sel;
+                        prev_in_search = in_search;
+                        prev_is_current = is_current_match;
+                    }
+
+                    // Render the character (may be partially clipped at scroll_x boundary)
+                    if ch == '\t' {
+                        // Number of visible spaces from this tab
+                        let start = if vcol < sx { sx } else { vcol };
+                        let vis_spaces = vcol_end.saturating_sub(start).min(text_area_width - visible_written);
+                        for _ in 0..vis_spaces {
+                            batch.push(' ');
+                        }
+                        visible_written += vis_spaces;
+                    } else {
+                        batch.push(ch);
+                        visible_written += ch_w;
+                    }
+                    vcol = vcol_end;
+                    char_idx += 1;
+                }
+
+                if !batch.is_empty() {
+                    w.queue(style::Print(&batch))?;
+                }
+                if in_sel || prev_in_search {
+                    w.queue(SetBackgroundColor(Color::Reset))?;
+                    w.queue(SetForegroundColor(Color::Reset))?;
+                }
+                cols_written += gutter_width + 1 + visible_written;
+            } else {
+                if show_line_numbers {
+                    let line_num = format!("{:>width$} ", line_idx + 1, width = gutter_width);
+                    cols_written += line_num.len();
+                    w.queue(SetForegroundColor(Color::DarkGrey))?;
+                    w.queue(style::Print(&line_num))?;
+                    w.queue(SetForegroundColor(Color::Reset))?;
+                }
+            }
+
+            let remaining = (vp.width as usize).saturating_sub(cols_written);
+            if remaining > 0 {
+                write_spaces(w, remaining)?;
+            }
         }
     }
 
@@ -270,7 +467,7 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
                 } else {
                     saved_col
                 };
-                let outline_x = (gutter_width + 1 + saved_visual_col) as u16;
+                let outline_x = (gutter_width + 1 + saved_visual_col.saturating_sub(editor.scroll_x)) as u16;
                 // Draw the character (or space) at that position with an underline-style outline.
                 w.queue(cursor::MoveTo(outline_x, saved_screen_y))?;
                 w.queue(SetBackgroundColor(Color::DarkGrey))?;
@@ -330,7 +527,7 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
         } else {
             cursor_pos.col
         };
-        let screen_x = (gutter_width + 1 + visual_col) as u16;
+        let screen_x = (gutter_width + 1 + visual_col.saturating_sub(editor.scroll_x)) as u16;
         w.queue(cursor::MoveTo(screen_x, screen_y))?;
         w.queue(cursor::Show)?;
 
@@ -415,6 +612,7 @@ fn render_help_bar<W: Write>(
         ("^F", "Find"),
         ("^K", "Del Ln"),
         ("^A", "Sel All"),
+        ("^W", "Wrap"),
         ("^H", "Help"),
     ];
 
