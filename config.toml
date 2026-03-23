@@ -10,6 +10,9 @@ expand_tab = false
 # Show line numbers in the gutter.
 line_numbers = true
 
+# Highlight active line
+highlight_active = true 
+
 # Lines of padding to keep above/below the cursor when scrolling.
 scroll_off = 5
 

@@ -43,6 +43,16 @@ pub struct Editor {
     suppress_next_paste: bool,
     /// Whether the help legend bar is visible (toggled with ^H).
     pub show_help: bool,
+    /// Current search query string (populated during search mode).
+    pub search_query: String,
+    /// All current matches as (start_char, end_char) pairs.
+    pub search_matches: Vec<(usize, usize)>,
+    /// Index of the currently-highlighted match.
+    pub search_match_idx: usize,
+    /// Saved cursor position before entering search (so Esc can restore).
+    pub search_saved_cursor: Option<(usize, usize)>,
+    /// Last completed search query (persists across search sessions).
+    last_search_query: String,
 }
 
 impl Editor {
@@ -63,6 +73,11 @@ impl Editor {
             terminal_height: th,
             suppress_next_paste: false,
             show_help: false,
+            search_query: String::new(),
+            search_matches: Vec::new(),
+            search_match_idx: 0,
+            search_saved_cursor: None,
+            last_search_query: String::new(),
         }
     }
 
@@ -424,11 +439,86 @@ impl Editor {
                 }
             }
 
-            // -- Search (stubs) --
+            // -- Search --
             Command::SearchForward => {
-                self.set_status("Search: not yet implemented (Ctrl+F)");
+                // Enter search mode — save the current cursor position.
+                self.clear_selection();
+                let c = self.cursors.cursor();
+                self.search_saved_cursor = Some((c.line, c.col));
+                // Pre-fill with the last search query so re-opening search
+                // immediately shows previous results.
+                self.search_query = self.last_search_query.clone();
+                self.search_matches.clear();
+                self.search_match_idx = 0;
+                self.mode = Mode::Searching;
+                // If we have a previous query, run the search immediately.
+                if !self.search_query.is_empty() {
+                    self.refresh_search_matches();
+                }
             }
-            Command::SearchNext | Command::SearchPrev => {}
+            Command::SearchInsertChar(ch) => {
+                self.search_query.push(ch);
+                self.refresh_search_matches();
+            }
+            Command::SearchDeleteChar => {
+                self.search_query.pop();
+                self.refresh_search_matches();
+            }
+            Command::SearchConfirm => {
+                // Accept the current match — exit search, select matched text.
+                if !self.search_query.is_empty() {
+                    self.last_search_query = self.search_query.clone();
+                }
+                if let Some(&(start, end)) = self.search_matches.get(self.search_match_idx) {
+                    // Position cursor at the start of the match.
+                    let line = self.buffer().text.char_to_line(start);
+                    let col = start - self.buffer().text.line_to_char(line);
+                    self.cursors.set_cursor(line, col);
+                    // Set selection anchor at end of match so the text is selected.
+                    let end_line = self.buffer().text.char_to_line(end);
+                    let end_col = end - self.buffer().text.line_to_char(end_line);
+                    self.select_anchor = Some((end_line, end_col));
+                    self.mode = Mode::Selecting;
+                } else {
+                    self.mode = Mode::Editing;
+                }
+                self.search_query.clear();
+                self.search_matches.clear();
+                self.search_match_idx = 0;
+                self.search_saved_cursor = None;
+                self.clear_status();
+            }
+            Command::SearchCancel => {
+                // Restore cursor to its pre-search position.
+                if !self.search_query.is_empty() {
+                    self.last_search_query = self.search_query.clone();
+                }
+                if let Some((line, col)) = self.search_saved_cursor.take() {
+                    self.cursors.set_cursor(line, col);
+                }
+                self.search_query.clear();
+                self.search_matches.clear();
+                self.search_match_idx = 0;
+                self.mode = Mode::Editing;
+                self.clear_status();
+            }
+            Command::SearchNext => {
+                if !self.search_matches.is_empty() {
+                    self.search_match_idx =
+                        (self.search_match_idx + 1) % self.search_matches.len();
+                    self.jump_to_search_match();
+                }
+            }
+            Command::SearchPrev => {
+                if !self.search_matches.is_empty() {
+                    if self.search_match_idx == 0 {
+                        self.search_match_idx = self.search_matches.len() - 1;
+                    } else {
+                        self.search_match_idx -= 1;
+                    }
+                    self.jump_to_search_match();
+                }
+            }
 
             // -- File --
             Command::Save => {
@@ -474,10 +564,12 @@ impl Editor {
         }
     }
 
-    /// Clear the active selection.
+    /// Clear the active selection (does NOT change the editor mode).
     fn clear_selection(&mut self) {
         self.select_anchor = None;
-        self.mode = Mode::Editing;
+        if self.mode == Mode::Selecting {
+            self.mode = Mode::Editing;
+        }
     }
 
     /// Get the selected text range as (start_pos, end_pos) char offsets.
@@ -515,6 +607,45 @@ impl Editor {
     }
 
     // -- Internal helpers --
+
+    /// Re-run the search against the buffer and jump to the nearest match.
+    fn refresh_search_matches(&mut self) {
+        self.search_matches = self.buffer().text.find_all(&self.search_query);
+        if self.search_matches.is_empty() {
+            if self.search_query.is_empty() {
+                self.clear_status();
+            } else {
+                self.set_status(format!("No matches for \"{}\"", self.search_query));
+            }
+            return;
+        }
+        // Find the match nearest (at or after) the saved cursor position.
+        let anchor_pos = if let Some((line, col)) = self.search_saved_cursor {
+            self.buffer().text.line_to_char(line) + col
+        } else {
+            0
+        };
+        self.search_match_idx = self
+            .search_matches
+            .iter()
+            .position(|&(start, _)| start >= anchor_pos)
+            .unwrap_or(0);
+        self.jump_to_search_match();
+    }
+
+    /// Jump the cursor to the currently-highlighted search match.
+    fn jump_to_search_match(&mut self) {
+        if let Some(&(start, _end)) = self.search_matches.get(self.search_match_idx) {
+            let line = self.buffer().text.char_to_line(start);
+            let col = start - self.buffer().text.line_to_char(line);
+            self.cursors.set_cursor(line, col);
+            self.set_status(format!(
+                "{}/{} matches",
+                self.search_match_idx + 1,
+                self.search_matches.len()
+            ));
+        }
+    }
 
     /// Get the char position in the buffer for the current cursor.
     fn cursor_char_pos(&self) -> usize {

@@ -6,7 +6,6 @@ It works the way you already know — type to insert text, use arrow keys to mov
 
 Under the hood it uses a rope data structure for efficient editing of large files, full Unicode support (CJK, emoji, combining marks), and a batched rendering pipeline that stays smooth even over SSH.
 
----
 
 ## Features
 
@@ -26,7 +25,6 @@ Under the hood it uses a rope data structure for efficient editing of large file
 - **Git hash in version** — `dan --version` prints the version and commit hash
 - **Cross-platform** — runs on Linux, macOS, and Windows (any terminal that supports ANSI)
 
----
 
 ## Installation
 
@@ -51,8 +49,6 @@ cp target/release/dan ~/.local/bin/
 ```bash
 cargo run -- myfile.txt
 ```
-
----
 
 ## Usage
 
@@ -81,8 +77,6 @@ dan notes.md
 dan --version
 # dan 0.1.2 (a3b8c1d)
 ```
-
----
 
 ## Keybindings
 
@@ -158,7 +152,6 @@ Dan uses familiar GUI-style shortcuts. No modes — every key works the same way
 | `Ctrl+C`             | Force quit (discards changes)       |
 | `Ctrl+H`             | Toggle help overlay                 |
 
----
 
 ## Configuration
 
@@ -202,8 +195,6 @@ theme = "default"
 
 The path is resolved using the [`dirs`](https://crates.io/crates/dirs) crate's `config_dir()`.
 
----
-
 ## Architecture
 
 Dan is structured as a set of loosely coupled modules:
@@ -243,7 +234,6 @@ src/
 
 - **64KB buffered writer** — Terminal output goes through a `BufWriter` with a 64KB buffer, minimizing syscalls and keeping rendering fast even over high-latency SSH connections.
 
----
 
 ## Development
 
@@ -281,7 +271,6 @@ To bump the version, edit the `VERSION` file.
 | `config.toml` | Example configuration file                         |
 | `src/`        | All Rust source code                               |
 
----
 
 ## Dependencies
 
@@ -298,13 +287,11 @@ Dan uses a deliberately small set of well-maintained Rust crates:
 
 No C dependencies. No build toolchain beyond `cargo`. No runtime dependencies.
 
----
 
 ## License
 
 MIT
 
----
 
 ## Contributing
 

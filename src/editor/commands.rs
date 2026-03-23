@@ -52,6 +52,10 @@ pub enum Command {
     SearchForward,
     SearchNext,
     SearchPrev,
+    SearchInsertChar(char),
+    SearchDeleteChar,
+    SearchConfirm,
+    SearchCancel,
 
     // -- File --
     Save,

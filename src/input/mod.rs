@@ -1,13 +1,42 @@
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 
 use crate::editor::commands::Command;
+use crate::editor::mode::Mode;
 
 /// Map a crossterm event to an editor command.
-/// Pico-style: no modes — all keys work the same way at all times.
-pub fn map_event(event: &Event) -> Command {
+/// The current `mode` changes how keys are interpreted.
+pub fn map_event(event: &Event, mode: Mode) -> Command {
     match event {
-        Event::Key(key) => map_key(key),
+        Event::Key(key) => {
+            if mode == Mode::Searching {
+                return map_search_key(key);
+            }
+            map_key(key)
+        }
         Event::Paste(text) => Command::InsertString(text.clone()),
+        _ => Command::Noop,
+    }
+}
+
+/// Key mapping while inside the interactive search prompt.
+fn map_search_key(key: &KeyEvent) -> Command {
+    let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+    let shift = key.modifiers.contains(KeyModifiers::SHIFT);
+
+    match key.code {
+        // Esc cancels search and restores cursor
+        KeyCode::Esc => Command::SearchCancel,
+        // Shift+Enter = prev match (cycle backwards)
+        KeyCode::Enter if shift => Command::SearchPrev,
+        // Enter confirms search — exits search, selects matched text
+        KeyCode::Enter => Command::SearchConfirm,
+        // Ctrl+G = next match, Ctrl+Shift+G = prev match
+        KeyCode::Char('g') if ctrl && shift => Command::SearchPrev,
+        KeyCode::Char('g') | KeyCode::Char('G') if ctrl => Command::SearchNext,
+        // Backspace deletes from query
+        KeyCode::Backspace => Command::SearchDeleteChar,
+        // Printable chars (including shifted) are appended to the query
+        KeyCode::Char(ch) if !ctrl => Command::SearchInsertChar(ch),
         _ => Command::Noop,
     }
 }
@@ -49,7 +78,7 @@ fn map_key(key: &KeyEvent) -> Command {
             KeyCode::Char('x') => Command::Cut,
             KeyCode::Char('v') => Command::Paste,
             KeyCode::Char('a') => Command::SelectAll,
-            KeyCode::Char('f') => Command::SearchForward,
+            KeyCode::Char('f') | KeyCode::Char('/') => Command::SearchForward,
             KeyCode::Char('g') => Command::SearchNext,
             KeyCode::Left      => Command::MoveWordBackward,
             KeyCode::Right     => Command::MoveWordForward,
@@ -108,6 +137,9 @@ fn map_key(key: &KeyEvent) -> Command {
         KeyCode::Backspace => Command::DeleteBackward,
         KeyCode::Delete    => Command::DeleteForward,
         KeyCode::Char(ch)  => Command::InsertChar(ch),
+
+        // F7 = open search (works even when Ctrl+F is intercepted by the terminal)
+        KeyCode::F(7) => Command::SearchForward,
 
         // Escape cancels selection
         KeyCode::Esc => Command::Noop,

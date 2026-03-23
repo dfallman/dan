@@ -83,7 +83,9 @@ fn run_loop(editor: &mut Editor, writer: &mut BufWriter<io::Stdout>) -> io::Resu
         // Wait for the first event (blocking).
         let evt = event::read()?;
 
-        if matches!(evt, Event::Key(_) | Event::Paste(_)) {
+        if matches!(evt, Event::Key(_) | Event::Paste(_))
+            && editor.mode != crate::editor::mode::Mode::Searching
+        {
             editor.clear_status();
         }
 
@@ -92,7 +94,7 @@ fn run_loop(editor: &mut Editor, writer: &mut BufWriter<io::Stdout>) -> io::Resu
             editor.handle_resize(w, h);
         }
 
-        let cmd = input::map_event(&evt);
+        let cmd = input::map_event(&evt, editor.mode);
         editor.execute(cmd);
 
         // Drain any additional buffered events without re-rendering.
@@ -101,13 +103,15 @@ fn run_loop(editor: &mut Editor, writer: &mut BufWriter<io::Stdout>) -> io::Resu
         // paste) into a single render pass.
         while event::poll(Duration::ZERO)? {
             let evt = event::read()?;
-            if matches!(evt, Event::Key(_) | Event::Paste(_)) {
+            if matches!(evt, Event::Key(_) | Event::Paste(_))
+                && editor.mode != crate::editor::mode::Mode::Searching
+            {
                 editor.clear_status();
             }
             if let Event::Resize(w, h) = evt {
                 editor.handle_resize(w, h);
             }
-            let cmd = input::map_event(&evt);
+            let cmd = input::map_event(&evt, editor.mode);
             editor.execute(cmd);
         }
     }
