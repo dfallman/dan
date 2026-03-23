@@ -1,0 +1,48 @@
+#!/bin/sh
+#
+# commit-msg hook — automatic SemVer bumping.
+#
+# Every commit bumps PATCH (C).
+# If the commit message contains "MINOR", bump MINOR (B) and reset PATCH.
+# If the commit message contains "MAJOR", bump MAJOR (A) and reset MINOR+PATCH.
+#
+# The VERSION file is updated and staged so it's included in the commit.
+
+COMMIT_MSG_FILE="$1"
+VERSION_FILE="$(git rev-parse --show-toplevel)/VERSION"
+
+# Read commit message
+MSG="$(cat "$COMMIT_MSG_FILE")"
+
+# Read current version (default to 0.0.0 if missing)
+if [ -f "$VERSION_FILE" ]; then
+    VERSION="$(cat "$VERSION_FILE" | tr -d '[:space:]')"
+else
+    VERSION="0.0.0"
+fi
+
+MAJOR="$(echo "$VERSION" | cut -d. -f1)"
+MINOR="$(echo "$VERSION" | cut -d. -f2)"
+PATCH="$(echo "$VERSION" | cut -d. -f3)"
+
+# Determine bump type from commit message (case-insensitive)
+if echo "$MSG" | grep -qi "MAJOR"; then
+    MAJOR=$((MAJOR + 1))
+    MINOR=0
+    PATCH=0
+elif echo "$MSG" | grep -qi "MINOR"; then
+    MINOR=$((MINOR + 1))
+    PATCH=0
+else
+    PATCH=$((PATCH + 1))
+fi
+
+NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+
+# Write the new version
+echo "$NEW_VERSION" > "$VERSION_FILE"
+
+# Stage the VERSION file so it's included in this commit
+git add "$VERSION_FILE"
+
+echo "Version bumped: ${VERSION} -> ${NEW_VERSION}"

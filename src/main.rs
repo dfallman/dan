@@ -17,8 +17,24 @@ use std::time::Duration;
 
 use crate::editor::Editor;
 
+/// Version from the VERSION file (embedded at compile time).
+pub const VERSION: &str = include_str!("../VERSION");
+
+/// Short git hash (embedded at compile time by build.rs).
+pub const GIT_HASH: &str = env!("GIT_HASH");
+
 fn main() -> io::Result<()> {
     let args: Vec<String> = env::args().collect();
+
+    // Handle version flags: -v, --v, --version
+    if args.len() > 1 {
+        let flag = args[1].as_str();
+        if matches!(flag, "-v" | "--v" | "--version") {
+            println!("dan {} ({})", VERSION.trim(), GIT_HASH);
+            return Ok(());
+        }
+    }
+
     let mut editor = Editor::new();
 
     // Open file(s) from arguments
