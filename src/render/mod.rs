@@ -1,6 +1,7 @@
 use crossterm::{
     cursor,
     style::{self, Color, SetBackgroundColor, SetForegroundColor},
+    terminal,
     QueueableCommand,
 };
 use std::io::{self, Write};
@@ -14,11 +15,14 @@ pub struct Viewport {
 }
 
 impl Viewport {
-    /// Build from the Editor's cached terminal size — no syscall.
-    pub fn from_editor(editor: &Editor) -> Self {
+    /// Query the actual terminal size and sync the editor's cached values.
+    pub fn from_editor(editor: &mut Editor) -> Self {
+        let (w, h) = terminal::size().unwrap_or((editor.terminal_width, editor.terminal_height));
+        editor.terminal_width = w;
+        editor.terminal_height = h;
         Self {
-            width: editor.terminal_width,
-            height: editor.terminal_height,
+            width: w,
+            height: h,
         }
     }
 
@@ -48,13 +52,14 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
     let vp = Viewport::from_editor(editor);
     let text_height = vp.text_height() as usize;
 
-    // Adjust scroll to keep cursor visible
+    // Adjust scroll to keep cursor visible (with scroll_off padding)
     let cursor_line = editor.cursors.cursor().line;
-    if cursor_line < editor.scroll_y {
-        editor.scroll_y = cursor_line;
+    let scroll_off = editor.config.scroll_off;
+    if cursor_line < editor.scroll_y + scroll_off {
+        editor.scroll_y = cursor_line.saturating_sub(scroll_off);
     }
-    if cursor_line >= editor.scroll_y + text_height {
-        editor.scroll_y = cursor_line - text_height + 1;
+    if cursor_line + scroll_off >= editor.scroll_y + text_height {
+        editor.scroll_y = (cursor_line + scroll_off).saturating_sub(text_height) + 1;
     }
 
     w.queue(cursor::Hide)?;
@@ -62,7 +67,12 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 
     // -- Render text lines --
     let line_count = editor.buffer().line_count();
-    let gutter_width = line_number_width(line_count);
+    let show_line_numbers = editor.config.line_numbers;
+    let gutter_width = if show_line_numbers {
+        line_number_width(line_count)
+    } else {
+        0
+    };
 
     // Get selection range for highlighting
     let sel_range = editor.selection_range();
@@ -70,17 +80,26 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
     for row in 0..text_height {
         let line_idx = editor.scroll_y + row;
         w.queue(cursor::MoveTo(0, row as u16))?;
+        // Ensure clean color state at the start of each row (Terminal.app compat).
+        w.queue(SetForegroundColor(Color::Reset))?;
+        w.queue(SetBackgroundColor(Color::Reset))?;
 
         // Track how many columns we've written so we can space-pad the rest.
         let mut cols_written: usize = 0;
 
         if line_idx < line_count {
-            // Line number gutter (batch-printed as one string)
-            let line_num = format!("{:>width$} ", line_idx + 1, width = gutter_width);
-            cols_written += line_num.len();
-            w.queue(SetForegroundColor(Color::DarkGrey))?;
-            w.queue(style::Print(&line_num))?;
-            w.queue(SetForegroundColor(Color::Reset))?;
+            // Line number gutter — Cyan for active line, White for others
+            if show_line_numbers {
+                let line_num = format!("{:>width$} ", line_idx + 1, width = gutter_width);
+                cols_written += line_num.len();
+                if line_idx == cursor_line {
+                    w.queue(SetForegroundColor(Color::Blue))?;
+                } else {
+                    w.queue(SetForegroundColor(Color::White))?;
+                }
+                w.queue(style::Print(&line_num))?;
+                w.queue(SetForegroundColor(Color::Reset))?;
+            }
 
             // Line text — iterate RopeSlice chars directly (zero-alloc)
             let line_slice = editor.buffer().text.line_slice(line_idx);
@@ -139,7 +158,7 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
             }
             cols_written += col;
         } else {
-            // Past end of file — show dimmed line number in gutter.
+            // Past end of file — show line numbers in dim grey.
             let line_num = format!("{:>width$} ", line_idx + 1, width = gutter_width);
             cols_written += line_num.len();
             w.queue(SetForegroundColor(Color::DarkGrey))?;

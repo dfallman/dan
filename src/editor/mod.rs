@@ -3,6 +3,7 @@ pub mod cursor;
 pub mod mode;
 
 use crate::buffer::Buffer;
+use crate::config::Config;
 use crate::editor::commands::Command;
 use crate::editor::cursor::CursorSet;
 use crate::editor::mode::Mode;
@@ -11,6 +12,8 @@ use crossterm::terminal;
 
 /// Core editor state — pico-style modeless editor.
 pub struct Editor {
+    /// Loaded configuration.
+    pub config: Config,
     /// All open buffers.
     pub buffers: Vec<Buffer>,
     /// Index of the active buffer.
@@ -43,6 +46,7 @@ impl Editor {
     pub fn new() -> Self {
         let (tw, th) = terminal::size().unwrap_or((80, 24));
         Self {
+            config: Config::load(),
             buffers: vec![Buffer::new()],
             active_buffer: 0,
             mode: Mode::Editing,
@@ -217,11 +221,44 @@ impl Editor {
             }
             Command::InsertTab => {
                 self.delete_selection_if_active();
-                // Insert 4 spaces instead of a tab
                 let pos = self.cursor_char_pos();
-                self.buffer_mut().insert_str(pos, "    ");
+                let tw = self.config.tab_width;
+                let advance = if self.config.expand_tab {
+                    let spaces: String = " ".repeat(tw);
+                    self.buffer_mut().insert_str(pos, &spaces);
+                    tw
+                } else {
+                    self.buffer_mut().insert_str(pos, "\t");
+                    1
+                };
                 let c = self.cursors.cursor();
-                self.cursors.primary_mut().head.set_col(c.col + 4);
+                self.cursors.primary_mut().head.set_col(c.col + advance);
+            }
+            Command::Dedent => {
+                let c = self.cursors.cursor();
+                let line_start = self.buffer().text.line_to_char(c.line);
+                let line_slice = self.buffer().text.line_slice(c.line);
+                let tw = self.config.tab_width;
+
+                // Count leading whitespace to remove:
+                // - a single '\t', or
+                // - up to `tab_width` leading spaces
+                let mut remove = 0usize;
+                for ch in line_slice.chars() {
+                    if ch == '\t' && remove == 0 {
+                        remove = 1;
+                        break;
+                    } else if ch == ' ' && remove < tw {
+                        remove += 1;
+                    } else {
+                        break;
+                    }
+                }
+                if remove > 0 {
+                    self.buffer_mut().delete_range(line_start, line_start + remove);
+                    let new_col = c.col.saturating_sub(remove);
+                    self.cursors.primary_mut().head.set_col(new_col);
+                }
             }
             Command::DeleteBackward => {
                 if self.has_selection() {
@@ -268,6 +305,41 @@ impl Editor {
                     let new_line = c.line.min(max_line);
                     self.cursors.set_cursor(new_line, 0);
                     self.set_status("Line deleted");
+                }
+            }
+            Command::DuplicateLineOrSelection => {
+                if let Some(text) = self.get_selected_text() {
+                    // Duplicate the selected text right after the selection.
+                    let (_, end) = self.selection_range().unwrap();
+                    self.clear_selection();
+                    self.buffer_mut().insert_str(end, &text);
+                    // Place cursor at the end of the inserted duplicate.
+                    let new_pos = end + text.len();
+                    let line = self.buffer().text.char_to_line(new_pos);
+                    let line_start = self.buffer().text.line_to_char(line);
+                    let col = new_pos - line_start;
+                    self.cursors.set_cursor(line, col);
+                    self.set_status("Selection duplicated");
+                } else {
+                    // No selection — duplicate the current line.
+                    let c = self.cursors.cursor();
+                    let line_start = self.buffer().text.line_to_char(c.line);
+                    let line_end = if c.line + 1 < self.buffer().line_count() {
+                        self.buffer().text.line_to_char(c.line + 1)
+                    } else {
+                        self.buffer().text.len_chars()
+                    };
+                    let line_text = self.buffer().text.slice_to_string(line_start..line_end);
+                    // If the line doesn't end with newline (last line), prepend one.
+                    let insert_text = if line_text.ends_with('\n') {
+                        line_text
+                    } else {
+                        format!("\n{}", line_text)
+                    };
+                    self.buffer_mut().insert_str(line_end, &insert_text);
+                    // Move cursor to the same column on the new duplicate line.
+                    self.cursors.set_cursor(c.line + 1, c.col);
+                    self.set_status("Line duplicated");
                 }
             }
 
@@ -519,6 +591,9 @@ impl Editor {
 
     /// Compute the gutter width (line numbers) for the current buffer.
     fn gutter_width(&self) -> usize {
+        if !self.config.line_numbers {
+            return 0;
+        }
         let lc = self.buffer().line_count();
         if lc == 0 { 1 } else { (lc as f64).log10().floor() as usize + 1 }
     }

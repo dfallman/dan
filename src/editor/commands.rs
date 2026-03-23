@@ -29,9 +29,11 @@ pub enum Command {
     InsertString(String),
     InsertNewline,
     InsertTab,
+    Dedent,
     DeleteBackward,
     DeleteForward,
     DeleteLine,
+    DuplicateLineOrSelection,
 
     // -- Undo / Redo --
     Undo,

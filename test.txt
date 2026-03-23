@@ -1,25 +1,35 @@
-/// Core editor state — pico-style modeless editor.
+// Core editor state — pico-style modeless editor.
 pub struct Editor {
-    /// All open buffers.
+    // All open buffers.
     pub buffers: Vec<Buffer>,
-    /// Index of the active buffer.
+    // Index of the active buffer.
     pub active_buffer: usize,
-    /// Current mode (Editing or Selecting).
+    // Current mode (Editing or Selecting).
     pub mode: Mode,
-    /// Cursors / selections for the active buffer.
+    // Cursors / selections for the active buffer.
     pub cursors: CursorSet,
-    /// Status message displayed in the status bar.
+    // Status message displayed in the status bar.
     pub status_msg: Option<String>,
-    /// Whether the editor should quit.
+    // Whether the editor should quit.
     pub should_quit: bool,
-    /// Viewport scroll offset (top visible line).
+    // Viewport scroll offset (top visible line).
     pub scroll_y: usize,
-    /// Clipboard content.
+    // Clipboard content.
     pub clipboard: String,
-    /// Selection anchor (line, col) — set when shift-selecting begins.
+    // Selection anchor (line, col) — set when shift-selecting begins.
     pub select_anchor: Option<(usize, usize)>,
-    /// Current terminal width (updated on resize).
+    // Current terminal width (updated on resize).
     pub terminal_width: u16,
-    /// Current terminal height (updated on resize).
+    // Current terminal height (updated on resize).
     pub terminal_height: u16,
 }
+
+
+
+
+
+
+
+
+
+
