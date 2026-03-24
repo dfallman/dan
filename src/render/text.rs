@@ -5,10 +5,58 @@ use crossterm::{
 };
 use std::io::{self, Write};
 
-use crate::editor::Editor;
+use syntect::easy::HighlightLines;
+use syntect::highlighting::FontStyle;
 
+use crate::editor::Editor;
 use crate::utils::char_width;
 use super::{write_spaces, Viewport};
+
+/// Convert a syntect RGBA color to a crossterm Color.
+fn syntect_to_crossterm(c: syntect::highlighting::Color) -> Color {
+    Color::Rgb {
+        r: c.r,
+        g: c.g,
+        b: c.b,
+    }
+}
+
+/// Build a per-char foreground color map for one buffer line using syntect.
+///
+/// Returns a Vec with one `Color` per character in `line_text` (excluding
+/// trailing newlines). If highlighting is disabled, returns an empty Vec.
+fn syntax_colors_for_line(
+    editor: &Editor,
+    hi: &mut HighlightLines<'_>,
+    line_text: &str,
+) -> Vec<(Color, bool)> {
+    if !editor.config.syntax_highlighting {
+        return Vec::new();
+    }
+    let ranges = hi
+        .highlight_line(line_text, &editor.highlighter.syntax_set)
+        .unwrap_or_default();
+
+    let mut colors: Vec<(Color, bool)> = Vec::with_capacity(line_text.len());
+    for (style, fragment) in &ranges {
+        let fg = syntect_to_crossterm(style.foreground);
+        let bold = style.font_style.contains(FontStyle::BOLD);
+        for _ in fragment.chars() {
+            colors.push((fg, bold));
+        }
+    }
+    colors
+}
+
+/// Look up the syntax color for a character at `char_idx`.
+/// Falls back to `Color::Reset` if the index is out of range or the map is empty.
+#[inline]
+fn syntax_fg(colors: &[(Color, bool)], char_idx: usize) -> Color {
+    colors
+        .get(char_idx)
+        .map(|(c, _)| *c)
+        .unwrap_or(Color::Reset)
+}
 
 /// Render text lines in wrap mode (soft-wrap).
 ///
@@ -29,6 +77,21 @@ pub fn render_wrap<W: Write>(
     let mut screen_row: usize = 0;
     let mut buf_line = editor.scroll_y;
 
+    // Set up syntect highlighter for the buffer's detected syntax.
+    let syntax = editor
+        .highlighter
+        .detect_syntax(editor.buffer().file_path.as_deref());
+    let mut hi = HighlightLines::new(syntax, &editor.highlighter.theme);
+
+    // We need to feed syntect all lines from the top of the file up to the
+    // first visible line so the parse state is correct (syntect is stateful).
+    // For moderate files this is fast; for very large files a cached parse
+    // state would be better (future optimisation).
+    for pre_line in 0..editor.scroll_y.min(line_count) {
+        let pre_text = editor.buffer().text.line(pre_line);
+        let _ = hi.highlight_line(&pre_text, &editor.highlighter.syntax_set);
+    }
+
     while screen_row < text_height && buf_line < line_count {
         let is_active = highlight_active && buf_line == cursor_line;
         let base_bg = if is_active {
@@ -45,27 +108,31 @@ pub fn render_wrap<W: Write>(
         if show_line_numbers {
             let line_num = format!("{:>width$} ", buf_line + 1, width = gutter_width);
             if buf_line == cursor_line {
-                w.queue(SetForegroundColor(Color::Blue))?;
-            } else {
                 w.queue(SetForegroundColor(Color::White))?;
+            } else {
+                w.queue(SetForegroundColor(Color::DarkGrey))?;
             }
             w.queue(style::Print(&line_num))?;
             w.queue(SetForegroundColor(Color::Reset))?;
         }
 
-        let line_slice = editor.buffer().text.line_slice(buf_line);
+        let line_text = editor.buffer().text.line(buf_line);
         let line_start_pos = editor.buffer().text.line_to_char(buf_line);
         let tab_w = editor.config.tab_width;
+
+        // Get per-char syntax colors for this line.
+        let syn_colors = syntax_colors_for_line(editor, &mut hi, &line_text);
 
         let mut batch = String::new();
         let mut in_sel = false;
         let mut prev_in_search = false;
         let mut prev_is_current = false;
+        let mut prev_syn_fg = Color::Reset;
         let mut vcol: usize = 0;
         let mut char_idx: usize = 0;
         let mut screen_col: usize = 0; // columns written on current screen row
 
-        for ch in line_slice.chars() {
+        for ch in line_text.chars() {
             if ch == '\n' || ch == '\r' {
                 char_idx += 1;
                 continue;
@@ -112,6 +179,7 @@ pub fn render_wrap<W: Write>(
                 in_sel = false;
                 prev_in_search = false;
                 prev_is_current = false;
+                prev_syn_fg = Color::Reset;
             }
 
             // Highlight logic
@@ -127,29 +195,32 @@ pub fn render_wrap<W: Write>(
             let is_current_match = search_hit.as_ref().map(|(i, _)| *i == editor.search_match_idx).unwrap_or(false);
             let in_search = search_hit.is_some();
 
-            let want_state = (want_sel, in_search, is_current_match);
-            let prev_state = (in_sel, prev_in_search, prev_is_current);
+            // Determine the fg color for this char: selection/search override syntax.
+            let cur_syn_fg = syntax_fg(&syn_colors, char_idx);
+            let want_state = (want_sel, in_search, is_current_match, if want_sel || in_search { Color::Reset } else { cur_syn_fg });
+            let prev_state = (in_sel, prev_in_search, prev_is_current, prev_syn_fg);
             if want_state != prev_state {
                 if !batch.is_empty() {
                     w.queue(style::Print(&batch))?;
                     batch.clear();
                 }
                 if want_sel {
-                    w.queue(SetBackgroundColor(Color::Rgb { r: 70, g: 130, b: 180 }))?;
+                    w.queue(SetBackgroundColor(Color::DarkBlue))?;
                     w.queue(SetForegroundColor(Color::White))?;
                 } else if is_current_match {
-                    w.queue(SetBackgroundColor(Color::Rgb { r: 255, g: 165, b: 0 }))?;
+                    w.queue(SetBackgroundColor(Color::Green))?;
                     w.queue(SetForegroundColor(Color::Black))?;
                 } else if in_search {
-                    w.queue(SetBackgroundColor(Color::Rgb { r: 180, g: 180, b: 60 }))?;
+                    w.queue(SetBackgroundColor(Color::Yellow))?;
                     w.queue(SetForegroundColor(Color::Black))?;
                 } else {
                     w.queue(SetBackgroundColor(base_bg))?;
-                    w.queue(SetForegroundColor(Color::Reset))?;
+                    w.queue(SetForegroundColor(cur_syn_fg))?;
                 }
                 in_sel = want_sel;
                 prev_in_search = in_search;
                 prev_is_current = is_current_match;
+                prev_syn_fg = if want_sel || in_search { Color::Reset } else { cur_syn_fg };
             }
 
             if ch == '\t' {
@@ -178,6 +249,7 @@ pub fn render_wrap<W: Write>(
         let cols_used = gutter_width + 1 + screen_col;
         let remaining = (vp.width as usize).saturating_sub(cols_used);
         if remaining > 0 {
+            w.queue(SetForegroundColor(Color::Reset))?;
             write_spaces(w, remaining)?;
         }
         // Reset bg after active-line padding so it doesn't bleed
@@ -228,6 +300,18 @@ pub fn render_nowrap<W: Write>(
     let line_count = editor.buffer().line_count();
     let sx = editor.scroll_x;
 
+    // Set up syntect highlighter for the buffer's detected syntax.
+    let syntax = editor
+        .highlighter
+        .detect_syntax(editor.buffer().file_path.as_deref());
+    let mut hi = HighlightLines::new(syntax, &editor.highlighter.theme);
+
+    // Pre-feed lines before the visible viewport so parse state is correct.
+    for pre_line in 0..editor.scroll_y.min(line_count) {
+        let pre_text = editor.buffer().text.line(pre_line);
+        let _ = hi.highlight_line(&pre_text, &editor.highlighter.syntax_set);
+    }
+
     for row in 0..text_height {
         let line_idx = editor.scroll_y + row;
         let is_active = highlight_active && line_idx == cursor_line;
@@ -255,19 +339,23 @@ pub fn render_nowrap<W: Write>(
                 w.queue(SetForegroundColor(Color::Reset))?;
             }
 
-            let line_slice = editor.buffer().text.line_slice(line_idx);
+            let line_text = editor.buffer().text.line(line_idx);
             let line_start_pos = editor.buffer().text.line_to_char(line_idx);
             let tab_w = editor.config.tab_width;
+
+            // Get per-char syntax colors for this line.
+            let syn_colors = syntax_colors_for_line(editor, &mut hi, &line_text);
 
             let mut batch = String::new();
             let mut in_sel = false;
             let mut prev_in_search = false;
             let mut prev_is_current = false;
+            let mut prev_syn_fg = Color::Reset;
             let mut vcol: usize = 0;
             let mut visible_written: usize = 0;
             let mut char_idx: usize = 0;
 
-            for ch in line_slice.chars() {
+            for ch in line_text.chars() {
                 if visible_written >= text_area_width {
                     break;
                 }
@@ -299,29 +387,31 @@ pub fn render_nowrap<W: Write>(
                 let is_current_match = search_hit.as_ref().map(|(i, _)| *i == editor.search_match_idx).unwrap_or(false);
                 let in_search = search_hit.is_some();
 
-                let want_state = (want_sel, in_search, is_current_match);
-                let prev_state = (in_sel, prev_in_search, prev_is_current);
+                let cur_syn_fg = syntax_fg(&syn_colors, char_idx);
+                let want_state = (want_sel, in_search, is_current_match, if want_sel || in_search { Color::Reset } else { cur_syn_fg });
+                let prev_state = (in_sel, prev_in_search, prev_is_current, prev_syn_fg);
                 if want_state != prev_state {
                     if !batch.is_empty() {
                         w.queue(style::Print(&batch))?;
                         batch.clear();
                     }
                     if want_sel {
-                        w.queue(SetBackgroundColor(Color::Rgb { r: 70, g: 130, b: 180 }))?;
+                        w.queue(SetBackgroundColor(Color::DarkBlue))?;
                         w.queue(SetForegroundColor(Color::White))?;
                     } else if is_current_match {
-                        w.queue(SetBackgroundColor(Color::Rgb { r: 255, g: 165, b: 0 }))?;
+                        w.queue(SetBackgroundColor(Color::DarkYellow))?;
                         w.queue(SetForegroundColor(Color::Black))?;
                     } else if in_search {
-                        w.queue(SetBackgroundColor(Color::Rgb { r: 180, g: 180, b: 60 }))?;
+                        w.queue(SetBackgroundColor(Color::Yellow))?;
                         w.queue(SetForegroundColor(Color::Black))?;
                     } else {
                         w.queue(SetBackgroundColor(base_bg))?;
-                        w.queue(SetForegroundColor(Color::Reset))?;
+                        w.queue(SetForegroundColor(cur_syn_fg))?;
                     }
                     in_sel = want_sel;
                     prev_in_search = in_search;
                     prev_is_current = is_current_match;
+                    prev_syn_fg = if want_sel || in_search { Color::Reset } else { cur_syn_fg };
                 }
 
                 // Render the character (may be partially clipped at scroll_x boundary)
@@ -361,6 +451,7 @@ pub fn render_nowrap<W: Write>(
 
         let remaining = (vp.width as usize).saturating_sub(cols_written);
         if remaining > 0 {
+            w.queue(SetForegroundColor(Color::Reset))?;
             write_spaces(w, remaining)?;
         }
         // Reset bg after active-line padding

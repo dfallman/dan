@@ -1,3 +1,5 @@
+use crossterm::style::Color;
+
 /// Editor mode — pico-style: editing is the default, no modal switching.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
@@ -16,11 +18,11 @@ impl Mode {
         }
     }
 
-    /// Status bar color as (r, g, b).
-    pub fn color(self) -> (u8, u8, u8) {
+    /// Status bar background color.
+    pub fn color(self) -> Color {
         match self {
-            Mode::Editing => (100, 180, 255),   // blue
-            Mode::Searching => (255, 160, 50),  // orange
+            Mode::Editing => Color::Blue,
+            Mode::Searching => Color::DarkYellow,
         }
     }
 }

@@ -282,10 +282,10 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
             vp.height.saturating_sub(1)
         };
         let label_len = 7; // " FIND: "
-        let cursor_x = (label_len + 1 + editor.search_query.len()) as u16; // +1 for leading space in query display
+        let cursor_x = (label_len + editor.search_query.len()) as u16; // +1 for leading space in query display
         w.queue(cursor::MoveTo(cursor_x, search_y))?;
         w.queue(cursor::Show)?;
-        w.queue(cursor::SetCursorStyle::BlinkingBar)?;
+        w.queue(cursor::SetCursorStyle::BlinkingBlock)?;
     } else {
         // Normal mode — position cursor in the document.
         let cursor_pos = editor.cursors.cursor();
