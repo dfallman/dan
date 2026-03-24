@@ -42,13 +42,6 @@ impl TextRope {
         }
     }
 
-    /// Insert a single character at a char position — O(log n).
-    pub fn insert_char(&mut self, char_pos: usize, ch: char) {
-        let mut buf = [0u8; 4];
-        let s = ch.encode_utf8(&mut buf);
-        self.rope.insert(char_pos, s);
-    }
-
     /// Insert a string at a char position — O(log n + len).
     pub fn insert_str(&mut self, char_pos: usize, s: &str) {
         self.rope.insert(char_pos, s);
@@ -168,9 +161,9 @@ mod tests {
     #[test]
     fn test_insert_char() {
         let mut r = TextRope::new();
-        r.insert_char(0, 'a');
-        r.insert_char(1, 'b');
-        r.insert_char(2, 'c');
+        r.insert_str(0, "a");
+        r.insert_str(1, "b");
+        r.insert_str(2, "c");
         assert_eq!(r.to_string_full(), "abc");
     }
 

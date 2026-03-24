@@ -10,20 +10,9 @@ impl Editor {
         if lc == 0 { 1 } else { (lc as f64).log10().floor() as usize + 1 }
     }
 
-    /// Available text columns (terminal width minus gutter and separator).
-    pub(crate) fn text_columns(&self) -> usize {
-        (self.terminal_width as usize).saturating_sub(self.gutter_width() + 1)
-    }
-
-    /// Compute the text-area width (terminal width minus gutter).
+    /// Compute the text-area width (terminal width minus gutter and separator).
     pub(crate) fn text_area_width(&self) -> usize {
-        let line_count = self.buffer().line_count();
-        let gutter_width = if self.config.line_numbers {
-            if line_count == 0 { 1 } else { (line_count as f64).log10().floor() as usize + 1 }
-        } else {
-            0
-        };
-        (self.terminal_width as usize).saturating_sub(gutter_width + 1)
+        (self.terminal_width as usize).saturating_sub(self.gutter_width() + 1)
     }
 }
 
