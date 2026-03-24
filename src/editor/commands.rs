@@ -57,10 +57,19 @@ pub enum Command {
     SearchConfirm,
     SearchCancel,
 
+    // -- Go-to-line --
+    GoToLineOpen,
+    GoToLineInsertChar(char),
+    GoToLineDeleteChar,
+    GoToLineConfirm,
+    GoToLineCancel,
+
     // -- File --
     Save,
     Quit,
     ForceQuit,
+    SaveAndQuit,
+    CancelQuit,
 
     // -- Misc --
     ToggleHelp,

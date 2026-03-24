@@ -72,7 +72,8 @@ pub fn render_help_bar<W: Write>(
     w: &mut W,
     vp: &Viewport,
 ) -> io::Result<()> {
-    let help_y = vp.height.saturating_sub(1);
+    // Help bar is the first overlay above the status bar.
+    let help_y = vp.height.saturating_sub(2);
     w.queue(cursor::MoveTo(0, help_y))?;
     
     // Pico/nano-style shortcut hints
@@ -85,6 +86,7 @@ pub fn render_help_bar<W: Write>(
         ("^X", "Cut"),
         ("^V", "Paste"),
         ("^F", "Find"),
+        ("^G", "GoTo"),
         ("^K", "Del Ln"),
         ("^A", "Sel All"),
         ("^W", "Wrap"),
@@ -105,12 +107,24 @@ pub fn render_help_bar<W: Write>(
         used += key.len() + lbl.len();
     }
 
-    // Pad rest of the line
-    let remaining = (vp.width as usize).saturating_sub(used);
+    // Right-aligned version string
+    let version_str = format!(
+        "Dan v{} ({}) ",
+        crate::VERSION.trim(),
+        crate::GIT_HASH,
+    );
+    let remaining = (vp.width as usize).saturating_sub(used + version_str.len());
+
+    // Pad between shortcuts and version
     if remaining > 0 {
         w.queue(SetBackgroundColor(Color::White))?;
         write_spaces(w, remaining)?;
     }
+
+    // Version in subdued style
+    w.queue(SetBackgroundColor(Color::White))?;
+    w.queue(SetForegroundColor(Color::DarkGrey))?;
+    w.queue(style::Print(&version_str))?;
 
     w.queue(SetForegroundColor(Color::Reset))?;
     w.queue(SetBackgroundColor(Color::Reset))?;
@@ -124,13 +138,11 @@ pub fn render_search_bar<W: Write>(
     w: &mut W,
     vp: &Viewport,
 ) -> io::Result<()> {
-    // Search bar sits just below the status bar.
-    // With help: status_y = h - chrome, help_y = h - 1, search_y = h - chrome + 1
-    // Without help: status_y = h - chrome, search_y = h - 1
+    // Search bar overlays above help (if shown) and above the status bar.
     let search_y = if editor.show_help {
-        vp.height.saturating_sub(2)
+        vp.height.saturating_sub(3)
     } else {
-        vp.height.saturating_sub(1)
+        vp.height.saturating_sub(2)
     };
     w.queue(cursor::MoveTo(0, search_y))?;
 
@@ -170,6 +182,57 @@ pub fn render_search_bar<W: Write>(
         w.queue(style::Print(&info))?;
         used += info.len();
     }
+
+    // Pad the rest
+    let remaining = width.saturating_sub(used);
+    if remaining > 0 {
+        w.queue(SetBackgroundColor(Color::DarkGrey))?;
+        write_spaces(w, remaining)?;
+    }
+
+    w.queue(SetBackgroundColor(Color::Reset))?;
+    w.queue(SetForegroundColor(Color::Reset))?;
+
+    Ok(())
+}
+
+/// Render the go-to-line prompt bar (appears below the status bar).
+pub fn render_goto_line_bar<W: Write>(
+    editor: &Editor,
+    w: &mut W,
+    vp: &Viewport,
+) -> io::Result<()> {
+    // GoTo bar overlays above help (if shown) and above the status bar.
+    let bar_y = if editor.show_help {
+        vp.height.saturating_sub(3)
+    } else {
+        vp.height.saturating_sub(2)
+    };
+    w.queue(cursor::MoveTo(0, bar_y))?;
+
+    let width = vp.width as usize;
+    let mut used: usize = 0;
+
+    // Label
+    w.queue(SetBackgroundColor(Color::DarkCyan))?;
+    w.queue(SetForegroundColor(Color::Black))?;
+    let label = "    → ";
+    w.queue(style::Print(label))?;
+    used += label.len();
+
+    // Line number input
+    w.queue(SetBackgroundColor(Color::DarkGrey))?;
+    w.queue(SetForegroundColor(Color::White))?;
+    let input_display = format!(" {} ", editor.goto_line_input);
+    w.queue(style::Print(&input_display))?;
+    used += input_display.len();
+
+    // Hint
+    let total_lines = editor.buffer().line_count();
+    let hint = format!(" (1-{}) ", total_lines);
+    w.queue(SetForegroundColor(Color::Grey))?;
+    w.queue(style::Print(&hint))?;
+    used += hint.len();
 
     // Pad the rest
     let remaining = width.saturating_sub(used);

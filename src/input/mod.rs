@@ -8,13 +8,32 @@ use crate::editor::mode::Mode;
 pub fn map_event(event: &Event, mode: Mode) -> Command {
     match event {
         Event::Key(key) => {
+            if mode == Mode::ConfirmQuit {
+                return map_confirm_quit_key(key);
+            }
             if mode == Mode::Searching {
                 return map_search_key(key);
+            }
+            if mode == Mode::GoToLine {
+                return map_goto_line_key(key);
             }
             map_key(key)
         }
         Event::Paste(text) => Command::InsertString(text.clone()),
         _ => Command::Noop,
+    }
+}
+
+/// Key mapping while in the quit-confirmation prompt.
+fn map_confirm_quit_key(key: &KeyEvent) -> Command {
+    let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+    match key.code {
+        // ^S = save and quit
+        KeyCode::Char('s') if ctrl => Command::SaveAndQuit,
+        // ^Y = yes, quit without saving
+        KeyCode::Char('y') if ctrl => Command::ForceQuit,
+        // Anything else (Esc, any key) cancels
+        _ => Command::CancelQuit,
     }
 }
 
@@ -79,7 +98,7 @@ fn map_key(key: &KeyEvent) -> Command {
             KeyCode::Char('v') => Command::Paste,
             KeyCode::Char('a') => Command::SelectAll,
             KeyCode::Char('f') | KeyCode::Char('/') => Command::SearchForward,
-            KeyCode::Char('g') => Command::SearchNext,
+            KeyCode::Char('g') => Command::GoToLineOpen,
             KeyCode::Left      => Command::MoveWordBackward,
             KeyCode::Right     => Command::MoveWordForward,
             KeyCode::Home      => Command::MoveBufferTop,
@@ -146,6 +165,19 @@ fn map_key(key: &KeyEvent) -> Command {
         // Escape cancels selection
         KeyCode::Esc => Command::Noop,
 
+        _ => Command::Noop,
+    }
+}
+
+/// Key mapping while inside the go-to-line prompt.
+fn map_goto_line_key(key: &KeyEvent) -> Command {
+    let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+
+    match key.code {
+        KeyCode::Esc => Command::GoToLineCancel,
+        KeyCode::Enter => Command::GoToLineConfirm,
+        KeyCode::Backspace => Command::GoToLineDeleteChar,
+        KeyCode::Char(ch) if !ctrl => Command::GoToLineInsertChar(ch),
         _ => Command::Noop,
     }
 }
