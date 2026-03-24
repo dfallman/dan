@@ -8,6 +8,7 @@ use std::io::{self, Write};
 
 use crate::editor::Editor;
 use crate::editor::mode::Mode;
+use crate::editor::visual_rows_for;
 use crate::utils::char_width;
 
 /// Viewport dimensions, cached from the Editor.
@@ -69,11 +70,75 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
     // Adjust scroll to keep cursor visible (with scroll_off padding)
     let cursor_line = editor.cursors.cursor().line;
     let scroll_off = editor.config.scroll_off;
-    if cursor_line < editor.scroll_y + scroll_off {
-        editor.scroll_y = cursor_line.saturating_sub(scroll_off);
-    }
-    if cursor_line + scroll_off >= editor.scroll_y + text_height {
-        editor.scroll_y = (cursor_line + scroll_off).saturating_sub(text_height) + 1;
+    if editor.config.wrap_lines {
+        // Wrap mode: scroll must account for visual rows, not just buffer lines.
+        // Re-derive text_area_width for the helper (gutter not computed yet, use temp)
+        let line_count_tmp = editor.buffer().line_count();
+        let gw_tmp = if editor.config.line_numbers {
+            line_number_width(line_count_tmp)
+        } else { 0 };
+        let taw_tmp = (vp.width as usize).saturating_sub(gw_tmp + 1);
+        let tab_w = editor.config.tab_width;
+        if taw_tmp > 0 {
+            // Find which visual row the cursor is on within its buffer line.
+            let cur_text: String = editor.buffer().text.line_slice(cursor_line).chars().collect();
+            let cur_vrows = visual_rows_for(&cur_text, tab_w, taw_tmp);
+            let cursor_col = editor.cursors.cursor().col;
+            let mut cur_vrow_idx = cur_vrows.len() - 1;
+            for (i, &(start, end)) in cur_vrows.iter().enumerate() {
+                if cursor_col >= start && (cursor_col < end || i == cur_vrows.len() - 1) {
+                    cur_vrow_idx = i;
+                    break;
+                }
+            }
+
+            // --- Scroll UP: ensure scroll_off visual rows above the cursor ---
+            // First, clamp scroll_y so it never goes past the cursor line.
+            if editor.scroll_y > cursor_line {
+                editor.scroll_y = cursor_line;
+            }
+            // Count visual rows from scroll_y to the cursor's visual row.
+            // If it's less than scroll_off, scroll up.
+            loop {
+                if editor.scroll_y == 0 { break; }
+                let mut rows_above: usize = 0;
+                for bl in editor.scroll_y..cursor_line {
+                    let lt: String = editor.buffer().text.line_slice(bl).chars().collect();
+                    rows_above += visual_rows_for(&lt, tab_w, taw_tmp).len();
+                }
+                rows_above += cur_vrow_idx; // cursor's sub-row within its line
+                if rows_above >= scroll_off { break; }
+                editor.scroll_y -= 1;
+            }
+
+            // --- Scroll DOWN: ensure scroll_off visual rows below the cursor ---
+            // The cursor's visual row (from top of viewport) must be at most
+            // text_height - 1 - scroll_off.
+            let max_row = text_height.saturating_sub(1 + scroll_off);
+            loop {
+                let mut vrow_from_top: usize = 0;
+                for bl in editor.scroll_y..cursor_line {
+                    let lt: String = editor.buffer().text.line_slice(bl).chars().collect();
+                    vrow_from_top += visual_rows_for(&lt, tab_w, taw_tmp).len();
+                }
+                vrow_from_top += cur_vrow_idx;
+                if vrow_from_top <= max_row {
+                    break;
+                }
+                editor.scroll_y += 1;
+                if editor.scroll_y > cursor_line {
+                    editor.scroll_y = cursor_line;
+                    break;
+                }
+            }
+        }
+    } else {
+        if cursor_line < editor.scroll_y + scroll_off {
+            editor.scroll_y = cursor_line.saturating_sub(scroll_off);
+        }
+        if cursor_line + scroll_off >= editor.scroll_y + text_height {
+            editor.scroll_y = (cursor_line + scroll_off).saturating_sub(text_height) + 1;
+        }
     }
 
     // -- Horizontal scroll adjustment (only when wrap_lines = false) --
@@ -506,29 +571,68 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
         w.queue(cursor::SetCursorStyle::BlinkingBar)?;
     } else {
         // Normal / Selecting mode — position cursor in the document.
-        // Compute visual column by expanding tabs in the cursor's line.
         let cursor_pos = editor.cursors.cursor();
-        let screen_y = cursor_pos.line.saturating_sub(editor.scroll_y) as u16;
         let tab_w = editor.config.tab_width;
-        let visual_col = if cursor_pos.line < line_count {
-            let line_slice = editor.buffer().text.line_slice(cursor_pos.line);
-            let mut vc: usize = 0;
-            for (i, ch) in line_slice.chars().enumerate() {
-                if i >= cursor_pos.col {
-                    break;
-                }
-                if ch == '\t' {
-                    vc += tab_w - (vc % tab_w);
-                } else {
-                    vc += char_width(ch, tab_w);
-                }
+
+        let (screen_y, visual_col) = if editor.config.wrap_lines && text_area_width > 0 {
+            // Wrap mode: screen_y must count visual rows, visual_col is
+            // relative to the start of the cursor's visual row.
+            let mut sy: usize = 0;
+            for bl in editor.scroll_y..cursor_pos.line.min(line_count) {
+                let lt: String = editor.buffer().text.line_slice(bl).chars().collect();
+                sy += visual_rows_for(&lt, tab_w, text_area_width).len();
             }
-            vc
+            // Find cursor's visual row within its buffer line.
+            let (vrow_idx, vrow_start) = if cursor_pos.line < line_count {
+                let lt: String = editor.buffer().text.line_slice(cursor_pos.line).chars().collect();
+                let vrows = visual_rows_for(&lt, tab_w, text_area_width);
+                let mut idx = vrows.len() - 1;
+                for (i, &(start, end)) in vrows.iter().enumerate() {
+                    if cursor_pos.col >= start && (cursor_pos.col < end || i == vrows.len() - 1) {
+                        idx = i;
+                        break;
+                    }
+                }
+                (idx, vrows[idx].0)
+            } else {
+                (0, 0)
+            };
+            sy += vrow_idx;
+
+            // Compute visual column from the visual row's start char.
+            let vc = if cursor_pos.line < line_count {
+                let line_slice = editor.buffer().text.line_slice(cursor_pos.line);
+                let mut v: usize = 0;
+                for (i, ch) in line_slice.chars().enumerate() {
+                    if i < vrow_start { continue; }
+                    if i >= cursor_pos.col { break; }
+                    if ch == '\t' { v += tab_w - (v % tab_w); }
+                    else { v += char_width(ch, tab_w); }
+                }
+                v
+            } else {
+                cursor_pos.col
+            };
+            (sy, vc)
         } else {
-            cursor_pos.col
+            // No-wrap mode: 1 buffer line = 1 screen row.
+            let sy = cursor_pos.line.saturating_sub(editor.scroll_y);
+            let vc = if cursor_pos.line < line_count {
+                let line_slice = editor.buffer().text.line_slice(cursor_pos.line);
+                let mut v: usize = 0;
+                for (i, ch) in line_slice.chars().enumerate() {
+                    if i >= cursor_pos.col { break; }
+                    if ch == '\t' { v += tab_w - (v % tab_w); }
+                    else { v += char_width(ch, tab_w); }
+                }
+                v
+            } else {
+                cursor_pos.col
+            };
+            (sy, vc)
         };
         let screen_x = (gutter_width + 1 + visual_col.saturating_sub(editor.scroll_x)) as u16;
-        w.queue(cursor::MoveTo(screen_x, screen_y))?;
+        w.queue(cursor::MoveTo(screen_x, screen_y as u16))?;
         w.queue(cursor::Show)?;
 
         // Pico-style: always use a steady block cursor (like a normal text editor)
