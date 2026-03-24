@@ -171,13 +171,16 @@ impl Editor {
             }
             Command::PageUp => {
                 self.clear_selection();
-                for _ in 0..20 {
+                // Scroll by visible text area height (terminal height minus status + command bars)
+                let page = (self.terminal_height as usize).saturating_sub(2).max(1);
+                for _ in 0..page {
                     self.move_cursor_vertical(-1);
                 }
             }
             Command::PageDown => {
                 self.clear_selection();
-                for _ in 0..20 {
+                let page = (self.terminal_height as usize).saturating_sub(2).max(1);
+                for _ in 0..page {
                     self.move_cursor_vertical(1);
                 }
             }
