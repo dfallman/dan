@@ -75,62 +75,59 @@ impl Selection {
     }
 }
 
-/// Multi-cursor container. Always has at least one cursor.
+/// Cursor/selection container. Wraps a single `Selection` whose anchor
+/// and head diverge when the user shift-selects. Moving without shift
+/// collapses the selection (anchor == head).
 #[derive(Debug, Clone)]
 pub struct CursorSet {
-    /// Primary cursor is always at index 0.
-    selections: Vec<Selection>,
+    selection: Selection,
 }
 
 impl CursorSet {
     pub fn new() -> Self {
         Self {
-            selections: vec![Selection::collapsed(Cursor::origin())],
+            selection: Selection::collapsed(Cursor::origin()),
         }
     }
 
     /// Get the primary selection.
     pub fn primary(&self) -> &Selection {
-        &self.selections[0]
+        &self.selection
     }
 
     /// Get a mutable reference to the primary selection.
     pub fn primary_mut(&mut self) -> &mut Selection {
-        &mut self.selections[0]
+        &mut self.selection
     }
 
     /// Get the primary cursor (head of primary selection).
     pub fn cursor(&self) -> Cursor {
-        self.selections[0].head
+        self.selection.head
     }
 
     /// Set the primary cursor position, collapsing the selection.
     pub fn set_cursor(&mut self, line: usize, col: usize) {
         let cursor = Cursor::new(line, col);
-        self.selections = vec![Selection::collapsed(cursor)];
+        self.selection = Selection::collapsed(cursor);
     }
 
-    /// Get all selections.
-    pub fn selections(&self) -> &[Selection] {
-        &self.selections
+    /// Returns true if the user has an active (non-collapsed) selection.
+    pub fn has_selection(&self) -> bool {
+        !self.selection.is_collapsed()
     }
 
-    /// Add a new cursor, creating a new selection.
-    pub fn add_cursor(&mut self, line: usize, col: usize) {
-        let cursor = Cursor::new(line, col);
-        self.selections.push(Selection::collapsed(cursor));
+    /// Pin the anchor at the current head position so subsequent head
+    /// moves create a selection range. No-op if already selecting.
+    pub fn begin_selection(&mut self) {
+        if self.selection.is_collapsed() {
+            // anchor stays, head will diverge on the next move
+            self.selection.anchor = self.selection.head;
+        }
     }
 
-    /// Reduce to a single cursor (the primary).
-    pub fn collapse_to_primary(&mut self) {
-        self.selections.truncate(1);
-        let head = self.selections[0].head;
-        self.selections[0] = Selection::collapsed(head);
-    }
-
-    /// Number of active cursors/selections.
-    pub fn count(&self) -> usize {
-        self.selections.len()
+    /// Collapse the selection by snapping the anchor to the head.
+    pub fn collapse_selection(&mut self) {
+        self.selection.anchor = self.selection.head;
     }
 }
 
@@ -171,17 +168,19 @@ mod tests {
     #[test]
     fn test_cursor_set_default() {
         let cs = CursorSet::new();
-        assert_eq!(cs.count(), 1);
+        assert!(!cs.has_selection());
         assert_eq!(cs.cursor().line, 0);
         assert_eq!(cs.cursor().col, 0);
     }
 
     #[test]
-    fn test_multi_cursor() {
+    fn test_begin_and_collapse_selection() {
         let mut cs = CursorSet::new();
-        cs.add_cursor(5, 10);
-        assert_eq!(cs.count(), 2);
-        cs.collapse_to_primary();
-        assert_eq!(cs.count(), 1);
+        cs.begin_selection();
+        assert!(!cs.has_selection()); // anchor == head still
+        cs.primary_mut().head.set_col(5);
+        assert!(cs.has_selection());
+        cs.collapse_selection();
+        assert!(!cs.has_selection());
     }
 }

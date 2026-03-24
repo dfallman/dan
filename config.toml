@@ -7,17 +7,21 @@ tab_width = 4
 # Expand tabs to spaces (true = spaces, false = literal tabs).
 expand_tab = false
 
-# Show line numbers in the gutter.
+# Show line numbers in the gutter
 line_numbers = true
+
+# Show ^H Help in the gutter (not implemented)
+show_help = true
 
 # Highlight active line
 highlight_active = true 
 
-# Lines of padding to keep above/below the cursor when scrolling.
+# Lines of padding to keep above/below the cursor when scrolling
 scroll_off = 5
 
 # Color theme (currently only "default").
 theme = "default"
 
-# Wrap long lines (true) or scroll horizontally (false).
+# Wrap long lines (true) or scroll horizontally (false) 
+# Note: toggle with keyboard shortcut [^G].
 wrap_lines = true

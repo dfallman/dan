@@ -3,8 +3,6 @@
 pub enum Mode {
     /// Normal editing — typing inserts text, arrows move cursor.
     Editing,
-    /// Selecting text (shift+arrows or Ctrl+A).
-    Selecting,
     /// Incremental search — typing updates the search query.
     Searching,
 }
@@ -14,7 +12,6 @@ impl Mode {
     pub fn label(self) -> &'static str {
         match self {
             Mode::Editing => "EDIT",
-            Mode::Selecting => "SELECT",
             Mode::Searching => "FIND",
         }
     }
@@ -23,7 +20,6 @@ impl Mode {
     pub fn color(self) -> (u8, u8, u8) {
         match self {
             Mode::Editing => (100, 180, 255),   // blue
-            Mode::Selecting => (255, 200, 80),  // gold
             Mode::Searching => (255, 160, 50),  // orange
         }
     }
@@ -42,7 +38,7 @@ mod tests {
     #[test]
     fn test_mode_labels() {
         assert_eq!(Mode::Editing.label(), "EDIT");
-        assert_eq!(Mode::Selecting.label(), "SELECT");
+        assert_eq!(Mode::Searching.label(), "FIND");
     }
 
     #[test]
