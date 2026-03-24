@@ -11,6 +11,8 @@ pub struct Config {
     pub expand_tab: bool,
     /// Show line numbers.
     pub line_numbers: bool,
+    /// Highlight the line the cursor is on.
+    pub highlight_active: bool,
     /// Scroll padding (lines above/below cursor to keep visible).
     pub scroll_off: usize,
     /// Theme name.
@@ -25,6 +27,7 @@ impl Default for Config {
             tab_width: 4,
             expand_tab: false,
             line_numbers: true,
+            highlight_active: true,
             scroll_off: 5,
             theme: "default".to_string(),
             wrap_lines: true,
