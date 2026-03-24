@@ -9,6 +9,8 @@ pub enum Mode {
     Searching,
     /// Go-to-line prompt — typing enters a line number.
     GoToLine,
+    /// Save-as prompt — typing enters a file path.
+    SaveAs,
     /// Confirming quit with unsaved changes.
     ConfirmQuit,
 }
@@ -20,6 +22,7 @@ impl Mode {
             Mode::Editing => "EDIT",
             Mode::Searching => "FIND",
             Mode::GoToLine => "GOTO",
+            Mode::SaveAs => "SAVE",
             Mode::ConfirmQuit => "QUIT",
         }
     }
@@ -30,6 +33,7 @@ impl Mode {
             Mode::Editing => Color::Blue,
             Mode::Searching => Color::DarkYellow,
             Mode::GoToLine => Color::DarkCyan,
+            Mode::SaveAs => Color::DarkGreen,
             Mode::ConfirmQuit => Color::DarkRed,
         }
     }
@@ -50,6 +54,7 @@ mod tests {
         assert_eq!(Mode::Editing.label(), "EDIT");
         assert_eq!(Mode::Searching.label(), "FIND");
         assert_eq!(Mode::GoToLine.label(), "GOTO");
+        assert_eq!(Mode::SaveAs.label(), "SAVE");
         assert_eq!(Mode::ConfirmQuit.label(), "QUIT");
     }
 

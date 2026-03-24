@@ -17,6 +17,9 @@ pub fn map_event(event: &Event, mode: Mode) -> Command {
             if mode == Mode::GoToLine {
                 return map_goto_line_key(key);
             }
+            if mode == Mode::SaveAs {
+                return map_save_as_key(key);
+            }
             map_key(key)
         }
         Event::Paste(text) => Command::InsertString(text.clone()),
@@ -69,6 +72,7 @@ fn map_key(key: &KeyEvent) -> Command {
     if ctrl && shift {
         return match key.code {
             KeyCode::Char('c') | KeyCode::Char('C') => Command::ForceQuit,
+            KeyCode::Char('s') | KeyCode::Char('S') => Command::SaveAsOpen,
             KeyCode::Left  => Command::SelectWordBackward,
             KeyCode::Right => Command::SelectWordForward,
             _ => Command::Noop,
@@ -178,6 +182,19 @@ fn map_goto_line_key(key: &KeyEvent) -> Command {
         KeyCode::Enter => Command::GoToLineConfirm,
         KeyCode::Backspace => Command::GoToLineDeleteChar,
         KeyCode::Char(ch) if !ctrl => Command::GoToLineInsertChar(ch),
+        _ => Command::Noop,
+    }
+}
+
+/// Key mapping while inside the save-as prompt.
+fn map_save_as_key(key: &KeyEvent) -> Command {
+    let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+
+    match key.code {
+        KeyCode::Esc => Command::SaveAsCancel,
+        KeyCode::Enter => Command::SaveAsConfirm,
+        KeyCode::Backspace => Command::SaveAsDeleteChar,
+        KeyCode::Char(ch) if !ctrl => Command::SaveAsInsertChar(ch),
         _ => Command::Noop,
     }
 }

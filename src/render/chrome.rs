@@ -79,6 +79,7 @@ pub fn render_help_bar<W: Write>(
     // Pico/nano-style shortcut hints
     let shortcuts = [
         ("^S", "Save"),
+        ("^⇧S", "SavAs"),
         ("^Q", "Quit"),
         ("^Z", "Undo"),
         ("^Y", "Redo"),
@@ -232,6 +233,55 @@ pub fn render_goto_line_bar<W: Write>(
     let hint = format!(" (1-{}) ", total_lines);
     w.queue(SetForegroundColor(Color::Grey))?;
     w.queue(style::Print(&hint))?;
+    used += hint.len();
+
+    // Pad the rest
+    let remaining = width.saturating_sub(used);
+    if remaining > 0 {
+        w.queue(SetBackgroundColor(Color::DarkGrey))?;
+        write_spaces(w, remaining)?;
+    }
+
+    w.queue(SetBackgroundColor(Color::Reset))?;
+    w.queue(SetForegroundColor(Color::Reset))?;
+
+    Ok(())
+}
+
+/// Render the save-as prompt bar (appears below the status bar).
+pub fn render_save_as_bar<W: Write>(
+    editor: &Editor,
+    w: &mut W,
+    vp: &Viewport,
+) -> io::Result<()> {
+    let bar_y = if editor.show_help {
+        vp.height.saturating_sub(3)
+    } else {
+        vp.height.saturating_sub(2)
+    };
+    w.queue(cursor::MoveTo(0, bar_y))?;
+
+    let width = vp.width as usize;
+    let mut used: usize = 0;
+
+    // Label
+    w.queue(SetBackgroundColor(Color::DarkGreen))?;
+    w.queue(SetForegroundColor(Color::Black))?;
+    let label = " Save As: ";
+    w.queue(style::Print(label))?;
+    used += label.len();
+
+    // Path input
+    w.queue(SetBackgroundColor(Color::DarkGrey))?;
+    w.queue(SetForegroundColor(Color::White))?;
+    let input_display = format!(" {} ", editor.save_as_input);
+    w.queue(style::Print(&input_display))?;
+    used += input_display.len();
+
+    // Hint
+    w.queue(SetForegroundColor(Color::Grey))?;
+    let hint = " (Enter=save, Esc=cancel) ";
+    w.queue(style::Print(hint))?;
     used += hint.len();
 
     // Pad the rest

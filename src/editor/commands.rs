@@ -64,6 +64,13 @@ pub enum Command {
     GoToLineConfirm,
     GoToLineCancel,
 
+    // -- Save As --
+    SaveAsOpen,
+    SaveAsInsertChar(char),
+    SaveAsDeleteChar,
+    SaveAsConfirm,
+    SaveAsCancel,
+
     // -- File --
     Save,
     Quit,
