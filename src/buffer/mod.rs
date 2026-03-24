@@ -55,6 +55,14 @@ impl Buffer {
         }
     }
 
+    /// Save the buffer to a new path and adopt it as the buffer's file.
+    pub fn save_to(&mut self, path: &Path) -> io::Result<()> {
+        std::fs::write(path, self.text.to_string_full())?;
+        self.file_path = Some(path.to_path_buf());
+        self.dirty = false;
+        Ok(())
+    }
+
     /// Number of lines in the buffer.
     pub fn line_count(&self) -> usize {
         self.text.len_lines()

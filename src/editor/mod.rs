@@ -65,6 +65,8 @@ pub struct Editor {
     pub highlighter: Highlighter,
     /// Current input text in the go-to-line prompt.
     pub goto_line_input: String,
+    /// Current input text in the save-as prompt.
+    pub save_as_input: String,
 }
 
 impl Editor {
@@ -94,6 +96,7 @@ impl Editor {
             last_search_query: String::new(),
             highlighter,
             goto_line_input: String::new(),
+            save_as_input: String::new(),
         }
     }
 
@@ -590,6 +593,44 @@ impl Editor {
             }
             Command::GoToLineCancel => {
                 self.goto_line_input.clear();
+                self.mode = Mode::Editing;
+                self.clear_status();
+            }
+
+            // -- Save As --
+            Command::SaveAsOpen => {
+                // Pre-populate with current file path if one exists.
+                self.save_as_input = self.buffer()
+                    .file_path
+                    .as_ref()
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or_default();
+                self.mode = Mode::SaveAs;
+                self.set_status("Save As: enter path, Enter to save, Esc to cancel");
+            }
+            Command::SaveAsInsertChar(ch) => {
+                self.save_as_input.push(ch);
+            }
+            Command::SaveAsDeleteChar => {
+                self.save_as_input.pop();
+            }
+            Command::SaveAsConfirm => {
+                let path_str = self.save_as_input.clone();
+                self.save_as_input.clear();
+                self.mode = Mode::Editing;
+                if path_str.is_empty() {
+                    self.set_status("Save As cancelled: no path given");
+                } else {
+                    let path = std::path::Path::new(&path_str);
+                    self.buffer_mut().commit_edits();
+                    match self.buffer_mut().save_to(path) {
+                        Ok(()) => self.set_status(format!("Saved as {}", path_str)),
+                        Err(e) => self.set_status(format!("Save failed: {}", e)),
+                    }
+                }
+            }
+            Command::SaveAsCancel => {
+                self.save_as_input.clear();
                 self.mode = Mode::Editing;
                 self.clear_status();
             }

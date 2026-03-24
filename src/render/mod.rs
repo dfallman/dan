@@ -242,6 +242,11 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
         chrome::render_goto_line_bar(editor, w, &vp)?;
     }
 
+    // -- Render save-as prompt (when in save-as mode) --
+    if editor.mode == Mode::SaveAs {
+        chrome::render_save_as_bar(editor, w, &vp)?;
+    }
+
     // -- Position the cursor --
     if editor.mode == Mode::Searching {
         // During search, draw an outline cursor in the document at the saved position.
