@@ -1051,7 +1051,7 @@ impl Default for Editor {
 
 /// Build visual row breaks for a line of text.
 /// Returns a Vec of (start_char_idx, end_char_idx) for each visual row.
-fn visual_rows_for(line_text: &str, tab_w: usize, text_area_width: usize) -> Vec<(usize, usize)> {
+pub(crate) fn visual_rows_for(line_text: &str, tab_w: usize, text_area_width: usize) -> Vec<(usize, usize)> {
     let mut rows: Vec<(usize, usize)> = Vec::new();
     let mut row_start: usize = 0;
     let mut screen_col: usize = 0;
