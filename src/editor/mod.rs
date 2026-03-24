@@ -14,6 +14,7 @@ use crate::config::Config;
 use crate::editor::commands::Command;
 use crate::editor::cursor::CursorSet;
 use crate::editor::mode::Mode;
+use crate::syntax::Highlighter;
 
 use crossterm::terminal;
 
@@ -60,13 +61,17 @@ pub struct Editor {
     pub search_saved_cursor: Option<(usize, usize)>,
     /// Last completed search query (persists across search sessions).
     last_search_query: String,
+    /// Syntax highlighter (shared across buffers).
+    pub highlighter: Highlighter,
 }
 
 impl Editor {
     pub fn new() -> Self {
         let (tw, th) = terminal::size().unwrap_or((80, 24));
+        let config = Config::load();
+        let highlighter = Highlighter::new(&config.theme);
         Self {
-            config: Config::load(),
+            config,
             buffers: vec![Buffer::new()],
             active_buffer: 0,
             mode: Mode::Editing,
@@ -85,6 +90,7 @@ impl Editor {
             search_match_idx: 0,
             search_saved_cursor: None,
             last_search_query: String::new(),
+            highlighter,
         }
     }
 
@@ -558,6 +564,10 @@ impl Editor {
 
             Command::ToggleWrap => {
                 self.config.wrap_lines = !self.config.wrap_lines;
+            }
+
+            Command::ToggleSyntax => {
+                self.config.syntax_highlighting = !self.config.syntax_highlighting;
             }
 
             Command::Noop => {}

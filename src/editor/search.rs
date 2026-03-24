@@ -8,7 +8,7 @@ impl Editor {
             if self.search_query.is_empty() {
                 self.clear_status();
             } else {
-                self.set_status(format!("No matches for \"{}\"", self.search_query));
+                self.set_status(format!(" No matches for \"{}\" ", self.search_query));
             }
             return;
         }
@@ -33,7 +33,7 @@ impl Editor {
             let col = start - self.buffer().text.line_to_char(line);
             self.cursors.set_cursor(line, col);
             self.set_status(format!(
-                "{}/{} matches",
+                "{}/{} matches, ^G for next, ⏎ to select",
                 self.search_match_idx + 1,
                 self.search_matches.len()
             ));

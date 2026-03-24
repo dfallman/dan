@@ -49,7 +49,7 @@ fn map_key(key: &KeyEvent) -> Command {
     // -- Ctrl+Shift shortcuts --
     if ctrl && shift {
         return match key.code {
-            KeyCode::Char('c') | KeyCode::Char('C') => Command::Copy,
+            KeyCode::Char('c') | KeyCode::Char('C') => Command::ForceQuit,
             KeyCode::Left  => Command::SelectWordBackward,
             KeyCode::Right => Command::SelectWordForward,
             _ => Command::Noop,
@@ -70,7 +70,7 @@ fn map_key(key: &KeyEvent) -> Command {
     // -- Ctrl shortcuts (GUI-style) --
     if ctrl {
         return match key.code {
-            KeyCode::Char('c') => Command::ForceQuit,
+            KeyCode::Char('c') => Command::Copy,
             KeyCode::Char('s') => Command::Save,
             KeyCode::Char('q') => Command::Quit,
             KeyCode::Char('z') => Command::Undo,
@@ -88,6 +88,7 @@ fn map_key(key: &KeyEvent) -> Command {
             KeyCode::Char('d') => Command::DuplicateLineOrSelection,
             KeyCode::Char('w') => Command::ToggleWrap,
             KeyCode::Char('h') => Command::ToggleHelp,
+            KeyCode::Char('l') => Command::ToggleSyntax,
             _ => Command::Noop,
         };
     }

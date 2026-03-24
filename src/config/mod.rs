@@ -15,10 +15,12 @@ pub struct Config {
     pub highlight_active: bool,
     /// Scroll padding (lines above/below cursor to keep visible).
     pub scroll_off: usize,
-    /// Theme name.
+    /// Theme name (used for syntect theme selection).
     pub theme: String,
     /// Wrap long lines (true) or scroll horizontally (false).
     pub wrap_lines: bool,
+    /// Enable syntax highlighting (requires a file with a known extension).
+    pub syntax_highlighting: bool,
 }
 
 impl Default for Config {
@@ -29,8 +31,9 @@ impl Default for Config {
             line_numbers: true,
             highlight_active: true,
             scroll_off: 5,
-            theme: "default".to_string(),
+            theme: "base16-eighties.dark".to_string(),
             wrap_lines: true,
+            syntax_highlighting: true,
         }
     }
 }

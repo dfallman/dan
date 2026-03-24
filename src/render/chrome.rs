@@ -21,14 +21,13 @@ pub fn render_status_bar<W: Write>(
     let mut used: usize = 0;
 
     // Mode indicator (derive visual mode from selection state)
-    let (r, g, b, mode_text) = if editor.has_selection() {
-        (255u8, 200u8, 80u8, "SELECT") // gold
+    let (mode_bg, mode_text) = if editor.has_selection() {
+        (Color::DarkYellow, "SELECT")
     } else {
-        let (r, g, b) = editor.mode.color();
-        (r, g, b, editor.mode.label())
+        (editor.mode.color(), editor.mode.label())
     };
     let mode_label = format!(" {} ", mode_text);
-    w.queue(SetBackgroundColor(Color::Rgb { r, g, b }))?;
+    w.queue(SetBackgroundColor(mode_bg))?;
     w.queue(SetForegroundColor(Color::Black))?;
     w.queue(style::Print(&mode_label))?;
     used += mode_label.len();
@@ -46,8 +45,10 @@ pub fn render_status_bar<W: Write>(
     // Status message (if any)
     if let Some(ref msg) = editor.status_msg {
         let msg_part = format!(" {} ", msg);
-        w.queue(SetForegroundColor(Color::Blue))?;
+        w.queue(SetBackgroundColor(Color::DarkBlue))?;
+        w.queue(SetForegroundColor(Color::Black))?;
         w.queue(style::Print(&msg_part))?;
+        w.queue(SetBackgroundColor(Color::White))?;
         w.queue(SetForegroundColor(Color::Black))?;
         used += msg_part.len();
     }
@@ -73,7 +74,7 @@ pub fn render_help_bar<W: Write>(
 ) -> io::Result<()> {
     let help_y = vp.height.saturating_sub(1);
     w.queue(cursor::MoveTo(0, help_y))?;
-
+    
     // Pico/nano-style shortcut hints
     let shortcuts = [
         ("^S", "Save"),
@@ -87,17 +88,18 @@ pub fn render_help_bar<W: Write>(
         ("^K", "Del Ln"),
         ("^A", "Sel All"),
         ("^W", "Wrap"),
+        ("^L", "Highl"),
         ("^H", "Help"),
     ];
 
     let mut used: usize = 0;
     for (key, label) in &shortcuts {
         // Key in inverse video
-        w.queue(SetBackgroundColor(Color::White))?;
+        w.queue(SetBackgroundColor(Color::DarkBlue))?;
         w.queue(SetForegroundColor(Color::Black))?;
         w.queue(style::Print(key))?;
-        w.queue(SetBackgroundColor(Color::Reset))?;
-        w.queue(SetForegroundColor(Color::DarkGrey))?;
+        w.queue(SetBackgroundColor(Color::White))?;
+        w.queue(SetForegroundColor(Color::Black))?;
         let lbl = format!(" {} ", label);
         w.queue(style::Print(&lbl))?;
         used += key.len() + lbl.len();
@@ -106,7 +108,7 @@ pub fn render_help_bar<W: Write>(
     // Pad rest of the line
     let remaining = (vp.width as usize).saturating_sub(used);
     if remaining > 0 {
-        w.queue(SetBackgroundColor(Color::Reset))?;
+        w.queue(SetBackgroundColor(Color::White))?;
         write_spaces(w, remaining)?;
     }
 
@@ -136,13 +138,9 @@ pub fn render_search_bar<W: Write>(
     let mut used: usize = 0;
 
     // Label
-    w.queue(SetBackgroundColor(Color::Rgb {
-        r: 255,
-        g: 165,
-        b: 0,
-    }))?;
+    w.queue(SetBackgroundColor(Color::DarkYellow))?;
     w.queue(SetForegroundColor(Color::Black))?;
-    let label = " FIND: ";
+    let label = "    → ";
     w.queue(style::Print(label))?;
     used += label.len();
 
@@ -158,21 +156,17 @@ pub fn render_search_bar<W: Write>(
         if editor.search_query.is_empty() {
             String::new()
         } else {
-            " (no matches)".to_string()
+            " (0) ".to_string()
         }
     } else {
         format!(
-            " ({}/{})",
+            " ({}/{}) ",
             editor.search_match_idx + 1,
             editor.search_matches.len()
         )
     };
     if !info.is_empty() {
-        w.queue(SetForegroundColor(Color::Rgb {
-            r: 200,
-            g: 200,
-            b: 200,
-        }))?;
+        w.queue(SetForegroundColor(Color::White))?;
         w.queue(style::Print(&info))?;
         used += info.len();
     }
@@ -180,6 +174,7 @@ pub fn render_search_bar<W: Write>(
     // Pad the rest
     let remaining = width.saturating_sub(used);
     if remaining > 0 {
+        w.queue(SetBackgroundColor(Color::DarkGrey))?;
         write_spaces(w, remaining)?;
     }
 
