@@ -33,7 +33,7 @@ Under the hood it uses a rope data structure for efficient editing of large file
 You need [Rust 1.70+](https://rustup.rs/) installed.
 
 ```bash
-git clone https://github.com/yourusername/dan.git
+git clone https://github.com/dfallman/dan.git
 cd dan
 cargo build --release
 ```

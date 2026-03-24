@@ -21,6 +21,8 @@ pub struct Config {
     pub wrap_lines: bool,
     /// Enable syntax highlighting (requires a file with a known extension).
     pub syntax_highlighting: bool,
+    /// Auto-indent new lines (copy leading whitespace from current line).
+    pub auto_indent: bool,
 }
 
 impl Default for Config {
@@ -34,6 +36,7 @@ impl Default for Config {
             theme: "base16-eighties.dark".to_string(),
             wrap_lines: true,
             syntax_highlighting: true,
+            auto_indent: true,
         }
     }
 }

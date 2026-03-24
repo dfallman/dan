@@ -18,8 +18,10 @@ use crate::utils::char_width;
 pub struct Viewport {
     pub width: u16,
     pub height: u16,
-    /// How many chrome rows at the bottom (status bar + optional help bar).
+    /// Fixed chrome rows (status bar = 1).
     pub chrome_rows: u16,
+    /// Overlay bars that paint over the bottom text lines (help, search, goto).
+    pub overlay_rows: u16,
 }
 
 impl Viewport {
@@ -28,25 +30,33 @@ impl Viewport {
         let (w, h) = terminal::size().unwrap_or((editor.terminal_width, editor.terminal_height));
         editor.terminal_width = w;
         editor.terminal_height = h;
-        // 1 row for the status bar, plus 1 more if help legend is shown,
-        // plus 1 more if the search prompt is active.
-        let mut chrome: u16 = 1;
+        // Status bar is always 1 row — it never changes.
+        let chrome: u16 = 1;
+        // Overlay bars paint over the bottom text lines (no text_height change).
+        let mut overlay: u16 = 0;
         if editor.show_help {
-            chrome += 1;
+            overlay += 1;
         }
-        if editor.mode == Mode::Searching {
-            chrome += 1;
+        if editor.mode == Mode::Searching || editor.mode == Mode::GoToLine {
+            overlay += 1;
         }
         Self {
             width: w,
             height: h,
             chrome_rows: chrome,
+            overlay_rows: overlay,
         }
     }
 
-    /// Height available for text (total height minus chrome rows).
+    /// Height available for text (total height minus the fixed status bar).
     pub fn text_height(&self) -> u16 {
         self.height.saturating_sub(self.chrome_rows)
+    }
+
+    /// Effective visible text height: text rows not covered by overlays.
+    /// Used for scroll clamping so the cursor stays above overlay bars.
+    pub fn visible_text_height(&self) -> u16 {
+        self.text_height().saturating_sub(self.overlay_rows)
     }
 }
 
@@ -125,8 +135,9 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 
             // --- Scroll DOWN: ensure scroll_off visual rows below the cursor ---
             // The cursor's visual row (from top of viewport) must be at most
-            // text_height - 1 - scroll_off.
-            let max_row = text_height.saturating_sub(1 + scroll_off);
+            // visible_height - 1 - scroll_off (so it stays above any overlay bars).
+            let visible_height = vp.visible_text_height() as usize;
+            let max_row = visible_height.saturating_sub(1 + scroll_off);
             loop {
                 let mut vrow_from_top: usize = 0;
                 for bl in editor.scroll_y..cursor_line {
@@ -145,11 +156,12 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
             }
         }
     } else {
+        let visible_height = vp.visible_text_height() as usize;
         if cursor_line < editor.scroll_y + scroll_off {
             editor.scroll_y = cursor_line.saturating_sub(scroll_off);
         }
-        if cursor_line + scroll_off >= editor.scroll_y + text_height {
-            editor.scroll_y = (cursor_line + scroll_off).saturating_sub(text_height) + 1;
+        if cursor_line + scroll_off >= editor.scroll_y + visible_height {
+            editor.scroll_y = (cursor_line + scroll_off).saturating_sub(visible_height) + 1;
         }
     }
 
@@ -225,6 +237,11 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
         chrome::render_search_bar(editor, w, &vp)?;
     }
 
+    // -- Render go-to-line prompt (when in goto-line mode) --
+    if editor.mode == Mode::GoToLine {
+        chrome::render_goto_line_bar(editor, w, &vp)?;
+    }
+
     // -- Position the cursor --
     if editor.mode == Mode::Searching {
         // During search, draw an outline cursor in the document at the saved position.
@@ -276,14 +293,27 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
         }
 
         // Place the real cursor at the end of the query text in the search bar.
+        // Search bar overlays above help (if shown) and above the status bar.
         let search_y = if editor.show_help {
-            vp.height.saturating_sub(2)
+            vp.height.saturating_sub(3)
         } else {
-            vp.height.saturating_sub(1)
+            vp.height.saturating_sub(2)
         };
         let label_len = 7; // " FIND: "
         let cursor_x = (label_len + editor.search_query.len()) as u16; // +1 for leading space in query display
         w.queue(cursor::MoveTo(cursor_x, search_y))?;
+        w.queue(cursor::Show)?;
+        w.queue(cursor::SetCursorStyle::BlinkingBlock)?;
+    } else if editor.mode == Mode::GoToLine {
+        // Place cursor in the go-to-line prompt bar.
+        let bar_y = if editor.show_help {
+            vp.height.saturating_sub(3)
+        } else {
+            vp.height.saturating_sub(2)
+        };
+        let label_len = 7; // "    → " (6 display cols + 1 leading space in input)
+        let cursor_x = (label_len + editor.goto_line_input.len()) as u16;
+        w.queue(cursor::MoveTo(cursor_x, bar_y))?;
         w.queue(cursor::Show)?;
         w.queue(cursor::SetCursorStyle::BlinkingBlock)?;
     } else {

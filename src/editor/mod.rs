@@ -63,6 +63,8 @@ pub struct Editor {
     last_search_query: String,
     /// Syntax highlighter (shared across buffers).
     pub highlighter: Highlighter,
+    /// Current input text in the go-to-line prompt.
+    pub goto_line_input: String,
 }
 
 impl Editor {
@@ -91,6 +93,7 @@ impl Editor {
             search_saved_cursor: None,
             last_search_query: String::new(),
             highlighter,
+            goto_line_input: String::new(),
         }
     }
 
@@ -247,7 +250,8 @@ impl Editor {
                 let pos = self.cursor_char_pos();
                 self.buffer_mut().insert_char(pos, ch);
                 let c = self.cursors.cursor();
-                self.cursors.primary_mut().head.set_col(c.col + 1);
+                // Move cursor forward and collapse selection (anchor = head)
+                self.cursors.set_cursor(c.line, c.col + 1);
             }
             Command::InsertString(ref s) => {
                 self.delete_selection_if_active();
@@ -268,10 +272,31 @@ impl Editor {
             }
             Command::InsertNewline => {
                 self.delete_selection_if_active();
-                let pos = self.cursor_char_pos();
-                self.buffer_mut().insert_char(pos, '\n');
                 let c = self.cursors.cursor();
-                self.cursors.set_cursor(c.line + 1, 0);
+                let pos = self.cursor_char_pos();
+
+                if self.config.auto_indent {
+                    // Collect leading whitespace from the current line, up to cursor col.
+                    let line_slice = self.buffer().text.line_slice(c.line);
+                    let mut indent = String::new();
+                    for (i, ch) in line_slice.chars().enumerate() {
+                        if i >= c.col { break; }
+                        if ch == ' ' || ch == '\t' {
+                            indent.push(ch);
+                        } else {
+                            break;
+                        }
+                    }
+                    // Insert "\n" + indent as a single operation (one undo step).
+                    let mut insertion = String::with_capacity(1 + indent.len());
+                    insertion.push('\n');
+                    insertion.push_str(&indent);
+                    self.buffer_mut().insert_str(pos, &insertion);
+                    self.cursors.set_cursor(c.line + 1, indent.len());
+                } else {
+                    self.buffer_mut().insert_char(pos, '\n');
+                    self.cursors.set_cursor(c.line + 1, 0);
+                }
             }
             Command::InsertTab => {
                 self.delete_selection_if_active();
@@ -286,7 +311,7 @@ impl Editor {
                     1
                 };
                 let c = self.cursors.cursor();
-                self.cursors.primary_mut().head.set_col(c.col + advance);
+                self.cursors.set_cursor(c.line, c.col + advance);
             }
             Command::Dedent => {
                 let c = self.cursors.cursor();
@@ -311,7 +336,7 @@ impl Editor {
                 if remove > 0 {
                     self.buffer_mut().delete_range(line_start, line_start + remove);
                     let new_col = c.col.saturating_sub(remove);
-                    self.cursors.primary_mut().head.set_col(new_col);
+                    self.cursors.set_cursor(c.line, new_col);
                 }
             }
             Command::DeleteBackward => {
@@ -324,7 +349,7 @@ impl Editor {
                         if c.col > 0 {
                             // Deleting a char within the line — simple case
                             self.buffer_mut().delete_char(pos - 1);
-                            self.cursors.primary_mut().head.set_col(c.col - 1);
+                            self.cursors.set_cursor(c.line, c.col - 1);
                         } else if c.line > 0 {
                             // At column 0: deleting the newline at end of previous line
                             // to join lines. Capture prev line length BEFORE the delete.
@@ -538,6 +563,37 @@ impl Editor {
                 }
             }
 
+            // -- Go-to-line --
+            Command::GoToLineOpen => {
+                self.clear_selection();
+                self.goto_line_input.clear();
+                self.mode = Mode::GoToLine;
+            }
+            Command::GoToLineInsertChar(ch) => {
+                if ch.is_ascii_digit() {
+                    self.goto_line_input.push(ch);
+                }
+            }
+            Command::GoToLineDeleteChar => {
+                self.goto_line_input.pop();
+            }
+            Command::GoToLineConfirm => {
+                if let Ok(n) = self.goto_line_input.parse::<usize>() {
+                    let target = if n == 0 { 0 } else { n - 1 }; // 1-indexed to 0-indexed
+                    let max_line = self.buffer().line_count().saturating_sub(1);
+                    let line = target.min(max_line);
+                    self.cursors.set_cursor(line, 0);
+                    self.set_status(format!("Jumped to line {}", line + 1));
+                }
+                self.goto_line_input.clear();
+                self.mode = Mode::Editing;
+            }
+            Command::GoToLineCancel => {
+                self.goto_line_input.clear();
+                self.mode = Mode::Editing;
+                self.clear_status();
+            }
+
             // -- File --
             Command::Save => {
                 self.buffer_mut().commit_edits();
@@ -548,14 +604,30 @@ impl Editor {
             }
             Command::Quit => {
                 if self.buffer().dirty {
-                    self.set_status("Unsaved changes! Save first (Ctrl+S) or use Ctrl+Q again");
-                    // Second Ctrl+Q force quits — we flip a soft flag
+                    self.mode = Mode::ConfirmQuit;
+                    self.set_status(
+                        "Unsaved changes! ^S save & quit, ^Y quit without saving, Esc cancel"
+                    );
                 } else {
                     self.should_quit = true;
                 }
             }
             Command::ForceQuit => {
                 self.should_quit = true;
+            }
+            Command::SaveAndQuit => {
+                self.buffer_mut().commit_edits();
+                match self.buffer_mut().save() {
+                    Ok(()) => self.should_quit = true,
+                    Err(e) => {
+                        self.mode = Mode::Editing;
+                        self.set_status(format!("Save failed: {}", e));
+                    }
+                }
+            }
+            Command::CancelQuit => {
+                self.mode = Mode::Editing;
+                self.clear_status();
             }
 
             Command::ToggleHelp => {

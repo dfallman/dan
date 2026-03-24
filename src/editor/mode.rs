@@ -7,6 +7,10 @@ pub enum Mode {
     Editing,
     /// Incremental search — typing updates the search query.
     Searching,
+    /// Go-to-line prompt — typing enters a line number.
+    GoToLine,
+    /// Confirming quit with unsaved changes.
+    ConfirmQuit,
 }
 
 impl Mode {
@@ -15,6 +19,8 @@ impl Mode {
         match self {
             Mode::Editing => "EDIT",
             Mode::Searching => "FIND",
+            Mode::GoToLine => "GOTO",
+            Mode::ConfirmQuit => "QUIT",
         }
     }
 
@@ -23,6 +29,8 @@ impl Mode {
         match self {
             Mode::Editing => Color::Blue,
             Mode::Searching => Color::DarkYellow,
+            Mode::GoToLine => Color::DarkCyan,
+            Mode::ConfirmQuit => Color::DarkRed,
         }
     }
 }
@@ -41,6 +49,8 @@ mod tests {
     fn test_mode_labels() {
         assert_eq!(Mode::Editing.label(), "EDIT");
         assert_eq!(Mode::Searching.label(), "FIND");
+        assert_eq!(Mode::GoToLine.label(), "GOTO");
+        assert_eq!(Mode::ConfirmQuit.label(), "QUIT");
     }
 
     #[test]

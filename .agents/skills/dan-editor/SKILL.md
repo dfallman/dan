@@ -5,7 +5,7 @@ description: >
   nano-style Rust TUI editor using crossterm + ropey. Covers architecture,
   module conventions, command pattern, rendering pipeline, Unicode handling,
   and contribution workflow. Use when writing, reviewing, or extending any
-  code in the dan editor project.
+  code in the dan editor project. Runs natively on macOS (aarch64-apple-darwin).
 ---
 
 # Dan Editor — Development Skill
@@ -394,9 +394,13 @@ No C dependencies. No runtime deps. No async runtime.
 
 ## Build & Run
 
+**Platform:** macOS 15.x (aarch64-apple-darwin)  
+**Toolchain:** stable Rust via rustup (`~/.cargo/bin/cargo`)  
+**Project path:** `/Users/dfallman/dev/dan`
+
 ```bash
-# Inside the OrbStack dev container:
-# Workspace is at ~/dev/dan (maps to /Users/dfallman/OrbStack/dev/home/dfallman/dev/dan)
+# All commands run natively — no container, no orb prefix.
+# Cwd: /Users/dfallman/dev/dan
 
 # Build
 cargo build --release
@@ -413,6 +417,11 @@ cargo clippy
 # Version
 cargo run -- --version
 ```
+
+> [!IMPORTANT]
+> Previously this project ran inside an OrbStack Linux VM.
+> As of 2026-03-24 it runs **natively on macOS**.
+> Run `cargo`, `rustc`, `clippy` directly — no `orb run` wrapper needed.
 
 The `build.rs` script embeds the short git hash as `GIT_HASH` env var.
 It re-runs when `.git/HEAD`, `.git/refs/`, or `VERSION` changes.

@@ -85,6 +85,7 @@ fn run_loop(editor: &mut Editor, writer: &mut BufWriter<io::Stdout>) -> io::Resu
 
         if matches!(evt, Event::Key(_) | Event::Paste(_))
             && editor.mode != crate::editor::mode::Mode::Searching
+            && editor.mode != crate::editor::mode::Mode::ConfirmQuit
         {
             editor.clear_status();
         }
@@ -105,6 +106,7 @@ fn run_loop(editor: &mut Editor, writer: &mut BufWriter<io::Stdout>) -> io::Resu
             let evt = event::read()?;
             if matches!(evt, Event::Key(_) | Event::Paste(_))
                 && editor.mode != crate::editor::mode::Mode::Searching
+            && editor.mode != crate::editor::mode::Mode::ConfirmQuit
             {
                 editor.clear_status();
             }
