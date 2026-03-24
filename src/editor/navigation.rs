@@ -1,6 +1,5 @@
 use crate::editor::viewport::{col_in_visual_row_from_text, visual_rows_for};
 use crate::editor::Editor;
-use unicode_segmentation::UnicodeSegmentation;
 
 impl Editor {
     /// Move cursor horizontally by `delta` chars (-1 = left, 1 = right).
@@ -115,72 +114,74 @@ impl Editor {
 
     /// Move cursor forward one word using UAX #29 word boundaries.
     pub(crate) fn move_word_forward(&mut self) {
-        let c = self.cursors.cursor();
-        let line_count = self.buffer().line_count();
-        let mut line = c.line;
-        let mut col = c.col;
+        let (line, col) = {
+            let text = &self.buffer().text;
+            let total_chars = text.len_chars();
+            let c = self.cursors.cursor();
+            let mut pos = text.line_to_char(c.line) + c.col;
 
-        // Walk forward across lines until we find the next word boundary
-        while line < line_count {
-            let line_text: String = self.buffer().text.line_slice(line).chars().collect();
-            // Collect word-boundary byte offsets, convert to char offsets
-            let boundaries: Vec<usize> = line_text
-                .split_word_bound_indices()
-                .map(|(byte_off, _)| line_text[..byte_off].chars().count())
-                .collect();
-            // Also add end-of-content boundary (excluding trailing newline)
-            let content_len = line_text.trim_end_matches('\n').chars().count();
-
-            // Find the first boundary strictly after our column
-            for &b in &boundaries {
-                if b > col && b <= content_len {
-                    self.cursors.primary_mut().head.line = line;
-                    self.cursors.primary_mut().head.set_col(b);
-                    return;
-                }
-            }
-            // If content_len is past us, go there
-            if content_len > col {
-                self.cursors.primary_mut().head.line = line;
-                self.cursors.primary_mut().head.set_col(content_len);
+            if pos >= total_chars {
                 return;
             }
-            // Move to next line, col 0
-            line += 1;
-            col = 0;
-        }
+
+            // Phase 1: skip current word (non-whitespace) characters
+            while pos < total_chars {
+                let ch = text.char_at(pos);
+                if ch.is_whitespace() {
+                    break;
+                }
+                pos += 1;
+            }
+            // Phase 2: skip whitespace (including newlines) to land on next word
+            while pos < total_chars {
+                let ch = text.char_at(pos);
+                if !ch.is_whitespace() {
+                    break;
+                }
+                pos += 1;
+            }
+
+            let line = text.char_to_line(pos);
+            let line_start = text.line_to_char(line);
+            (line, pos - line_start)
+        };
+        self.cursors.primary_mut().head.line = line;
+        self.cursors.primary_mut().head.set_col(col);
     }
 
-    /// Move cursor backward one word using UAX #29 word boundaries.
+    /// Move cursor backward one word, skipping spaces to land on the start of the previous word.
     pub(crate) fn move_word_backward(&mut self) {
-        let c = self.cursors.cursor();
-        let mut line = c.line;
-        let mut col = c.col;
+        let (line, col) = {
+            let text = &self.buffer().text;
+            let c = self.cursors.cursor();
+            let mut pos = text.line_to_char(c.line) + c.col;
 
-        loop {
-            let line_text: String = self.buffer().text.line_slice(line).chars().collect();
-            let boundaries: Vec<usize> = line_text
-                .split_word_bound_indices()
-                .map(|(byte_off, _)| line_text[..byte_off].chars().count())
-                .collect();
-
-            // Find the last boundary strictly before our column
-            for &b in boundaries.iter().rev() {
-                if b < col {
-                    self.cursors.primary_mut().head.line = line;
-                    self.cursors.primary_mut().head.set_col(b);
-                    return;
-                }
-            }
-            // No boundary found before us on this line — go to end of previous line
-            if line == 0 {
-                self.cursors.primary_mut().head.line = 0;
-                self.cursors.primary_mut().head.set_col(0);
+            if pos == 0 {
                 return;
             }
-            line -= 1;
-            let prev_line_text: String = self.buffer().text.line_slice(line).chars().collect();
-            col = prev_line_text.trim_end_matches('\n').chars().count();
-        }
+
+            // Phase 1: skip whitespace behind cursor
+            while pos > 0 {
+                let ch = text.char_at(pos - 1);
+                if !ch.is_whitespace() {
+                    break;
+                }
+                pos -= 1;
+            }
+            // Phase 2: skip word (non-whitespace) characters to find start of word
+            while pos > 0 {
+                let ch = text.char_at(pos - 1);
+                if ch.is_whitespace() {
+                    break;
+                }
+                pos -= 1;
+            }
+
+            let line = text.char_to_line(pos);
+            let line_start = text.line_to_char(line);
+            (line, pos - line_start)
+        };
+        self.cursors.primary_mut().head.line = line;
+        self.cursors.primary_mut().head.set_col(col);
     }
 }
