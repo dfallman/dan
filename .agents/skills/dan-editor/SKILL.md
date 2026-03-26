@@ -325,6 +325,9 @@ No C dependencies. No runtime deps. No async runtime.
 
 ### Rust Style
 - **Edition 2021**, no nightly features.
+- **Indentation: TABS (hard tabs), NOT spaces.** Enforced by `rustfmt.toml`
+  (`hard_tabs = true`) and `.editorconfig` (`indent_style = tab`).
+  All `.rs` files use tabs. Cargo.toml uses 2 spaces (TOML convention).
 - All public items should have `///` doc comments.
 - Use `snake_case` for functions/variables, `PascalCase` for types/enums.
 - Keep modules focused: one concept per file.
