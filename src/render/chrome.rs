@@ -66,20 +66,11 @@ pub fn render_status_bar<W: Write>(
     Ok(())
 }
 
-/// Render the pico-style help bar at the bottom of the screen.
-pub fn render_help_bar<W: Write>(
-    _editor: &Editor,
-    w: &mut W,
-    vp: &Viewport,
-) -> io::Result<()> {
-    // Help bar is the first overlay above the status bar.
-    let help_y = vp.height.saturating_sub(2);
-    w.queue(cursor::MoveTo(0, help_y))?;
-    
-    // Pico/nano-style shortcut hints
-    let shortcuts = [
+/// Shortcut definitions for the help bar.
+fn help_shortcuts() -> Vec<(&'static str, &'static str)> {
+    vec![
         ("^S", "Save"),
-        ("^⇧S", "SavAs"),
+        ("^A", "Save As"),
         ("^Q", "Quit"),
         ("^Z", "Undo"),
         ("^Y", "Redo"),
@@ -87,45 +78,131 @@ pub fn render_help_bar<W: Write>(
         ("^X", "Cut"),
         ("^V", "Paste"),
         ("^F", "Find"),
-        ("^G", "GoTo"),
-        ("^K", "Del Ln"),
-        ("^A", "Sel All"),
+        ("^G", "Go to"),
+        ("^K", "Del ln"),
+        ("^D", "Dupl"),
         ("^W", "Wrap"),
         ("^L", "Highl"),
         ("^H", "Help"),
-    ];
+    ]
+}
 
-    let mut used: usize = 0;
+/// Width of a single shortcut entry: key + " label ".
+fn shortcut_width(key: &str, label: &str) -> usize {
+    // key displayed, then " label " (space-label-space)
+    key.len() + 1 + label.len() + 1
+}
+
+/// The width of the " HELP " label prefix.
+const HELP_LABEL_WIDTH: usize = 6; // " HELP "
+
+/// Calculate how many rows the help bar needs given a terminal width.
+pub fn help_row_count(term_width: u16) -> u16 {
+    let shortcuts = help_shortcuts();
+    let width = term_width as usize;
+    if width == 0 { return 1; }
+
+    // First row starts after the " HELP " label.
+    let mut rows: u16 = 1;
+    let mut x = HELP_LABEL_WIDTH;
+
     for (key, label) in &shortcuts {
-        // Key in inverse video
-        w.queue(SetBackgroundColor(Color::DarkBlue))?;
-        w.queue(SetForegroundColor(Color::Black))?;
-        w.queue(style::Print(key))?;
-        w.queue(SetBackgroundColor(Color::White))?;
-        w.queue(SetForegroundColor(Color::Black))?;
-        let lbl = format!(" {} ", label);
-        w.queue(style::Print(&lbl))?;
-        used += key.len() + lbl.len();
+        let sw = shortcut_width(key, label);
+        if x + sw > width && x > HELP_LABEL_WIDTH {
+            // Doesn't fit — start a new row.
+            rows += 1;
+            x = sw;
+        } else {
+            x += sw;
+        }
+    }
+    rows
+}
+
+/// Render the pico-style help bar at the bottom of the screen.
+/// Builds upward from the row above the status bar when it needs
+/// multiple lines.
+pub fn render_help_bar<W: Write>(
+    _editor: &Editor,
+    w: &mut W,
+    vp: &Viewport,
+) -> io::Result<()> {
+    let shortcuts = help_shortcuts();
+    let width = vp.width as usize;
+    let num_rows = help_row_count(vp.width) as usize;
+
+    // Layout shortcuts into rows.
+    // Each row is a Vec of (key, label) pairs.
+    let mut rows: Vec<Vec<(&str, &str)>> = vec![Vec::new()];
+    let mut x = HELP_LABEL_WIDTH; // first row starts after " HELP "
+
+    for (key, label) in &shortcuts {
+        let sw = shortcut_width(key, label);
+        if x + sw > width && x > HELP_LABEL_WIDTH && !rows.last().unwrap().is_empty() {
+            rows.push(Vec::new());
+            x = sw;
+        } else {
+            x += sw;
+        }
+        rows.last_mut().unwrap().push((key, label));
     }
 
-    // Right-aligned version string
-    let version_str = format!(
-        "Dan v{} ({}) ",
-        crate::VERSION.trim(),
-        crate::GIT_HASH,
-    );
-    let remaining = (vp.width as usize).saturating_sub(used + version_str.len());
+    // The bottom-most help row sits directly above the status bar.
+    // Status bar is at vp.height - 1, so the bottom help row is at
+    // vp.height - 2, and rows build upward from there.
+    let base_y = vp.height.saturating_sub(2);
 
-    // Pad between shortcuts and version
-    if remaining > 0 {
-        w.queue(SetBackgroundColor(Color::White))?;
-        write_spaces(w, remaining)?;
+    for (row_idx, row_items) in rows.iter().enumerate() {
+        // Rows render top-to-bottom, row 0 is the topmost.
+        let y = base_y.saturating_sub((num_rows - 1 - row_idx) as u16);
+        w.queue(cursor::MoveTo(0, y))?;
+
+        let mut used: usize = 0;
+
+        if row_idx == 0 {
+            // First row: " HELP " label in yellow (like mode labels)
+            w.queue(SetBackgroundColor(Color::DarkYellow))?;
+            w.queue(SetForegroundColor(Color::Black))?;
+            w.queue(style::Print(" HELP "))?;
+            used += HELP_LABEL_WIDTH;
+        }
+
+        // Render shortcut items
+        for (key, label) in row_items {
+            w.queue(SetBackgroundColor(Color::DarkBlue))?;
+            w.queue(SetForegroundColor(Color::Black))?;
+            w.queue(style::Print(key))?;
+            w.queue(SetBackgroundColor(Color::White))?;
+            w.queue(SetForegroundColor(Color::Black))?;
+            let lbl = format!(" {} ", label);
+            w.queue(style::Print(&lbl))?;
+            used += key.len() + lbl.len();
+        }
+
+        // On the last row, right-align the version string
+        if row_idx == rows.len() - 1 {
+            let version_str = format!(
+                "Dan v{} ({}) ",
+                crate::VERSION.trim(),
+                crate::GIT_HASH,
+            );
+            let remaining = width.saturating_sub(used + version_str.len());
+            if remaining > 0 {
+                w.queue(SetBackgroundColor(Color::White))?;
+                write_spaces(w, remaining)?;
+            }
+            w.queue(SetBackgroundColor(Color::White))?;
+            w.queue(SetForegroundColor(Color::DarkGrey))?;
+            w.queue(style::Print(&version_str))?;
+        } else {
+            // Pad remaining width with white background
+            let remaining = width.saturating_sub(used);
+            if remaining > 0 {
+                w.queue(SetBackgroundColor(Color::White))?;
+                write_spaces(w, remaining)?;
+            }
+        }
     }
-
-    // Version in subdued style
-    w.queue(SetBackgroundColor(Color::White))?;
-    w.queue(SetForegroundColor(Color::DarkGrey))?;
-    w.queue(style::Print(&version_str))?;
 
     w.queue(SetForegroundColor(Color::Reset))?;
     w.queue(SetBackgroundColor(Color::Reset))?;
@@ -140,11 +217,8 @@ pub fn render_search_bar<W: Write>(
     vp: &Viewport,
 ) -> io::Result<()> {
     // Search bar overlays above help (if shown) and above the status bar.
-    let search_y = if editor.show_help {
-        vp.height.saturating_sub(3)
-    } else {
-        vp.height.saturating_sub(2)
-    };
+    let help_offset = if editor.show_help { help_row_count(vp.width) } else { 0 };
+    let search_y = vp.height.saturating_sub(2 + help_offset);
     w.queue(cursor::MoveTo(0, search_y))?;
 
     let width = vp.width as usize;
@@ -204,11 +278,8 @@ pub fn render_goto_line_bar<W: Write>(
     vp: &Viewport,
 ) -> io::Result<()> {
     // GoTo bar overlays above help (if shown) and above the status bar.
-    let bar_y = if editor.show_help {
-        vp.height.saturating_sub(3)
-    } else {
-        vp.height.saturating_sub(2)
-    };
+    let help_offset = if editor.show_help { help_row_count(vp.width) } else { 0 };
+    let bar_y = vp.height.saturating_sub(2 + help_offset);
     w.queue(cursor::MoveTo(0, bar_y))?;
 
     let width = vp.width as usize;
@@ -254,11 +325,8 @@ pub fn render_save_as_bar<W: Write>(
     w: &mut W,
     vp: &Viewport,
 ) -> io::Result<()> {
-    let bar_y = if editor.show_help {
-        vp.height.saturating_sub(3)
-    } else {
-        vp.height.saturating_sub(2)
-    };
+    let help_offset = if editor.show_help { help_row_count(vp.width) } else { 0 };
+    let bar_y = vp.height.saturating_sub(2 + help_offset);
     w.queue(cursor::MoveTo(0, bar_y))?;
 
     let width = vp.width as usize;
@@ -279,10 +347,10 @@ pub fn render_save_as_bar<W: Write>(
     used += input_display.len();
 
     // Hint
-    w.queue(SetForegroundColor(Color::Grey))?;
-    let hint = " (Enter=save, Esc=cancel) ";
-    w.queue(style::Print(hint))?;
-    used += hint.len();
+    // w.queue(SetForegroundColor(Color::Grey))?;
+    // let hint = " (Enter=save, Esc=cancel) ";
+    // w.queue(style::Print(hint))?;
+    // used += hint.len();
 
     // Pad the rest
     let remaining = width.saturating_sub(used);

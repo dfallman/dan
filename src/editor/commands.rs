@@ -68,8 +68,14 @@ pub enum Command {
     SaveAsOpen,
     SaveAsInsertChar(char),
     SaveAsDeleteChar,
+    SaveAsCursorLeft,
+    SaveAsCursorRight,
     SaveAsConfirm,
     SaveAsCancel,
+
+    // -- Overwrite confirmation --
+    ConfirmOverwrite,
+    CancelOverwrite,
 
     // -- File --
     Save,
