@@ -2,186 +2,186 @@ use crate::editor::viewport::{col_in_visual_row_from_text, visual_rows_for};
 use crate::editor::Editor;
 
 impl Editor {
-    /// Move cursor horizontally by `delta` chars (-1 = left, 1 = right).
-    pub(crate) fn move_cursor_horizontal(&mut self, delta: i32) {
-        let c = self.cursors.cursor();
-        if delta < 0 {
-            if c.col > 0 {
-                self.cursors.primary_mut().head.set_col(c.col - 1);
-            } else if c.line > 0 {
-                let prev_len = self.line_len_no_newline(c.line - 1);
-                self.cursors.primary_mut().head.line = c.line - 1;
-                self.cursors.primary_mut().head.set_col(prev_len);
-            }
-        } else {
-            let line_len = self.line_len_no_newline(c.line);
-            if c.col < line_len {
-                self.cursors.primary_mut().head.set_col(c.col + 1);
-            } else if c.line + 1 < self.buffer().line_count() {
-                self.cursors.primary_mut().head.line = c.line + 1;
-                self.cursors.primary_mut().head.set_col(0);
-            }
-        }
-    }
+	/// Move cursor horizontally by `delta` chars (-1 = left, 1 = right).
+	pub(crate) fn move_cursor_horizontal(&mut self, delta: i32) {
+		let c = self.cursors.cursor();
+		if delta < 0 {
+			if c.col > 0 {
+				self.cursors.primary_mut().head.set_col(c.col - 1);
+			} else if c.line > 0 {
+				let prev_len = self.line_len_no_newline(c.line - 1);
+				self.cursors.primary_mut().head.line = c.line - 1;
+				self.cursors.primary_mut().head.set_col(prev_len);
+			}
+		} else {
+			let line_len = self.line_len_no_newline(c.line);
+			if c.col < line_len {
+				self.cursors.primary_mut().head.set_col(c.col + 1);
+			} else if c.line + 1 < self.buffer().line_count() {
+				self.cursors.primary_mut().head.line = c.line + 1;
+				self.cursors.primary_mut().head.set_col(0);
+			}
+		}
+	}
 
-    /// Move cursor vertically by `delta` lines.
-    pub(crate) fn move_cursor_vertical(&mut self, delta: i32) {
-        if !self.config.wrap_lines {
-            // No-wrap mode: move by buffer lines as before.
-            let c = self.cursors.cursor();
-            let new_line = if delta < 0 {
-                c.line.saturating_sub((-delta) as usize)
-            } else {
-                let max_line = self.buffer().line_count().saturating_sub(1);
-                (c.line + delta as usize).min(max_line)
-            };
+	/// Move cursor vertically by `delta` lines.
+	pub(crate) fn move_cursor_vertical(&mut self, delta: i32) {
+		if !self.config.wrap_lines {
+			// No-wrap mode: move by buffer lines as before.
+			let c = self.cursors.cursor();
+			let new_line = if delta < 0 {
+				c.line.saturating_sub((-delta) as usize)
+			} else {
+				let max_line = self.buffer().line_count().saturating_sub(1);
+				(c.line + delta as usize).min(max_line)
+			};
 
-            if new_line != c.line {
-                let line_len = self.line_len_no_newline(new_line);
-                let new_col = c.desired_col.min(line_len);
-                self.cursors.primary_mut().head.line = new_line;
-                self.cursors.primary_mut().head.set_col_clamped(new_col);
-            }
-            return;
-        }
+			if new_line != c.line {
+				let line_len = self.line_len_no_newline(new_line);
+				let new_col = c.desired_col.min(line_len);
+				self.cursors.primary_mut().head.line = new_line;
+				self.cursors.primary_mut().head.set_col_clamped(new_col);
+			}
+			return;
+		}
 
-        // -- Wrap mode: move by visual (screen) rows --
-        let text_area_width = self.text_area_width();
-        if text_area_width == 0 {
-            return;
-        }
-        let tab_w = self.config.tab_width;
-        let c = self.cursors.cursor();
-        let line_count = self.buffer().line_count();
+		// -- Wrap mode: move by visual (screen) rows --
+		let text_area_width = self.text_area_width();
+		if text_area_width == 0 {
+			return;
+		}
+		let tab_w = self.config.tab_width;
+		let c = self.cursors.cursor();
+		let line_count = self.buffer().line_count();
 
-        // Collect current line text so we release the borrow on self.
-        let cur_line_text: String = self.buffer().text.line_slice(c.line).chars().collect();
-        let cur_line_len = self.line_len_no_newline(c.line);
+		// Collect current line text so we release the borrow on self.
+		let cur_line_text: String = self.buffer().text.line_slice(c.line).chars().collect();
+		let cur_line_len = self.line_len_no_newline(c.line);
 
-        let rows = visual_rows_for(&cur_line_text, tab_w, text_area_width);
+		let rows = visual_rows_for(&cur_line_text, tab_w, text_area_width);
 
-        // Which visual row is the cursor on within its buffer line?
-        let mut cur_vrow: usize = 0;
-        for (i, &(start, end)) in rows.iter().enumerate() {
-            if c.col >= start && (c.col < end || i == rows.len() - 1) {
-                cur_vrow = i;
-                break;
-            }
-        }
+		// Which visual row is the cursor on within its buffer line?
+		let mut cur_vrow: usize = 0;
+		for (i, &(start, end)) in rows.iter().enumerate() {
+			if c.col >= start && (c.col < end || i == rows.len() - 1) {
+				cur_vrow = i;
+				break;
+			}
+		}
 
-        if delta > 0 {
-            // Moving down
-            if cur_vrow + 1 < rows.len() {
-                // Stay on same buffer line, move to next visual row.
-                let next_row = rows[cur_vrow + 1];
-                let new_col = col_in_visual_row_from_text(&cur_line_text, cur_line_len, next_row.0, next_row.1, c.desired_col, tab_w);
-                self.cursors.primary_mut().head.set_col_clamped(new_col);
-            } else {
-                // Move to next buffer line (first visual row).
-                let next_line = c.line + 1;
-                if next_line < line_count {
-                    let next_text: String = self.buffer().text.line_slice(next_line).chars().collect();
-                    let next_len = self.line_len_no_newline(next_line);
-                    let next_rows = visual_rows_for(&next_text, tab_w, text_area_width);
-                    let first = next_rows[0];
-                    let new_col = col_in_visual_row_from_text(&next_text, next_len, first.0, first.1, c.desired_col, tab_w);
-                    self.cursors.primary_mut().head.line = next_line;
-                    self.cursors.primary_mut().head.set_col_clamped(new_col);
-                }
-            }
-        } else {
-            // Moving up
-            if cur_vrow > 0 {
-                // Stay on same buffer line, move to previous visual row.
-                let prev_row = rows[cur_vrow - 1];
-                let new_col = col_in_visual_row_from_text(&cur_line_text, cur_line_len, prev_row.0, prev_row.1, c.desired_col, tab_w);
-                self.cursors.primary_mut().head.set_col_clamped(new_col);
-            } else {
-                // Move to previous buffer line (last visual row).
-                if c.line > 0 {
-                    let prev_line = c.line - 1;
-                    let prev_text: String = self.buffer().text.line_slice(prev_line).chars().collect();
-                    let prev_len = self.line_len_no_newline(prev_line);
-                    let prev_rows = visual_rows_for(&prev_text, tab_w, text_area_width);
-                    let last = prev_rows[prev_rows.len() - 1];
-                    let new_col = col_in_visual_row_from_text(&prev_text, prev_len, last.0, last.1, c.desired_col, tab_w);
-                    self.cursors.primary_mut().head.line = prev_line;
-                    self.cursors.primary_mut().head.set_col_clamped(new_col);
-                }
-            }
-        }
-    }
+		if delta > 0 {
+			// Moving down
+			if cur_vrow + 1 < rows.len() {
+				// Stay on same buffer line, move to next visual row.
+				let next_row = rows[cur_vrow + 1];
+				let new_col = col_in_visual_row_from_text(&cur_line_text, cur_line_len, next_row.0, next_row.1, c.desired_col, tab_w);
+				self.cursors.primary_mut().head.set_col_clamped(new_col);
+			} else {
+				// Move to next buffer line (first visual row).
+				let next_line = c.line + 1;
+				if next_line < line_count {
+					let next_text: String = self.buffer().text.line_slice(next_line).chars().collect();
+					let next_len = self.line_len_no_newline(next_line);
+					let next_rows = visual_rows_for(&next_text, tab_w, text_area_width);
+					let first = next_rows[0];
+					let new_col = col_in_visual_row_from_text(&next_text, next_len, first.0, first.1, c.desired_col, tab_w);
+					self.cursors.primary_mut().head.line = next_line;
+					self.cursors.primary_mut().head.set_col_clamped(new_col);
+				}
+			}
+		} else {
+			// Moving up
+			if cur_vrow > 0 {
+				// Stay on same buffer line, move to previous visual row.
+				let prev_row = rows[cur_vrow - 1];
+				let new_col = col_in_visual_row_from_text(&cur_line_text, cur_line_len, prev_row.0, prev_row.1, c.desired_col, tab_w);
+				self.cursors.primary_mut().head.set_col_clamped(new_col);
+			} else {
+				// Move to previous buffer line (last visual row).
+				if c.line > 0 {
+					let prev_line = c.line - 1;
+					let prev_text: String = self.buffer().text.line_slice(prev_line).chars().collect();
+					let prev_len = self.line_len_no_newline(prev_line);
+					let prev_rows = visual_rows_for(&prev_text, tab_w, text_area_width);
+					let last = prev_rows[prev_rows.len() - 1];
+					let new_col = col_in_visual_row_from_text(&prev_text, prev_len, last.0, last.1, c.desired_col, tab_w);
+					self.cursors.primary_mut().head.line = prev_line;
+					self.cursors.primary_mut().head.set_col_clamped(new_col);
+				}
+			}
+		}
+	}
 
-    /// Move cursor forward one word using UAX #29 word boundaries.
-    pub(crate) fn move_word_forward(&mut self) {
-        let (line, col) = {
-            let text = &self.buffer().text;
-            let total_chars = text.len_chars();
-            let c = self.cursors.cursor();
-            let mut pos = text.line_to_char(c.line) + c.col;
+	/// Move cursor forward one word using UAX #29 word boundaries.
+	pub(crate) fn move_word_forward(&mut self) {
+		let (line, col) = {
+			let text = &self.buffer().text;
+			let total_chars = text.len_chars();
+			let c = self.cursors.cursor();
+			let mut pos = text.line_to_char(c.line) + c.col;
 
-            if pos >= total_chars {
-                return;
-            }
+			if pos >= total_chars {
+				return;
+			}
 
-            // Phase 1: skip current word (non-whitespace) characters
-            while pos < total_chars {
-                let ch = text.char_at(pos);
-                if ch.is_whitespace() {
-                    break;
-                }
-                pos += 1;
-            }
-            // Phase 2: skip whitespace (including newlines) to land on next word
-            while pos < total_chars {
-                let ch = text.char_at(pos);
-                if !ch.is_whitespace() {
-                    break;
-                }
-                pos += 1;
-            }
+			// Phase 1: skip current word (non-whitespace) characters
+			while pos < total_chars {
+				let ch = text.char_at(pos);
+				if ch.is_whitespace() {
+					break;
+				}
+				pos += 1;
+			}
+			// Phase 2: skip whitespace (including newlines) to land on next word
+			while pos < total_chars {
+				let ch = text.char_at(pos);
+				if !ch.is_whitespace() {
+					break;
+				}
+				pos += 1;
+			}
 
-            let line = text.char_to_line(pos);
-            let line_start = text.line_to_char(line);
-            (line, pos - line_start)
-        };
-        self.cursors.primary_mut().head.line = line;
-        self.cursors.primary_mut().head.set_col(col);
-    }
+			let line = text.char_to_line(pos);
+			let line_start = text.line_to_char(line);
+			(line, pos - line_start)
+		};
+		self.cursors.primary_mut().head.line = line;
+		self.cursors.primary_mut().head.set_col(col);
+	}
 
-    /// Move cursor backward one word, skipping spaces to land on the start of the previous word.
-    pub(crate) fn move_word_backward(&mut self) {
-        let (line, col) = {
-            let text = &self.buffer().text;
-            let c = self.cursors.cursor();
-            let mut pos = text.line_to_char(c.line) + c.col;
+	/// Move cursor backward one word, skipping spaces to land on the start of the previous word.
+	pub(crate) fn move_word_backward(&mut self) {
+		let (line, col) = {
+			let text = &self.buffer().text;
+			let c = self.cursors.cursor();
+			let mut pos = text.line_to_char(c.line) + c.col;
 
-            if pos == 0 {
-                return;
-            }
+			if pos == 0 {
+				return;
+			}
 
-            // Phase 1: skip whitespace behind cursor
-            while pos > 0 {
-                let ch = text.char_at(pos - 1);
-                if !ch.is_whitespace() {
-                    break;
-                }
-                pos -= 1;
-            }
-            // Phase 2: skip word (non-whitespace) characters to find start of word
-            while pos > 0 {
-                let ch = text.char_at(pos - 1);
-                if ch.is_whitespace() {
-                    break;
-                }
-                pos -= 1;
-            }
+			// Phase 1: skip whitespace behind cursor
+			while pos > 0 {
+				let ch = text.char_at(pos - 1);
+				if !ch.is_whitespace() {
+					break;
+				}
+				pos -= 1;
+			}
+			// Phase 2: skip word (non-whitespace) characters to find start of word
+			while pos > 0 {
+				let ch = text.char_at(pos - 1);
+				if ch.is_whitespace() {
+					break;
+				}
+				pos -= 1;
+			}
 
-            let line = text.char_to_line(pos);
-            let line_start = text.line_to_char(line);
-            (line, pos - line_start)
-        };
-        self.cursors.primary_mut().head.line = line;
-        self.cursors.primary_mut().head.set_col(col);
-    }
+			let line = text.char_to_line(pos);
+			let line_start = text.line_to_char(line);
+			(line, pos - line_start)
+		};
+		self.cursors.primary_mut().head.line = line;
+		self.cursors.primary_mut().head.set_col(col);
+	}
 }
