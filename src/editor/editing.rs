@@ -109,6 +109,109 @@ impl Editor {
         self.cursors.set_cursor(line + 1, col);
     }
 
+    /// Move all lines covered by the current selection up by one line.
+    /// The selection (anchor + head) follows the moved block.
+    pub(crate) fn move_lines_up(&mut self) {
+        let (start, end) = self.cursors.primary().ordered();
+        let first_line = start.line;
+        // Include the line the end cursor is on, but if end is at col 0
+        // of the next line we don't drag that empty line along.
+        let last_line = if end.col == 0 && end.line > first_line {
+            end.line - 1
+        } else {
+            end.line
+        };
+
+        if first_line == 0 {
+            return; // already at top
+        }
+
+        let total = self.buffer().line_count();
+
+        // Char ranges for the block and the line above.
+        let block_start = self.buffer().text.line_to_char(first_line);
+        let block_end = if last_line + 1 < total {
+            self.buffer().text.line_to_char(last_line + 1)
+        } else {
+            self.buffer().text.len_chars()
+        };
+        let above_start = self.buffer().text.line_to_char(first_line - 1);
+
+        let block_text = self.buffer().text.slice_to_string(block_start..block_end);
+        let above_text = self.buffer().text.slice_to_string(above_start..block_start);
+
+        let block_body = block_text.strip_suffix('\n').unwrap_or(&block_text);
+        let above_body = above_text.strip_suffix('\n').unwrap_or(&above_text);
+
+        let is_last = last_line + 1 >= total;
+        let mut new_text = String::with_capacity(block_text.len() + above_text.len());
+        new_text.push_str(block_body);
+        new_text.push('\n');
+        new_text.push_str(above_body);
+        if !is_last {
+            new_text.push('\n');
+        }
+
+        self.buffer_mut().text.remove(above_start..block_end);
+        self.buffer_mut().text.insert_str(above_start, &new_text);
+        self.buffer_mut().dirty = true;
+
+        // Shift both anchor and head up by one line to follow the block.
+        let sel = self.cursors.primary_mut();
+        sel.anchor.line = sel.anchor.line.saturating_sub(1);
+        sel.head.line = sel.head.line.saturating_sub(1);
+    }
+
+    /// Move all lines covered by the current selection down by one line.
+    /// The selection (anchor + head) follows the moved block.
+    pub(crate) fn move_lines_down(&mut self) {
+        let (start, end) = self.cursors.primary().ordered();
+        let first_line = start.line;
+        let last_line = if end.col == 0 && end.line > first_line {
+            end.line - 1
+        } else {
+            end.line
+        };
+
+        let total = self.buffer().line_count();
+        if last_line + 1 >= total {
+            return; // already at bottom
+        }
+
+        // Char ranges for the block and the line below.
+        let block_start = self.buffer().text.line_to_char(first_line);
+        let block_end = self.buffer().text.line_to_char(last_line + 1);
+        let below_end = if last_line + 2 < total {
+            self.buffer().text.line_to_char(last_line + 2)
+        } else {
+            self.buffer().text.len_chars()
+        };
+
+        let block_text = self.buffer().text.slice_to_string(block_start..block_end);
+        let below_text = self.buffer().text.slice_to_string(block_end..below_end);
+
+        let block_body = block_text.strip_suffix('\n').unwrap_or(&block_text);
+        let below_body = below_text.strip_suffix('\n').unwrap_or(&below_text);
+
+        let is_last = last_line + 2 >= total;
+        let mut new_text = String::with_capacity(block_text.len() + below_text.len());
+        new_text.push_str(below_body);
+        new_text.push('\n');
+        new_text.push_str(block_body);
+        if !is_last {
+            new_text.push('\n');
+        }
+
+        self.buffer_mut().text.remove(block_start..below_end);
+        self.buffer_mut().text.insert_str(block_start, &new_text);
+        self.buffer_mut().dirty = true;
+
+        // Shift both anchor and head down by one line to follow the block.
+        let sel = self.cursors.primary_mut();
+        sel.anchor.line += 1;
+        sel.head.line += 1;
+    }
+
     /// Sanitize pasted / externally-sourced text.
     ///
     /// Strips:

@@ -20,6 +20,9 @@ pub fn map_event(event: &Event, mode: Mode) -> Command {
             if mode == Mode::SaveAs {
                 return map_save_as_key(key);
             }
+            if mode == Mode::ConfirmOverwrite {
+                return map_confirm_overwrite_key(key);
+            }
             map_key(key)
         }
         Event::Paste(text) => Command::InsertString(text.clone()),
@@ -72,7 +75,7 @@ fn map_key(key: &KeyEvent) -> Command {
     if ctrl && shift {
         return match key.code {
             KeyCode::Char('c') | KeyCode::Char('C') => Command::ForceQuit,
-            KeyCode::Char('s') | KeyCode::Char('S') => Command::SaveAsOpen,
+            KeyCode::Char('@') | KeyCode::Char('2') => Command::SelectAll,
             KeyCode::Left  => Command::SelectWordBackward,
             KeyCode::Right => Command::SelectWordForward,
             _ => Command::Noop,
@@ -95,12 +98,13 @@ fn map_key(key: &KeyEvent) -> Command {
         return match key.code {
             KeyCode::Char('c') => Command::Copy,
             KeyCode::Char('s') => Command::Save,
+            KeyCode::Char('@') => Command::SelectAll,
             KeyCode::Char('q') => Command::Quit,
             KeyCode::Char('z') => Command::Undo,
             KeyCode::Char('y') => Command::Redo,
             KeyCode::Char('x') => Command::Cut,
             KeyCode::Char('v') => Command::Paste,
-            KeyCode::Char('a') => Command::SelectAll,
+            KeyCode::Char('a') => Command::SaveAsOpen,
             KeyCode::Char('f') | KeyCode::Char('/') => Command::SearchForward,
             KeyCode::Char('g') => Command::GoToLineOpen,
             KeyCode::Left      => Command::MoveWordBackward,
@@ -194,7 +198,20 @@ fn map_save_as_key(key: &KeyEvent) -> Command {
         KeyCode::Esc => Command::SaveAsCancel,
         KeyCode::Enter => Command::SaveAsConfirm,
         KeyCode::Backspace => Command::SaveAsDeleteChar,
+        KeyCode::Left => Command::SaveAsCursorLeft,
+        KeyCode::Right => Command::SaveAsCursorRight,
         KeyCode::Char(ch) if !ctrl => Command::SaveAsInsertChar(ch),
         _ => Command::Noop,
+    }
+}
+
+/// Key mapping while in the overwrite-confirmation prompt.
+fn map_confirm_overwrite_key(key: &KeyEvent) -> Command {
+    let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+    match key.code {
+        // ^O = confirm overwrite
+        KeyCode::Char('o') if ctrl => Command::ConfirmOverwrite,
+        // Anything else cancels back to Save As
+        _ => Command::CancelOverwrite,
     }
 }

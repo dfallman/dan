@@ -67,6 +67,10 @@ pub struct Editor {
     pub goto_line_input: String,
     /// Current input text in the save-as prompt.
     pub save_as_input: String,
+    /// Cursor position within the save-as input.
+    pub save_as_cursor: usize,
+    /// Path pending overwrite confirmation.
+    pub save_as_pending_path: Option<String>,
 }
 
 impl Editor {
@@ -97,6 +101,8 @@ impl Editor {
             highlighter,
             goto_line_input: String::new(),
             save_as_input: String::new(),
+            save_as_cursor: 0,
+            save_as_pending_path: None,
         }
     }
 
@@ -169,12 +175,20 @@ impl Editor {
                 self.clear_selection();
             }
             Command::SwapLineUp => {
-                self.swap_line_up();
-                self.clear_selection();
+                if self.has_selection() {
+                    self.move_lines_up();
+                } else {
+                    self.swap_line_up();
+                    self.clear_selection();
+                }
             }
             Command::SwapLineDown => {
-                self.swap_line_down();
-                self.clear_selection();
+                if self.has_selection() {
+                    self.move_lines_down();
+                } else {
+                    self.swap_line_down();
+                    self.clear_selection();
+                }
             }
             Command::MoveBufferTop => {
                 self.cursors.primary_mut().head.line = 0;
@@ -498,6 +512,7 @@ impl Editor {
                 self.search_matches.clear();
                 self.search_match_idx = 0;
                 self.mode = Mode::Searching;
+                self.show_help = false;
                 // If we have a previous query, run the search immediately.
                 if !self.search_query.is_empty() {
                     self.refresh_search_matches();
@@ -571,6 +586,7 @@ impl Editor {
                 self.clear_selection();
                 self.goto_line_input.clear();
                 self.mode = Mode::GoToLine;
+                self.show_help = false;
             }
             Command::GoToLineInsertChar(ch) => {
                 if ch.is_ascii_digit() {
@@ -605,23 +621,79 @@ impl Editor {
                     .as_ref()
                     .map(|p| p.to_string_lossy().to_string())
                     .unwrap_or_default();
+                self.save_as_cursor = self.save_as_input.len();
                 self.mode = Mode::SaveAs;
+                self.show_help = false;
                 self.set_status("Save As: enter path, Enter to save, Esc to cancel");
             }
             Command::SaveAsInsertChar(ch) => {
-                self.save_as_input.push(ch);
+                self.save_as_input.insert(self.save_as_cursor, ch);
+                self.save_as_cursor += 1;
             }
             Command::SaveAsDeleteChar => {
-                self.save_as_input.pop();
+                if self.save_as_cursor > 0 {
+                    self.save_as_cursor -= 1;
+                    self.save_as_input.remove(self.save_as_cursor);
+                }
+            }
+            Command::SaveAsCursorLeft => {
+                if self.save_as_cursor > 0 {
+                    self.save_as_cursor -= 1;
+                }
+            }
+            Command::SaveAsCursorRight => {
+                if self.save_as_cursor < self.save_as_input.len() {
+                    self.save_as_cursor += 1;
+                }
             }
             Command::SaveAsConfirm => {
                 let path_str = self.save_as_input.clone();
-                self.save_as_input.clear();
-                self.mode = Mode::Editing;
                 if path_str.is_empty() {
+                    self.save_as_input.clear();
+                    self.save_as_cursor = 0;
+                    self.mode = Mode::Editing;
                     self.set_status("Save As cancelled: no path given");
                 } else {
                     let path = std::path::Path::new(&path_str);
+                    // Check if parent directory exists.
+                    if let Some(parent) = path.parent() {
+                        if !parent.as_os_str().is_empty() && !parent.exists() {
+                            self.set_status(format!("Directory does not exist: {}", parent.display()));
+                            return;
+                        }
+                    }
+                    // Check if file already exists — ask for overwrite confirmation.
+                    if path.exists() {
+                        self.save_as_pending_path = Some(path_str);
+                        self.mode = Mode::ConfirmOverwrite;
+                        self.set_status("File exists! ^O Overwrite, Esc Cancel");
+                    } else {
+                        // New file — save directly.
+                        self.save_as_input.clear();
+                        self.save_as_cursor = 0;
+                        self.mode = Mode::Editing;
+                        self.buffer_mut().commit_edits();
+                        match self.buffer_mut().save_to(path) {
+                            Ok(()) => self.set_status(format!("Saved as {}", path.display())),
+                            Err(e) => self.set_status(format!("Save failed: {}", e)),
+                        }
+                    }
+                }
+            }
+            Command::SaveAsCancel => {
+                self.save_as_input.clear();
+                self.save_as_cursor = 0;
+                self.mode = Mode::Editing;
+                self.clear_status();
+            }
+
+            // -- Overwrite confirmation --
+            Command::ConfirmOverwrite => {
+                if let Some(path_str) = self.save_as_pending_path.take() {
+                    let path = std::path::Path::new(&path_str);
+                    self.save_as_input.clear();
+                    self.save_as_cursor = 0;
+                    self.mode = Mode::Editing;
                     self.buffer_mut().commit_edits();
                     match self.buffer_mut().save_to(path) {
                         Ok(()) => self.set_status(format!("Saved as {}", path_str)),
@@ -629,10 +701,10 @@ impl Editor {
                     }
                 }
             }
-            Command::SaveAsCancel => {
-                self.save_as_input.clear();
-                self.mode = Mode::Editing;
-                self.clear_status();
+            Command::CancelOverwrite => {
+                self.save_as_pending_path = None;
+                self.mode = Mode::SaveAs;
+                self.set_status("Save As: enter path, Enter to save, Esc to cancel");
             }
 
             // -- File --
@@ -647,7 +719,7 @@ impl Editor {
                 if self.buffer().dirty {
                     self.mode = Mode::ConfirmQuit;
                     self.set_status(
-                        "Unsaved changes! ^S save & quit, ^Y quit without saving, Esc cancel"
+                        "Unsaved changes! ^S Save and quit, ^Y Force quit, Esc Cancel"
                     );
                 } else {
                     self.should_quit = true;

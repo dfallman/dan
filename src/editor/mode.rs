@@ -13,6 +13,8 @@ pub enum Mode {
     SaveAs,
     /// Confirming quit with unsaved changes.
     ConfirmQuit,
+    /// Confirming overwrite of existing file.
+    ConfirmOverwrite,
 }
 
 impl Mode {
@@ -24,6 +26,7 @@ impl Mode {
             Mode::GoToLine => "GOTO",
             Mode::SaveAs => "SAVE",
             Mode::ConfirmQuit => "QUIT",
+            Mode::ConfirmOverwrite => "SAVE",
         }
     }
 
@@ -35,6 +38,7 @@ impl Mode {
             Mode::GoToLine => Color::DarkCyan,
             Mode::SaveAs => Color::DarkGreen,
             Mode::ConfirmQuit => Color::DarkRed,
+            Mode::ConfirmOverwrite => Color::DarkRed,
         }
     }
 }
@@ -56,6 +60,7 @@ mod tests {
         assert_eq!(Mode::GoToLine.label(), "GOTO");
         assert_eq!(Mode::SaveAs.label(), "SAVE");
         assert_eq!(Mode::ConfirmQuit.label(), "QUIT");
+        assert_eq!(Mode::ConfirmOverwrite.label(), "SAVE");
     }
 
     #[test]
