@@ -10,17 +10,22 @@ Under the hood it uses a rope data structure for efficient editing of large file
 ## Features
 
 - **No modes** — start typing immediately, just like nano or a GUI editor
-- **GUI-style keybindings** — `Ctrl+C`/`Ctrl+V` clipboard, `Ctrl+Z`/`Ctrl+Y` undo/redo, `Ctrl+F` search
+- **GUI-style keybindings** — `Ctrl+C` copy, `Ctrl+V` paste, `Ctrl+Z`/`Ctrl+Y` undo/redo, `Ctrl+F` search
+- **Syntax highlighting** — powered by [syntect](https://crates.io/crates/syntect) with automatic language detection by file extension; toggle on/off with `Ctrl+L`
+- **Word wrap** — toggle between soft-wrapping long lines and horizontal scrolling with `Ctrl+W`
 - **CJK & Unicode** — correct display widths for Chinese/Japanese/Korean characters, fullwidth forms, combining marks, and emoji
 - **Rope-backed buffer** — O(log n) insert/delete, handles large files without lag
 - **Undo/redo** with edit grouping — related keystrokes are bundled into a single undo step
 - **Selections** — `Shift+Arrow` to select text, `Ctrl+Shift+Arrow` to select by word, `Ctrl+A` to select all
-- **Clipboard** — `Ctrl+X` cut, `Ctrl+Shift+C` copy, `Ctrl+V` paste
+- **Clipboard** — `Ctrl+X` cut, `Ctrl+C` copy, `Ctrl+V` paste
 - **Bracketed paste** — multi-line paste from your system clipboard arrives as a single event, no garbled text
-- **Incremental search** — `Ctrl+F` to search, `Ctrl+G` to jump to next match
+- **Incremental search** — `Ctrl+F` to search, `Ctrl+G` to go to a line number, navigate matches with `Shift+Enter` / `Ctrl+Shift+G`
+- **Go-to-line** — `Ctrl+G` opens a prompt to jump directly to a line number
+- **Save As** — `Ctrl+A` to save the current buffer to a new file path, with overwrite confirmation
+- **Auto-indent** — pressing `Enter` automatically matches the indentation of the previous line
 - **Line operations** — `Alt+Up/Down` to move lines, `Ctrl+K` to delete a line, `Ctrl+D` to duplicate
 - **Tab / Dedent** — `Tab` inserts a tab (or spaces), `Shift+Tab` dedents the current line
-- **TOML configuration** — customise tab width, expand tabs, line numbers, scroll padding, and theme
+- **TOML configuration** — customise tab width, expand tabs, line numbers, word wrap, active line highlight, scroll padding, and theme
 - **Status bar** — shows file name, cursor position, mode, and contextual messages
 - **Git hash in version** — `dan --version` prints the version and commit hash
 - **Cross-platform** — runs on Linux, macOS, and Windows (any terminal that supports ANSI)
@@ -80,7 +85,7 @@ dan --version
 
 ## Keybindings
 
-Dan uses familiar GUI-style shortcuts. No modes — every key works the same way at all times.
+Dan uses familiar GUI-style shortcuts. No modes — every key works the same way at all times (except when in a prompt like search, go-to-line, or save-as).
 
 ### Navigation
 
@@ -130,7 +135,7 @@ Dan uses familiar GUI-style shortcuts. No modes — every key works the same way
 
 | Key                  | Action                              |
 |----------------------|-------------------------------------|
-| `Ctrl+Shift+C`       | Copy selection                      |
+| `Ctrl+C`             | Copy selection                      |
 | `Ctrl+X`             | Cut selection                       |
 | `Ctrl+V`             | Paste                               |
 | `Ctrl+Z`             | Undo                                |
@@ -141,9 +146,28 @@ Dan uses familiar GUI-style shortcuts. No modes — every key works the same way
 | Key                  | Action                              |
 |----------------------|-------------------------------------|
 | `Ctrl+F`             | Open search prompt                  |
-| `Ctrl+G`             | Jump to next search match           |
-| `Return`             | Select current search result        |
+| `Enter`              | Confirm search / jump to match      |
+| `Shift+Enter`        | Jump to previous match              |
+| `Ctrl+G` (in search) | Next match                          |
+| `Ctrl+Shift+G`       | Previous match                      |
 | `Esc`                | Cancel search                       |
+
+### Go-to-line
+
+| Key                  | Action                              |
+|----------------------|-------------------------------------|
+| `Ctrl+G`             | Open go-to-line prompt              |
+| `Enter`              | Jump to entered line number         |
+| `Esc`                | Cancel                              |
+
+### Save As
+
+| Key                  | Action                              |
+|----------------------|-------------------------------------|
+| `Ctrl+A`             | Open save-as prompt                 |
+| `Enter`              | Save to entered path                |
+| `Ctrl+O` (on conflict) | Confirm overwrite                |
+| `Esc`                | Cancel                              |
 
 ### File & Misc
 
@@ -151,8 +175,10 @@ Dan uses familiar GUI-style shortcuts. No modes — every key works the same way
 |----------------------|-------------------------------------|
 | `Ctrl+S`             | Save file                           |
 | `Ctrl+Q`             | Quit (prompts if unsaved changes)   |
-| `Ctrl+C`             | Force quit (discards any changes)   |
+| `Ctrl+Shift+C`       | Force quit (discards any changes)   |
 | `Ctrl+H`             | Toggle help overlay                 |
+| `Ctrl+W`             | Toggle word wrap                    |
+| `Ctrl+L`             | Toggle syntax highlighting          |
 
 
 ## Configuration
@@ -169,6 +195,10 @@ cp config.toml ~/.config/dan/config.toml
 ### Options
 
 ```toml
+# Wrap long lines (true) or scroll horizontally (false).
+# Toggle at runtime with Ctrl+W.
+wrap_lines = true
+
 # Tab width in spaces (default: 4)
 tab_width = 4
 
@@ -179,6 +209,9 @@ expand_tab = false
 
 # Show line numbers in the gutter (default: true)
 line_numbers = true
+
+# Highlight the active (cursor) line (default: true)
+highlight_active = true
 
 # Scroll padding — lines to keep visible above/below cursor (default: 5)
 scroll_off = 5
@@ -203,25 +236,32 @@ Dan is structured as a set of loosely coupled modules:
 
 ```
 src/
-├── main.rs          Entry point, CLI args, event loop
-├── utils.rs         Unicode character width utilities
+├── main.rs              Entry point, CLI args, event loop
+├── utils.rs             Unicode character width utilities
 ├── buffer/
-│   ├── mod.rs       Buffer (text + file path + dirty flag + edit operations)
-│   ├── rope.rs      TextRope — wrapper around `ropey` for O(log n) editing
-│   └── history.rs   Undo/redo with edit grouping
+│   ├── mod.rs           Buffer (text + file path + dirty flag + edit operations)
+│   ├── rope.rs          TextRope — wrapper around `ropey` for O(log n) editing
+│   └── history.rs       Undo/redo with edit grouping
 ├── config/
-│   └── mod.rs       TOML config loading from ~/.config/dan/
+│   └── mod.rs           TOML config loading from ~/.config/dan/
 ├── editor/
-│   ├── mod.rs       Core editor state and command execution
-│   ├── commands.rs  Command enum (all possible actions)
-│   ├── cursor.rs    Cursor positions, multi-cursor support, selections
-│   └── mode.rs      Editor modes (Editing / Selecting)
+│   ├── mod.rs           Core editor state and top-level command dispatch
+│   ├── commands.rs      Command enum (all possible actions)
+│   ├── cursor.rs        Cursor positions, multi-cursor support, selections
+│   ├── editing.rs       Insert, delete, line-swap, auto-indent, save-as
+│   ├── mode.rs          Editor modes (Editing, Searching, GoToLine, SaveAs, …)
+│   ├── navigation.rs    Arrow-key movement, word jump, page up/down
+│   ├── search.rs        Incremental search, next/prev match
+│   ├── selection.rs     Shift+arrow selection logic
+│   └── viewport.rs      Scroll offset and visible-area calculations
 ├── input/
-│   └── mod.rs       Keybinding map (crossterm events → Commands)
+│   └── mod.rs           Keybinding map (crossterm events → Commands)
 ├── render/
-│   └── mod.rs       Terminal rendering (gutter, text, status bar, cursor)
+│   ├── mod.rs           Top-level render orchestration
+│   ├── chrome.rs        Status bar, prompt overlays, help panel
+│   └── text.rs          Line rendering, gutter, syntax-highlighted text
 └── syntax/
-    └── mod.rs       Syntax highlighting stub (placeholder for future work)
+    └── mod.rs           Syntax highlighting via syntect (auto language detection)
 ```
 
 ### Design decisions
@@ -229,6 +269,8 @@ src/
 - **Rope data structure** — The text buffer uses [ropey](https://crates.io/crates/ropey), a B-tree–based rope that gives O(log n) insert and delete at any position. This means editing a 100MB log file is just as responsive as editing a 10-line script.
 
 - **Unicode-correct rendering** —  Character display widths are computed using the [unicode-width](https://crates.io/crates/unicode-width) crate, which correctly handles CJK ideographs (2 columns), combining marks (0 columns), fullwidth forms, and control characters. Word movement uses [unicode-segmentation](https://crates.io/crates/unicode-segmentation) for proper UAX #29 word boundaries.
+
+- **Syntax highlighting** — Powered by [syntect](https://crates.io/crates/syntect), which bundles Sublime Text syntax definitions. Language is detected automatically by file extension. Highlighting can be toggled on/off at runtime with `Ctrl+L`.
 
 - **Command pattern** — All user actions are represented as a `Command` enum. The input layer maps key events to commands, and the editor executes them. This decouples keybindings from behavior — rebinding keys means changing the mapping, not the editor logic.
 
@@ -255,7 +297,7 @@ cargo build --release
 cargo test
 ```
 
-There are currently 25 tests covering the rope, cursor/selection, mode, and Unicode width utilities.
+Tests cover the rope, cursor/selection, mode, and Unicode width utilities.
 
 ### Versioning
 
@@ -282,6 +324,7 @@ Dan uses a deliberately small set of well-maintained Rust crates:
 |-----------------------|---------------------------------------------|
 | `crossterm`           | Cross-platform terminal I/O and key events  |
 | `ropey`               | Rope data structure for the text buffer     |
+| `syntect`             | Syntax highlighting (Sublime Text grammars) |
 | `serde` + `toml`      | Configuration file parsing                  |
 | `dirs`                | Platform-specific config directory paths    |
 | `unicode-width`       | Correct display width for CJK, emoji, etc.  |
