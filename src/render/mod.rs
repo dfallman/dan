@@ -91,7 +91,7 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 
 	// Adjust scroll to keep cursor visible (with scroll_off padding)
 	let cursor_line = editor.cursors.cursor().line;
-	let scroll_off = editor.config.scroll_off;
+	let scroll_off = if vp.height <= 20 { 0 } else { editor.config.scroll_off };
 	if editor.config.wrap_lines {
 		// Wrap mode: scroll must account for visual rows, not just buffer lines.
 		// Re-derive text_area_width for the helper (gutter not computed yet, use temp)

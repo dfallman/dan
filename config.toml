@@ -17,11 +17,12 @@ line_numbers = true
 highlight_active = true 
 
 # Lines of offset/padding to keep above/below the cursor when scrolling
+# Note: If the terminal window is smaller than 20 lines, the offset is 0
 scroll_off = 5
 
 # Color theme (currently only "default").
 theme = "default"
 
-# Show "^H Help" in the gutter TODO: not implemented
+# Show "^H Help" in the gutter
 show_help = true
 
