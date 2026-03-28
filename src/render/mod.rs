@@ -121,43 +121,76 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 			}
 
 			// --- Scroll UP: ensure scroll_off visual rows above the cursor ---
-			// First, clamp scroll_y so it never goes past the cursor line.
+			// Clamp both scroll_y and scroll_vrow so the viewport never starts below the cursor.
 			if editor.scroll_y > cursor_line {
 				editor.scroll_y = cursor_line;
+				editor.scroll_vrow = cur_vrow_idx;
+			} else if editor.scroll_y == cursor_line && editor.scroll_vrow > cur_vrow_idx {
+				editor.scroll_vrow = cur_vrow_idx;
 			}
-			// Count visual rows from scroll_y to the cursor's visual row.
-			// If it's less than scroll_off, scroll up.
+
+			// Calculate rows strictly between (scroll_y, scroll_vrow) and (cursor_line, cur_vrow_idx).
 			loop {
-				if editor.scroll_y == 0 { break; }
 				let mut rows_above: usize = 0;
-				for bl in editor.scroll_y..cursor_line {
-					let lt: String = editor.buffer().text.line_slice(bl).chars().collect();
-					rows_above += visual_rows_for(&lt, tab_w, taw_tmp).len();
+				if editor.scroll_y == cursor_line {
+					rows_above = cur_vrow_idx.saturating_sub(editor.scroll_vrow);
+				} else {
+					let lt: String = editor.buffer().text.line_slice(editor.scroll_y).chars().collect();
+					let vrows_in_top = visual_rows_for(&lt, tab_w, taw_tmp).len();
+					rows_above += vrows_in_top.saturating_sub(editor.scroll_vrow);
+					
+					for bl in (editor.scroll_y + 1)..cursor_line {
+						let lt: String = editor.buffer().text.line_slice(bl).chars().collect();
+						rows_above += visual_rows_for(&lt, tab_w, taw_tmp).len();
+					}
+					rows_above += cur_vrow_idx;
 				}
-				rows_above += cur_vrow_idx; // cursor's sub-row within its line
+
 				if rows_above >= scroll_off { break; }
-				editor.scroll_y -= 1;
+				if editor.scroll_y == 0 && editor.scroll_vrow == 0 { break; }
+				
+				// Scroll UP one visual row
+				if editor.scroll_vrow > 0 {
+					editor.scroll_vrow -= 1;
+				} else {
+					editor.scroll_y -= 1;
+					let lt: String = editor.buffer().text.line_slice(editor.scroll_y).chars().collect();
+					let count = visual_rows_for(&lt, tab_w, taw_tmp).len();
+					editor.scroll_vrow = count.saturating_sub(1);
+				}
 			}
 
 			// --- Scroll DOWN: ensure scroll_off visual rows below the cursor ---
-			// The cursor's visual row (from top of viewport) must be at most
-			// visible_height - 1 - scroll_off (so it stays above any overlay bars).
 			let visible_height = vp.visible_text_height() as usize;
 			let max_row = visible_height.saturating_sub(1 + scroll_off);
 			loop {
 				let mut vrow_from_top: usize = 0;
-				for bl in editor.scroll_y..cursor_line {
-					let lt: String = editor.buffer().text.line_slice(bl).chars().collect();
-					vrow_from_top += visual_rows_for(&lt, tab_w, taw_tmp).len();
+				if editor.scroll_y == cursor_line {
+					vrow_from_top = cur_vrow_idx.saturating_sub(editor.scroll_vrow);
+				} else {
+					let lt: String = editor.buffer().text.line_slice(editor.scroll_y).chars().collect();
+					let vrows_in_top = visual_rows_for(&lt, tab_w, taw_tmp).len();
+					vrow_from_top += vrows_in_top.saturating_sub(editor.scroll_vrow);
+					
+					for bl in (editor.scroll_y + 1)..cursor_line {
+						let lt: String = editor.buffer().text.line_slice(bl).chars().collect();
+						vrow_from_top += visual_rows_for(&lt, tab_w, taw_tmp).len();
+					}
+					vrow_from_top += cur_vrow_idx;
 				}
-				vrow_from_top += cur_vrow_idx;
+				
 				if vrow_from_top <= max_row {
 					break;
 				}
-				editor.scroll_y += 1;
-				if editor.scroll_y > cursor_line {
-					editor.scroll_y = cursor_line;
-					break;
+				
+				// Scroll DOWN one visual row
+				let lt: String = editor.buffer().text.line_slice(editor.scroll_y).chars().collect();
+				let count = visual_rows_for(&lt, tab_w, taw_tmp).len();
+				if editor.scroll_vrow + 1 < count {
+					editor.scroll_vrow += 1;
+				} else {
+					editor.scroll_y += 1;
+					editor.scroll_vrow = 0;
 				}
 			}
 		}
@@ -352,6 +385,7 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 				(0, 0)
 			};
 			sy += vrow_idx;
+			sy = sy.saturating_sub(editor.scroll_vrow);
 
 			// Compute visual column from the visual row's start char.
 			let vc = if cursor_pos.line < line_count {

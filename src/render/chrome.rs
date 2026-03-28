@@ -66,7 +66,7 @@ pub fn render_status_bar<W: Write>(
 		right_parts.push(syntax.name.clone());
 	}
 	if editor.config.show_encoding {
-		right_parts.push("utf-8".to_string());
+		right_parts.push(editor.buffer().encoding.name().to_string());
 	}
 	right_parts.push(format!("Ln {:2}, Col {:2}", c.line + 1, c.col + 1));
 

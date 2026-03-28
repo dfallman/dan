@@ -1,5 +1,10 @@
 // Note: This is a test file only
 
+// Todo
+// chrome.rs:68-70: here we should show the ACTUAL encoding of the current document, not a fixed string. we need to figure out what character encoding the edited document has and print it here
+
+
+
 let cmd = input::map_event(&evt, editor.mode);let cmd = input::map_event(&evt, editor.mode);let cmd = input::map_event(&evt, editor.mode);let cmd = input::map_event(&evt, editor.mode);let cmd = input::map_event(&evt, editor.mode);let cmd = input::map_event(&evt, editor.mode);let cmd = input::map_event(&evt, editor.mode);let cmd = input::map_event(&evt, editor.mode);let cmd = input::map_event(&evt, editor.mode);let cmd = input::map_event(&evt, editor.mode);let cmd = input::map_event(&evt, editor.mode);let cmd = input::map_event(&evt, editor.mode);
 
 mod buffer;

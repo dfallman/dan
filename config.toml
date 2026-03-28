@@ -24,6 +24,10 @@ syntax_highlight = true
 # Note: If the terminal window has less than 20 lines, the offset is automatically 0
 scroll_off = 3
 
+# Fast scroll
+# TODO: not implemented
+fast_scroll_steps = 10
+
 # Color theme (currently only "default")
 theme = "default"
 

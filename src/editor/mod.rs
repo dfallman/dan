@@ -38,6 +38,8 @@ pub struct Editor {
 	pub should_quit: bool,
 	/// Viewport scroll offset (top visible line).
 	pub scroll_y: usize,
+	/// Viewport visual row scroll offset (for wrap mode sub-line scrolling).
+	pub scroll_vrow: usize,
 	/// Horizontal scroll offset (first visible column, used when wrap_lines=false).
 	pub scroll_x: usize,
 	/// OS system clipboard.
@@ -90,6 +92,7 @@ impl Editor {
 			status_msg: None,
 			should_quit: false,
 			scroll_y: 0,
+			scroll_vrow: 0,
 			scroll_x: 0,
 			sys_clipboard: arboard::Clipboard::new().ok(),
 			internal_clipboard: String::new(),
@@ -117,6 +120,7 @@ impl Editor {
 		self.active_buffer = self.buffers.len() - 1;
 		self.cursors = CursorSet::new();
 		self.scroll_y = 0;
+		self.scroll_vrow = 0;
 		Ok(())
 	}
 
@@ -782,6 +786,7 @@ impl Editor {
 
 			Command::ToggleWrap => {
 				self.config.wrap_lines = !self.config.wrap_lines;
+				self.scroll_vrow = 0;
 			}
 
 			Command::ToggleSyntax => {
