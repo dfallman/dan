@@ -104,22 +104,7 @@ pub fn render_wrap<W: Write>(
 	while screen_row < text_height && buf_line < line_count {
 		let is_active = highlight_active && buf_line == cursor_line;
 		let base_bg = if is_active { Color::AnsiValue(236) } else { Color::Reset };
-
-		// -- First screen row of this buffer line: draw the real line number --
-		w.queue(cursor::MoveTo(0, screen_row as u16))?;
-		w.queue(SetForegroundColor(Color::Reset))?;
-		w.queue(SetBackgroundColor(base_bg))?;
-
-		if show_line_numbers {
-			let line_num = format!("{:>width$} ", buf_line + 1, width = gutter_width);
-			if buf_line == cursor_line {
-				w.queue(SetForegroundColor(Color::White))?;
-			} else {
-				w.queue(SetForegroundColor(Color::DarkGrey))?;
-			}
-			w.queue(style::Print(&line_num))?;
-			w.queue(SetForegroundColor(Color::Reset))?;
-		}
+		let skip_lines = if buf_line == editor.scroll_y { editor.scroll_vrow } else { 0 };
 
 		let line_text = editor.buffer().text.line(buf_line);
 		let line_start_pos = editor.buffer().text.line_to_char(buf_line);
@@ -136,6 +121,25 @@ pub fn render_wrap<W: Write>(
 		let mut vcol: usize = 0;
 		let mut char_idx: usize = 0;
 		let mut screen_col: usize = 0; // columns written on current screen row
+		let mut current_vrow: usize = 0;
+
+		// -- First screen row of this buffer line --
+		if skip_lines == 0 {
+			w.queue(cursor::MoveTo(0, screen_row as u16))?;
+			w.queue(SetForegroundColor(Color::Reset))?;
+			w.queue(SetBackgroundColor(base_bg))?;
+
+			if show_line_numbers {
+				let line_num = format!("{:>width$} ", buf_line + 1, width = gutter_width);
+				if buf_line == cursor_line {
+					w.queue(SetForegroundColor(Color::White))?;
+				} else {
+					w.queue(SetForegroundColor(Color::DarkGrey))?;
+				}
+				w.queue(style::Print(&line_num))?;
+				w.queue(SetForegroundColor(Color::Reset))?;
+			}
+		}
 
 		for ch in line_text.chars() {
 			if ch == '\n' || ch == '\r' {
@@ -148,121 +152,133 @@ pub fn render_wrap<W: Write>(
 
 			// If this char would overflow the current screen row, wrap.
 			if screen_col + ch_w > text_area_width {
-				// Flush batch
-				if !batch.is_empty() {
-					w.queue(style::Print(&batch))?;
-					batch.clear();
-				}
-				if in_sel || prev_in_search {
-					w.queue(SetBackgroundColor(base_bg))?;
-					w.queue(SetForegroundColor(Color::Reset))?;
-				}
-				// Pad rest of this row
-				let remaining = text_area_width.saturating_sub(screen_col);
-				if remaining > 0 {
-					write_spaces(w, remaining)?;
-				}
-				screen_row += 1;
-				if screen_row >= text_height { break; }
-
-				// Start new screen row — continuation with ↳ gutter
-				w.queue(cursor::MoveTo(0, screen_row as u16))?;
-				w.queue(SetForegroundColor(Color::Reset))?;
-				w.queue(SetBackgroundColor(base_bg))?;
-				if show_line_numbers {
-					// Right-align ↳ within the gutter width, followed by separator space
-					let wrap_gutter = format!("{:>width$} ", "↳", width = gutter_width);
-					if buf_line == cursor_line {
-						w.queue(SetForegroundColor(Color::Blue))?;
-					} else {
-						w.queue(SetForegroundColor(Color::DarkGrey))?;
+				if current_vrow >= skip_lines {
+					// Flush batch
+					if !batch.is_empty() {
+						w.queue(style::Print(&batch))?;
+						batch.clear();
 					}
-					w.queue(style::Print(&wrap_gutter))?;
-					w.queue(SetForegroundColor(Color::Reset))?;
+					if in_sel || prev_in_search {
+						w.queue(SetBackgroundColor(base_bg))?;
+						w.queue(SetForegroundColor(Color::Reset))?;
+					}
+					// Pad rest of this row
+					let remaining = text_area_width.saturating_sub(screen_col);
+					if remaining > 0 {
+						write_spaces(w, remaining)?;
+					}
+					screen_row += 1;
+					if screen_row >= text_height { break; }
 				}
+
+				current_vrow += 1;
 				screen_col = 0;
 				in_sel = false;
 				prev_in_search = false;
 				prev_is_current = false;
 				prev_syn_fg = Color::Reset;
-			}
+				batch.clear();
 
-			// Highlight logic
-			let char_pos = line_start_pos + char_idx;
-			let want_sel = if let Some((sel_start, sel_end)) = sel_range {
-				char_pos >= sel_start && char_pos < sel_end
-			} else {
-				false
-			};
-			let search_hit = editor.search_matches.iter().enumerate().find(
-				|(_i, &(ms, me))| char_pos >= ms && char_pos < me,
-			);
-			let is_current_match = search_hit.as_ref().map(|(i, _)| *i == editor.search_match_idx).unwrap_or(false);
-			let in_search = search_hit.is_some();
-
-			// Determine the fg color for this char: selection/search override syntax.
-			let cur_syn_fg = syntax_fg(&syn_colors, char_idx);
-			let want_state = (want_sel, in_search, is_current_match, if want_sel || in_search { Color::Reset } else { cur_syn_fg });
-			let prev_state = (in_sel, prev_in_search, prev_is_current, prev_syn_fg);
-			if want_state != prev_state {
-				if !batch.is_empty() {
-					w.queue(style::Print(&batch))?;
-					batch.clear();
-				}
-				if want_sel {
-					w.queue(SetBackgroundColor(Color::DarkBlue))?;
-					w.queue(SetForegroundColor(Color::White))?;
-				} else if is_current_match {
-					w.queue(SetBackgroundColor(Color::Green))?;
-					w.queue(SetForegroundColor(Color::Black))?;
-				} else if in_search {
-					w.queue(SetBackgroundColor(Color::Yellow))?;
-					w.queue(SetForegroundColor(Color::Black))?;
-				} else {
+				if current_vrow >= skip_lines {
+					// Start new screen row — continuation with ↳ gutter
+					w.queue(cursor::MoveTo(0, screen_row as u16))?;
+					w.queue(SetForegroundColor(Color::Reset))?;
 					w.queue(SetBackgroundColor(base_bg))?;
-					w.queue(SetForegroundColor(cur_syn_fg))?;
+					if show_line_numbers {
+						// Right-align ↳ within the gutter width, followed by separator space
+						let wrap_gutter = format!("{:>width$} ", "↳", width = gutter_width);
+						if buf_line == cursor_line {
+							w.queue(SetForegroundColor(Color::Blue))?;
+						} else {
+							w.queue(SetForegroundColor(Color::DarkGrey))?;
+						}
+						w.queue(style::Print(&wrap_gutter))?;
+						w.queue(SetForegroundColor(Color::Reset))?;
+					}
 				}
-				in_sel = want_sel;
-				prev_in_search = in_search;
-				prev_is_current = is_current_match;
-				prev_syn_fg = if want_sel || in_search { Color::Reset } else { cur_syn_fg };
 			}
 
-			if ch == '\t' {
-				let spaces = ch_w;
-				for _ in 0..spaces {
-					batch.push(' ');
+			if current_vrow >= skip_lines {
+				// Highlight logic
+				let char_pos = line_start_pos + char_idx;
+				let want_sel = if let Some((sel_start, sel_end)) = sel_range {
+					char_pos >= sel_start && char_pos < sel_end
+				} else {
+					false
+				};
+				let search_hit = editor.search_matches.iter().enumerate().find(
+					|(_i, &(ms, me))| char_pos >= ms && char_pos < me,
+				);
+				let is_current_match = search_hit.as_ref().map(|(i, _)| *i == editor.search_match_idx).unwrap_or(false);
+				let in_search = search_hit.is_some();
+
+				// Determine the fg color for this char: selection/search override syntax.
+				let cur_syn_fg = syntax_fg(&syn_colors, char_idx);
+				let want_state = (want_sel, in_search, is_current_match, if want_sel || in_search { Color::Reset } else { cur_syn_fg });
+				let prev_state = (in_sel, prev_in_search, prev_is_current, prev_syn_fg);
+				if want_state != prev_state {
+					if !batch.is_empty() {
+						w.queue(style::Print(&batch))?;
+						batch.clear();
+					}
+					if want_sel {
+						w.queue(SetBackgroundColor(Color::DarkBlue))?;
+						w.queue(SetForegroundColor(Color::White))?;
+					} else if is_current_match {
+						w.queue(SetBackgroundColor(Color::Green))?;
+						w.queue(SetForegroundColor(Color::Black))?;
+					} else if in_search {
+						w.queue(SetBackgroundColor(Color::Yellow))?;
+						w.queue(SetForegroundColor(Color::Black))?;
+					} else {
+						w.queue(SetBackgroundColor(base_bg))?;
+						w.queue(SetForegroundColor(cur_syn_fg))?;
+					}
+					in_sel = want_sel;
+					prev_in_search = in_search;
+					prev_is_current = is_current_match;
+					prev_syn_fg = if want_sel || in_search { Color::Reset } else { cur_syn_fg };
 				}
-			} else {
-				batch.push(ch);
+
+				if ch == '\t' {
+					let spaces = ch_w;
+					for _ in 0..spaces {
+						batch.push(' ');
+					}
+				} else {
+					batch.push(ch);
+				}
 			}
+
 			vcol += ch_w;
 			screen_col += ch_w;
 			char_idx += 1;
 		}
 
-		// Flush remaining batch for this buffer line
-		if !batch.is_empty() {
-			w.queue(style::Print(&batch))?;
-		}
-		if in_sel || prev_in_search {
-			w.queue(SetBackgroundColor(base_bg))?;
-			w.queue(SetForegroundColor(Color::Reset))?;
-		}
+		if current_vrow >= skip_lines {
+			// Flush remaining batch for this buffer line
+			if !batch.is_empty() {
+				w.queue(style::Print(&batch))?;
+			}
+			if in_sel || prev_in_search {
+				w.queue(SetBackgroundColor(base_bg))?;
+				w.queue(SetForegroundColor(Color::Reset))?;
+			}
 
-		// Pad rest of the last screen row for this buffer line
-		let cols_used = gutter_width + 1 + screen_col;
-		let remaining = (vp.width as usize).saturating_sub(cols_used);
-		if remaining > 0 {
-			w.queue(SetForegroundColor(Color::Reset))?;
-			write_spaces(w, remaining)?;
-		}
-		// Reset bg after active-line padding so it doesn't bleed
-		if is_active {
-			w.queue(SetBackgroundColor(Color::Reset))?;
-		}
+			// Pad rest of the last screen row for this buffer line
+			let cols_used = gutter_width + 1 + screen_col;
+			let remaining = (vp.width as usize).saturating_sub(cols_used);
+			if remaining > 0 {
+				w.queue(SetForegroundColor(Color::Reset))?;
+				write_spaces(w, remaining)?;
+			}
+			// Reset bg after active-line padding so it doesn't bleed
+			if is_active {
+				w.queue(SetBackgroundColor(Color::Reset))?;
+			}
 
-		screen_row += 1;
+			screen_row += 1;
+		}
 		buf_line += 1;
 	}
 

@@ -17,6 +17,8 @@ pub struct Buffer {
 	pub file_path: Option<PathBuf>,
 	/// Whether the buffer has unsaved changes.
 	pub dirty: bool,
+	/// The detected byte stream character encoding of the document.
+	pub encoding: &'static encoding_rs::Encoding,
 }
 
 impl Buffer {
@@ -27,24 +29,37 @@ impl Buffer {
 			history: History::new(),
 			file_path: None,
 			dirty: false,
+			encoding: encoding_rs::UTF_8,
 		}
 	}
 
 	/// Create a buffer from a file.
 	pub fn from_file(path: &Path) -> io::Result<Self> {
-		let content = std::fs::read_to_string(path)?;
+		let bytes = std::fs::read(path)?;
+		let (content, encoding) = if let Ok(s) = std::str::from_utf8(&bytes) {
+			(s.to_string(), encoding_rs::UTF_8)
+		} else {
+			let mut detector = chardetng::EncodingDetector::new();
+			detector.feed(&bytes, true);
+			let enc = detector.guess(None, true);
+			let (dec, _, _) = enc.decode(&bytes);
+			(dec.into_owned(), enc)
+		};
 		Ok(Self {
 			text: TextRope::from_str(&content),
 			history: History::new(),
 			file_path: Some(path.to_path_buf()),
 			dirty: false,
+			encoding,
 		})
 	}
 
 	/// Save the buffer to its file.
 	pub fn save(&mut self) -> io::Result<()> {
 		if let Some(ref path) = self.file_path {
-			std::fs::write(path, self.text.to_string_full())?;
+			let text = self.text.to_string_full();
+			let (encoded_bytes, _, _) = self.encoding.encode(&text);
+			std::fs::write(path, encoded_bytes.as_ref())?;
 			self.dirty = false;
 			Ok(())
 		} else {
@@ -57,7 +72,9 @@ impl Buffer {
 
 	/// Save the buffer to a new path and adopt it as the buffer's file.
 	pub fn save_to(&mut self, path: &Path) -> io::Result<()> {
-		std::fs::write(path, self.text.to_string_full())?;
+		let text = self.text.to_string_full();
+		let (encoded_bytes, _, _) = self.encoding.encode(&text);
+		std::fs::write(path, encoded_bytes.as_ref())?;
 		self.file_path = Some(path.to_path_buf());
 		self.dirty = false;
 		Ok(())

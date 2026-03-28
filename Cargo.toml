@@ -2,7 +2,7 @@
 name = "dan"
 version = "0.1.0"
 edition = "2021"
-description = "A modal text editor"
+description = "A friendly, fast, modeless, and (somewhat) opinionated terminal text editor written in Rust"
 
 [dependencies]
 crossterm = "0.29"
@@ -14,3 +14,5 @@ unicode-width = "0.2"
 unicode-segmentation = "1.12"
 syntect = "5.3.0"
 arboard = "3.4"
+chardetng = "0.1"
+encoding_rs = "0.8"
