@@ -57,6 +57,17 @@ pub enum Command {
 	SearchConfirm,
 	SearchCancel,
 
+	// -- Global Replace --
+	ReplaceOpen,
+	ReplaceInsertChar(char),
+	ReplaceDeleteChar,
+	ReplaceSearchConfirm,
+	ReplaceWithConfirm,
+	ReplaceActionYes,
+	ReplaceActionNo,
+	ReplaceActionAll,
+	ReplaceCancel,
+
 	// -- Go-to-line --
 	GoToLineOpen,
 	GoToLineInsertChar(char),

@@ -15,6 +15,12 @@ pub enum Mode {
 	ConfirmQuit,
 	/// Confirming overwrite of existing file.
 	ConfirmOverwrite,
+	/// Capturing global replace target string.
+	ReplacingSearch,
+	/// Capturing global replacement macro string.
+	ReplacingWith,
+	/// Interactive Replace confirmation step.
+	ReplacingStep,
 }
 
 impl Mode {
@@ -27,6 +33,9 @@ impl Mode {
 			Mode::SaveAs => "SAVE",
 			Mode::ConfirmQuit => "QUIT",
 			Mode::ConfirmOverwrite => "SAVE",
+			Mode::ReplacingSearch => "REPL",
+			Mode::ReplacingWith => "RWTH",
+			Mode::ReplacingStep => "REPL",
 		}
 	}
 
@@ -39,6 +48,9 @@ impl Mode {
 			Mode::SaveAs => Color::DarkGreen,
 			Mode::ConfirmQuit => Color::DarkRed,
 			Mode::ConfirmOverwrite => Color::DarkRed,
+			Mode::ReplacingSearch => Color::DarkMagenta,
+			Mode::ReplacingWith => Color::DarkMagenta,
+			Mode::ReplacingStep => Color::DarkMagenta,
 		}
 	}
 }

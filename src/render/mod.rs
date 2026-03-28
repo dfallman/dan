@@ -280,6 +280,11 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 		chrome::render_search_bar(editor, w, &vp)?;
 	}
 
+	// -- Render replace prompt (when in replace mode sequences) --
+	if matches!(editor.mode, Mode::ReplacingSearch | Mode::ReplacingWith | Mode::ReplacingStep) {
+		chrome::render_replace_bar(editor, w, &vp)?;
+	}
+
 	// -- Render go-to-line prompt (when in goto-line mode) --
 	if editor.mode == Mode::GoToLine {
 		chrome::render_goto_line_bar(editor, w, &vp)?;
@@ -291,7 +296,7 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 	}
 
 	// -- Position the cursor --
-	if editor.mode == Mode::Searching {
+	if matches!(editor.mode, Mode::Searching | Mode::ReplacingSearch | Mode::ReplacingWith) {
 		// During search, draw an outline cursor in the document at the saved position.
 		if let Some((saved_line, saved_col)) = editor.search_saved_cursor {
 			if saved_line >= editor.scroll_y && saved_line < editor.scroll_y + text_height {
@@ -343,7 +348,7 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 
 	let has_prompt = matches!(
 		editor.mode,
-		Mode::Searching | Mode::GoToLine | Mode::SaveAs | Mode::ConfirmOverwrite
+		Mode::Searching | Mode::GoToLine | Mode::SaveAs | Mode::ConfirmOverwrite | Mode::ReplacingSearch | Mode::ReplacingWith
 	);
 
 	if has_prompt {

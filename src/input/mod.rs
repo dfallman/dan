@@ -23,6 +23,15 @@ pub fn map_event(event: &Event, mode: Mode) -> Command {
 			if mode == Mode::ConfirmOverwrite {
 				return map_confirm_overwrite_key(key);
 			}
+			if mode == Mode::ReplacingSearch {
+				return map_replace_search_key(key);
+			}
+			if mode == Mode::ReplacingWith {
+				return map_replace_with_key(key);
+			}
+			if mode == Mode::ReplacingStep {
+				return map_replace_step_key(key);
+			}
 			map_key(key)
 		}
 		Event::Paste(text) => Command::InsertString(text.clone()),
@@ -62,6 +71,46 @@ fn map_search_key(key: &KeyEvent) -> Command {
 		KeyCode::Backspace => Command::SearchDeleteChar,
 		// Printable chars (including shifted) are appended to the query
 		KeyCode::Char(ch) if !ctrl => Command::SearchInsertChar(ch),
+		_ => Command::Noop,
+	}
+}
+
+/// Key mapping while inside the Replace: target prompt.
+fn map_replace_search_key(key: &KeyEvent) -> Command {
+	let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+
+	match key.code {
+		KeyCode::Esc => Command::ReplaceCancel,
+		KeyCode::Enter => Command::ReplaceSearchConfirm,
+		KeyCode::Backspace => Command::ReplaceDeleteChar,
+		KeyCode::Char(ch) if !ctrl => Command::ReplaceInsertChar(ch),
+		_ => Command::Noop,
+	}
+}
+
+/// Key mapping while inside the Replace With: prompt.
+fn map_replace_with_key(key: &KeyEvent) -> Command {
+	let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+
+	match key.code {
+		KeyCode::Esc => Command::ReplaceCancel,
+		KeyCode::Enter => Command::ReplaceWithConfirm,
+		KeyCode::Backspace => Command::ReplaceDeleteChar,
+		KeyCode::Char(ch) if !ctrl => Command::ReplaceInsertChar(ch),
+		_ => Command::Noop,
+	}
+}
+
+/// Key mapping while interacting through Match Replacement Steps.
+fn map_replace_step_key(key: &KeyEvent) -> Command {
+	let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+
+	match key.code {
+		KeyCode::Esc => Command::ReplaceCancel,
+		KeyCode::Char('y') | KeyCode::Char('Y') if !ctrl => Command::ReplaceActionYes,
+		KeyCode::Char('n') | KeyCode::Char('N') if !ctrl => Command::ReplaceActionNo,
+		KeyCode::Char('a') | KeyCode::Char('A') if !ctrl => Command::ReplaceActionAll,
+		KeyCode::Char('q') | KeyCode::Char('Q') if !ctrl => Command::ReplaceCancel,
 		_ => Command::Noop,
 	}
 }
@@ -115,6 +164,7 @@ fn map_key(key: &KeyEvent) -> Command {
 			KeyCode::Char('d') => Command::DuplicateLineOrSelection,
 			KeyCode::Char('w') => Command::ToggleWrap,
 			KeyCode::Char('h') => Command::ToggleHelp,
+			KeyCode::Char('r') => Command::ReplaceOpen,
 			KeyCode::Char('l') => Command::ToggleSyntax,
 			_ => Command::Noop,
 		};
