@@ -23,13 +23,11 @@ syntax_highlight = true
 # Fast scroll lines when jumping via Ctrl+Shift+Up/Down
 fast_scroll_steps = 10
  
-
 # Lines of offset/padding to keep above/below the cursor when scrolling
 # Note: If the terminal window has less than 20 lines, the offset is automatically 0
 scroll_off = 3
 
 # Auto-close pairs: "'`({[
-# TODO: not implemented
 auto_close = true
 
 # Color theme

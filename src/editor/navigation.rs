@@ -126,7 +126,7 @@ impl Editor {
 		}
 	}
 
-	/// Move cursor forward one word using UAX #29 word boundaries.
+	/// Move cursor forward one word using programming-language-aware boundaries.
 	pub(crate) fn move_word_forward(&mut self) {
 		let (line, col) = {
 			let text = &self.buffer().text;
@@ -138,18 +138,33 @@ impl Editor {
 				return;
 			}
 
-			// Phase 1: skip current word (non-whitespace) characters
-			while pos < total_chars {
-				let ch = text.char_at(pos);
+			fn char_class(ch: char) -> u8 {
 				if ch.is_whitespace() {
-					break;
+					0
+				} else if ch.is_alphanumeric() || ch == '_' {
+					1
+				} else {
+					2
 				}
-				pos += 1;
 			}
-			// Phase 2: skip whitespace (including newlines) to land on next word
+
+			let start_class = char_class(text.char_at(pos));
+
+			if start_class != 0 {
+				// Phase 1: skip characters of the same class (word -> word, or punct -> punct)
+				while pos < total_chars {
+					let ch = text.char_at(pos);
+					if char_class(ch) != start_class {
+						break;
+					}
+					pos += 1;
+				}
+			}
+
+			// Phase 2: skip trailing whitespace to land cleanly on the next token
 			while pos < total_chars {
 				let ch = text.char_at(pos);
-				if !ch.is_whitespace() {
+				if char_class(ch) != 0 {
 					break;
 				}
 				pos += 1;
@@ -177,21 +192,35 @@ impl Editor {
 				return;
 			}
 
-			// Phase 1: skip whitespace behind cursor
+			fn char_class(ch: char) -> u8 {
+				if ch.is_whitespace() {
+					0
+				} else if ch.is_alphanumeric() || ch == '_' {
+					1
+				} else {
+					2
+				}
+			}
+
+			// Phase 1: skip preceding whitespace behind cursor
 			while pos > 0 {
 				let ch = text.char_at(pos - 1);
-				if !ch.is_whitespace() {
+				if char_class(ch) != 0 {
 					break;
 				}
 				pos -= 1;
 			}
-			// Phase 2: skip word (non-whitespace) characters to find start of word
-			while pos > 0 {
-				let ch = text.char_at(pos - 1);
-				if ch.is_whitespace() {
-					break;
+
+			if pos > 0 {
+				let target_class = char_class(text.char_at(pos - 1));
+				// Phase 2: skip characters of the same target class to find bounding start
+				while pos > 0 {
+					let ch = text.char_at(pos - 1);
+					if char_class(ch) != target_class {
+						break;
+					}
+					pos -= 1;
 				}
-				pos -= 1;
 			}
 
 			let line = text.char_to_line(pos);

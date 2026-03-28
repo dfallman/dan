@@ -32,6 +32,8 @@ pub struct Config {
 	pub show_lang: bool,
 	/// How many lines to jump for fast scroll navigation (Ctrl+Shift+Up/Down)
 	pub fast_scroll_steps: usize,
+	/// Automatically insert closing brackets and quotes
+	pub auto_close: bool,
 }
 
 impl Default for Config {
@@ -50,6 +52,7 @@ impl Default for Config {
 			show_encoding: true,
 			show_lang: true,
 			fast_scroll_steps: 10,
+			auto_close: true,
 		}
 	}
 }

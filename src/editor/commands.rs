@@ -103,5 +103,6 @@ pub enum Command {
 	ToggleHelp,
 	ToggleWrap,
 	ToggleSyntax,
+	ToggleComment,
 	Noop,
 }
