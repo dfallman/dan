@@ -5,8 +5,10 @@ pub struct Cursor {
 	pub line: usize,
 	/// Zero-indexed column (char offset within the line).
 	pub col: usize,
-	/// "Desired" column — preserved across vertical movement through short lines.
-	pub desired_col: usize,
+	/// Desired visual column (display width from left margin).
+	/// Preserved across vertical movement through short lines so the cursor
+	/// snaps back when returning to a long line.
+	pub desired_vcol: usize,
 }
 
 impl Cursor {
@@ -14,7 +16,7 @@ impl Cursor {
 		Self {
 			line,
 			col,
-			desired_col: col,
+			desired_vcol: col,
 		}
 	}
 
@@ -22,14 +24,17 @@ impl Cursor {
 		Self::new(0, 0)
 	}
 
-	/// Set both actual and desired column.
+	/// Set both actual column and desired visual column.
+	/// For ASCII text, col == vcol so the default is correct.
+	/// Callers that know the true visual column should follow up with
+	/// `desired_vcol = visual_col_at(...)`.
 	pub fn set_col(&mut self, col: usize) {
 		self.col = col;
-		self.desired_col = col;
+		self.desired_vcol = col;
 	}
 
-	/// Set column without updating desired (for vertical movement).
-	pub fn set_col_clamped(&mut self, col: usize) {
+	/// Set column without updating desired visual column (for vertical movement).
+	pub fn set_col_keep_vcol(&mut self, col: usize) {
 		self.col = col;
 	}
 }

@@ -1,6 +1,6 @@
 # dan
 
-**Dan** is a friendly, familiar, and fast terminal text editor written in Rust.
+**Dan** is a friendly, fast, modeless, and (somewhat) opinionated terminal text editor written in Rust.
 
 It works the way you already know — type to insert text, use arrow keys to move, `Ctrl+S` to save, `Ctrl+Z` to undo. No modes to learn, no cheat sheet needed. If you can use Notepad or nano, you can use Dan.
 

@@ -1,5 +1,7 @@
 // Note: This is a test file only
 
+let cmd = input::map_event(&evt, editor.mode);let cmd = input::map_event(&evt, editor.mode);let cmd = input::map_event(&evt, editor.mode);let cmd = input::map_event(&evt, editor.mode);let cmd = input::map_event(&evt, editor.mode);let cmd = input::map_event(&evt, editor.mode);let cmd = input::map_event(&evt, editor.mode);let cmd = input::map_event(&evt, editor.mode);let cmd = input::map_event(&evt, editor.mode);let cmd = input::map_event(&evt, editor.mode);let cmd = input::map_event(&evt, editor.mode);let cmd = input::map_event(&evt, editor.mode);
+
 mod buffer;
 mod config;
 mod editor;

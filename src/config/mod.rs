@@ -20,9 +20,14 @@ pub struct Config {
 	/// Wrap long lines (true) or scroll horizontally (false).
 	pub wrap_lines: bool,
 	/// Enable syntax highlighting (requires a file with a known extension).
-	pub syntax_highlighting: bool,
+	#[serde(alias = "syntax_highlighting")]
+	pub syntax_highlight: bool,
 	/// Auto-indent new lines (copy leading whitespace from current line).
 	pub auto_indent: bool,
+	/// Show "^H Help" in the toolbar.
+	pub show_help: bool,
+	/// Show detected language in the toolbar.
+	pub show_lang: bool,
 }
 
 impl Default for Config {
@@ -35,8 +40,10 @@ impl Default for Config {
 			scroll_off: 5,
 			theme: "base16-eighties.dark".to_string(),
 			wrap_lines: true,
-			syntax_highlighting: true,
+			syntax_highlight: true,
 			auto_indent: true,
+			show_help: true,
+			show_lang: true,
 		}
 	}
 }
@@ -44,16 +51,36 @@ impl Default for Config {
 impl Config {
 	/// Load config from the default config path (~/.config/dan/config.toml).
 	pub fn load() -> Self {
+		let mut config = Self::default();
 		if let Some(path) = config_path() {
 			if path.exists() {
 				if let Ok(content) = std::fs::read_to_string(&path) {
-					if let Ok(config) = toml::from_str(&content) {
-						return config;
+					if let Ok(c) = toml::from_str(&content) {
+						config = c;
 					}
 				}
 			}
 		}
-		Self::default()
+
+		// Try local config (allows local developer overrides)
+		let local_path = PathBuf::from("config.toml");
+		if local_path.exists() {
+			if let Ok(content) = std::fs::read_to_string(&local_path) {
+				if let Ok(c) = toml::from_str(&content) {
+					config = c;
+				}
+			}
+		}
+
+		// Disable colors if NO_COLOR is present and not empty
+		if let Ok(val) = std::env::var("NO_COLOR") {
+			if !val.is_empty() {
+				config.highlight_active = false;
+				config.syntax_highlight = false;
+			}
+		}
+
+		config
 	}
 }
 

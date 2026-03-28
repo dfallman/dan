@@ -6,6 +6,7 @@ mod navigation;
 mod search;
 mod selection;
 pub(crate) mod viewport;
+pub(crate) mod visual_col;
 
 pub(crate) use viewport::visual_rows_for;
 
@@ -39,8 +40,10 @@ pub struct Editor {
 	pub scroll_y: usize,
 	/// Horizontal scroll offset (first visible column, used when wrap_lines=false).
 	pub scroll_x: usize,
-	/// Clipboard content.
-	pub clipboard: String,
+	/// OS system clipboard.
+	pub sys_clipboard: Option<arboard::Clipboard>,
+	/// Internal fallback clipboard content.
+	pub internal_clipboard: String,
 	/// Current terminal width (updated on resize).
 	pub terminal_width: u16,
 	/// Current terminal height (updated on resize).
@@ -88,7 +91,8 @@ impl Editor {
 			should_quit: false,
 			scroll_y: 0,
 			scroll_x: 0,
-			clipboard: String::new(),
+			sys_clipboard: arboard::Clipboard::new().ok(),
+			internal_clipboard: String::new(),
 			terminal_width: tw,
 			terminal_height: th,
 			suppress_next_paste: false,
@@ -163,7 +167,9 @@ impl Editor {
 			Command::MoveLineEnd => {
 				let c = self.cursors.cursor();
 				let len = self.line_len_no_newline(c.line);
+				let line_text: String = self.buffer().text.line_slice(c.line).chars().collect();
 				self.cursors.primary_mut().head.set_col(len);
+				self.cursors.primary_mut().head.desired_vcol = crate::editor::visual_col::visual_col_at(&line_text, len, self.config.tab_width);
 				self.clear_selection();
 			}
 			Command::MoveWordForward => {
@@ -250,7 +256,9 @@ impl Editor {
 				self.begin_selection_if_needed();
 				let c = self.cursors.cursor();
 				let len = self.line_len_no_newline(c.line);
+				let line_text: String = self.buffer().text.line_slice(c.line).chars().collect();
 				self.cursors.primary_mut().head.set_col(len);
+				self.cursors.primary_mut().head.desired_vcol = crate::editor::visual_col::visual_col_at(&line_text, len, self.config.tab_width);
 			}
 			Command::SelectAll => {
 				let last_line = self.buffer().line_count().saturating_sub(1);
@@ -399,7 +407,10 @@ impl Editor {
 				};
 				if line_start < line_end {
 					let deleted = self.buffer().text.slice_to_string(line_start..line_end);
-					self.clipboard = deleted;
+					if let Some(clip) = &mut self.sys_clipboard {
+						let _ = clip.set_text(deleted.clone());
+					}
+					self.internal_clipboard = deleted;
 					self.buffer_mut().delete_range(line_start, line_end);
 					let max_line = self.buffer().line_count().saturating_sub(1);
 					let new_line = c.line.min(max_line);
@@ -456,19 +467,29 @@ impl Editor {
 			// -- Clipboard (GUI-style) --
 			Command::Copy => {
 				if let Some(text) = self.get_selected_text() {
-					self.clipboard = text;
+					if let Some(clip) = &mut self.sys_clipboard {
+						let _ = clip.set_text(text.clone());
+					}
+					self.internal_clipboard = text;
 					self.set_status("Copied");
 				} else {
 					// Copy current line if no selection
 					let c = self.cursors.cursor();
-					self.clipboard = self.buffer().text.line(c.line).to_string();
+					let text = self.buffer().text.line(c.line).to_string();
+					if let Some(clip) = &mut self.sys_clipboard {
+						let _ = clip.set_text(text.clone());
+					}
+					self.internal_clipboard = text;
 					self.set_status("Copied line");
 				}
 			}
 			Command::Cut => {
 				if self.has_selection() {
 					if let Some(text) = self.get_selected_text() {
-						self.clipboard = text;
+						if let Some(clip) = &mut self.sys_clipboard {
+							let _ = clip.set_text(text.clone());
+						}
+						self.internal_clipboard = text;
 					}
 					self.delete_selection_if_active();
 					self.set_status("Cut");
@@ -486,11 +507,24 @@ impl Editor {
 					return;
 				}
 				self.delete_selection_if_active();
-				if !self.clipboard.is_empty() {
+				
+				let mut text = String::new();
+				if let Some(clip) = &mut self.sys_clipboard {
+					if let Ok(sys_text) = clip.get_text() {
+						if !sys_text.is_empty() {
+							text = sys_text;
+						}
+					}
+				}
+				if text.is_empty() {
+					text = self.internal_clipboard.clone();
+				}
+
+				if !text.is_empty() {
 					let pos = self.cursor_char_pos();
-					let text = self.clipboard.clone();
-					let char_count = text.chars().count();
-					self.buffer_mut().insert_str(pos, &text);
+					let clean = Self::sanitize_paste(&text);
+					let char_count = clean.chars().count();
+					self.buffer_mut().insert_str(pos, &clean);
 					// Move cursor to end of pasted text
 					let new_pos = pos + char_count;
 					let new_line = self.buffer().text.char_to_line(new_pos);
@@ -512,7 +546,6 @@ impl Editor {
 				self.search_matches.clear();
 				self.search_match_idx = 0;
 				self.mode = Mode::Searching;
-				self.show_help = false;
 				// If we have a previous query, run the search immediately.
 				if !self.search_query.is_empty() {
 					self.refresh_search_matches();
@@ -586,7 +619,6 @@ impl Editor {
 				self.clear_selection();
 				self.goto_line_input.clear();
 				self.mode = Mode::GoToLine;
-				self.show_help = false;
 			}
 			Command::GoToLineInsertChar(ch) => {
 				if ch.is_ascii_digit() {
@@ -623,7 +655,6 @@ impl Editor {
 					.unwrap_or_default();
 				self.save_as_cursor = self.save_as_input.len();
 				self.mode = Mode::SaveAs;
-				self.show_help = false;
 				self.set_status("Save As: enter path, Enter to save, Esc to cancel");
 			}
 			Command::SaveAsInsertChar(ch) => {
@@ -752,7 +783,7 @@ impl Editor {
 			}
 
 			Command::ToggleSyntax => {
-				self.config.syntax_highlighting = !self.config.syntax_highlighting;
+				self.config.syntax_highlight = !self.config.syntax_highlight;
 			}
 
 			Command::Noop => {}

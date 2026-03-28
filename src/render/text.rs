@@ -30,7 +30,7 @@ fn syntax_colors_for_line(
 	hi: &mut HighlightLines<'_>,
 	line_text: &str,
 ) -> Vec<(Color, bool)> {
-	if !editor.config.syntax_highlighting {
+	if !editor.config.syntax_highlight {
 		return Vec::new();
 	}
 	let ranges = hi
@@ -57,6 +57,15 @@ fn syntax_fg(colors: &[(Color, bool)], char_idx: usize) -> Color {
 		.map(|(c, _)| *c)
 		.unwrap_or(Color::Reset)
 }
+
+/// Calculate a subtle active line highlight background dynamically derived from
+/// the theme's default background luminance. This safely avoids garish active
+/// line colors defined by eccentric theme authors.
+
+
+
+
+
 
 /// Render text lines in wrap mode (soft-wrap).
 ///
@@ -94,11 +103,7 @@ pub fn render_wrap<W: Write>(
 
 	while screen_row < text_height && buf_line < line_count {
 		let is_active = highlight_active && buf_line == cursor_line;
-		let base_bg = if is_active {
-			Color::AnsiValue(236)
-		} else {
-			Color::Reset
-		};
+		let base_bg = if is_active { Color::AnsiValue(236) } else { Color::Reset };
 
 		// -- First screen row of this buffer line: draw the real line number --
 		w.queue(cursor::MoveTo(0, screen_row as u16))?;
@@ -315,11 +320,7 @@ pub fn render_nowrap<W: Write>(
 	for row in 0..text_height {
 		let line_idx = editor.scroll_y + row;
 		let is_active = highlight_active && line_idx == cursor_line;
-		let base_bg = if is_active {
-			Color::AnsiValue(236)
-		} else {
-			Color::Reset
-		};
+		let base_bg = if is_active { Color::AnsiValue(236) } else { Color::Reset };
 		w.queue(cursor::MoveTo(0, row as u16))?;
 		w.queue(SetForegroundColor(Color::Reset))?;
 		w.queue(SetBackgroundColor(base_bg))?;

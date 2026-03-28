@@ -32,13 +32,19 @@ impl Viewport {
 		editor.terminal_height = h;
 		// Status bar is always 1 row — it never changes.
 		let chrome: u16 = 1;
-		// Overlay bars paint over the bottom text lines (no text_height change).
+		let has_prompt = matches!(
+			editor.mode,
+			Mode::Searching | Mode::GoToLine | Mode::SaveAs | Mode::ConfirmOverwrite
+		);
 		let mut overlay: u16 = 0;
-		if editor.show_help {
+
+		// Automatically hide help if a prompt is showing above the toolbar
+		if editor.show_help && !has_prompt {
 			overlay += chrome::help_row_count(w);
 		}
-		if editor.mode == Mode::Searching || editor.mode == Mode::GoToLine || editor.mode == Mode::SaveAs || editor.mode == Mode::ConfirmOverwrite {
-			overlay += 1;
+		if has_prompt {
+			let (rows, _) = chrome::prompt_geometry(editor, w);
+			overlay += rows;
 		}
 		Self {
 			width: w,
@@ -227,8 +233,12 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 	// -- Render status bar (always the row just after text) --
 	chrome::render_status_bar(editor, w, &vp)?;
 
-	// -- Render help bar (only when toggled on with ^H) --
-	if editor.show_help {
+	// -- Render help bar (only when toggled on & no prompt active) --
+	let has_prompt = matches!(
+		editor.mode,
+		Mode::Searching | Mode::GoToLine | Mode::SaveAs | Mode::ConfirmOverwrite
+	);
+	if editor.show_help && !has_prompt {
 		chrome::render_help_bar(editor, w, &vp)?;
 	}
 
@@ -296,34 +306,23 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 				w.queue(SetForegroundColor(Color::Reset))?;
 			}
 		}
+	}
 
-		// Place the real cursor at the end of the query text in the search bar.
-		// Search bar overlays above help (if shown) and above the status bar.
-		let help_offset = if editor.show_help { chrome::help_row_count(vp.width) } else { 0 };
-		let search_y = vp.height.saturating_sub(2 + help_offset);
-		let label_len = 7; // " FIND: "
-		let cursor_x = (label_len + editor.search_query.len()) as u16; // +1 for leading space in query display
-		w.queue(cursor::MoveTo(cursor_x, search_y))?;
-		w.queue(cursor::Show)?;
-		w.queue(cursor::SetCursorStyle::BlinkingBlock)?;
-	} else if editor.mode == Mode::GoToLine {
-		// Place cursor in the go-to-line prompt bar.
-		let help_offset = if editor.show_help { chrome::help_row_count(vp.width) } else { 0 };
-		let bar_y = vp.height.saturating_sub(2 + help_offset);
-		let label_len = 7; // "    → " (6 display cols + 1 leading space in input)
-		let cursor_x = (label_len + editor.goto_line_input.len()) as u16;
-		w.queue(cursor::MoveTo(cursor_x, bar_y))?;
-		w.queue(cursor::Show)?;
-		w.queue(cursor::SetCursorStyle::BlinkingBlock)?;
-	} else if editor.mode == Mode::SaveAs {
-		// Place cursor in the save-as prompt bar.
-		let help_offset = if editor.show_help { chrome::help_row_count(vp.width) } else { 0 };
-		let bar_y = vp.height.saturating_sub(2 + help_offset);
-		let label_len: usize = 11; // " Save As: " (10) + leading space in input (1)
-		let cursor_x = (label_len + editor.save_as_cursor) as u16;
-		w.queue(cursor::MoveTo(cursor_x, bar_y))?;
-		w.queue(cursor::Show)?;
-		w.queue(cursor::SetCursorStyle::BlinkingBlock)?;
+	let has_prompt = matches!(
+		editor.mode,
+		Mode::Searching | Mode::GoToLine | Mode::SaveAs | Mode::ConfirmOverwrite
+	);
+
+	if has_prompt {
+		let (rows, offset) = chrome::prompt_geometry(editor, vp.width);
+		if rows > 0 {
+			let prompt_y = vp.height.saturating_sub(1 + rows);
+			let cursor_x = offset % vp.width;
+			let cursor_y = prompt_y + (offset / vp.width);
+			w.queue(cursor::MoveTo(cursor_x, cursor_y))?;
+			w.queue(cursor::Show)?;
+			w.queue(cursor::SetCursorStyle::BlinkingBlock)?;
+		}
 	} else {
 		// Normal mode — position cursor in the document.
 		let cursor_pos = editor.cursors.cursor();

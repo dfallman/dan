@@ -1,28 +1,34 @@
 # dan editor configuration
-# Copy to ~/.config/dan/config.toml to customise.
+# Copy to ~/.config/dan/config.toml to customise
 
-# Wrap long lines (true) or scroll horizontally (false) [Kbd: ^G].
+# Wrap long lines (true) or scroll horizontally (false)
+# Note: toggle in app with ^G
 wrap_lines = true
 
 # Tab width in spaces.
 tab_width = 4
 
-# Expand tabs to spaces (true = spaces, false = literal tabs).
+# Expand tabs to spaces (true = spaces, false = literal tabs)
 expand_tab = false
 
-# Show line numbers in the gutter
+# Show line numbers in the toolbar
 line_numbers = true
 
 # Highlight active line
 highlight_active = true 
 
-# Lines of offset/padding to keep above/below the cursor when scrolling
-# Note: If the terminal window is smaller than 20 lines, the offset is 0
-scroll_off = 5
+# Syntax highlighting
+syntax_highlight = true 
 
-# Color theme (currently only "default").
+# Lines of offset/padding to keep above/below the cursor when scrolling
+# Note: If the terminal window has less than 20 lines, the offset is automatically 0
+scroll_off = 3
+
+# Color theme (currently only "default")
 theme = "default"
 
-# Show "^H Help" in the gutter
+# Show "^H Help" in the toolbar
 show_help = true
 
+# Show detected language in the toolbar
+show_lang = true
