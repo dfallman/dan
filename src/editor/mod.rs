@@ -13,7 +13,7 @@ pub(crate) use viewport::visual_rows_for;
 use crate::buffer::Buffer;
 use crate::config::Config;
 use crate::editor::commands::Command;
-use crate::editor::cursor::CursorSet;
+use crate::editor::cursor::{CursorSet, Cursor};
 use crate::editor::mode::Mode;
 use crate::syntax::Highlighter;
 
@@ -158,6 +158,69 @@ impl Editor {
 	/// Clear the status message.
 	pub fn clear_status(&mut self) {
 		self.status_msg = None;
+	}
+
+
+
+	/// Toggle comments for the selected lines (or current line) using syntax-aware prefixes.
+	pub fn toggle_comment(&mut self) {
+		let syntax = self.highlighter.detect_syntax(self.buffer().file_path.as_deref());
+		let prefix = match syntax.name.as_str() {
+			"Python" | "Ruby" | "Shell-Unix-Generic" | "Bourne Again Shell (bash)" | "YAML" | "TOML" | "Makefile" | "Perl" | "PowerShell" | "R" | "Elixir" => "#",
+			"Lua" | "SQL" | "Haskell" | "Ada" | "AppleScript" => "--",
+			"HTML" | "XML" | "Markdown" => "<!--", // Note: HTML usually requires `-->` block suffix, simplistic fallback used
+			"CSS" => "/*", // simplistic fallback used
+			_ => "//", // Rust, C, C++, JS, TS, Java, Go, Swift, PHP, D, etc.
+		};
+
+		let (start_line, end_line) = if self.has_selection() {
+			let (start_c, end_c) = self.cursors.primary().ordered();
+			(start_c.line, end_c.line)
+		} else {
+			let l = self.cursors.cursor().line;
+			(l, l)
+		};
+
+		// Check if ALL non-empty lines already start with the comment prefix natively ignoring whitespace buffers
+		let mut all_commented = true;
+		for line_idx in start_line..=end_line {
+			let line_text: String = self.buffer().text.line_slice(line_idx).chars().collect();
+			if line_text.trim_end().is_empty() {
+				continue;
+			}
+			if !line_text.trim_start().starts_with(prefix) {
+				all_commented = false;
+				break;
+			}
+		}
+
+		// Apply toggle synchronously iterating in reverse to protect positional string mutations dynamically mapped down buffer
+		for line_idx in (start_line..=end_line).rev() {
+			let line_text: String = self.buffer().text.line_slice(line_idx).chars().collect();
+			let stripped = line_text.trim_start();
+			
+			if stripped.is_empty() {
+				continue;
+			}
+			
+			let indent_len = line_text.chars().count() - stripped.chars().count();
+			let insert_pos = self.buffer().text.line_to_char(line_idx) + indent_len;
+
+			if all_commented {
+				// Strip prefix (+ physically bound contextual whitespace logically attached)
+				let to_remove = if stripped.starts_with(&format!("{} ", prefix)) {
+					prefix.chars().count() + 1
+				} else {
+					prefix.chars().count()
+				};
+				self.buffer_mut().delete_range(insert_pos, insert_pos + to_remove);
+			} else {
+				// Inject comment natively pushing boundaries
+				self.buffer_mut().insert_str(insert_pos, &format!("{} ", prefix));
+			}
+		}
+
+		self.buffer_mut().commit_edits();
 	}
 
 	/// Execute a command.
@@ -322,12 +385,82 @@ impl Editor {
 
 			// -- Editing --
 			Command::InsertChar(ch) => {
+				if self.config.auto_close && self.has_selection() {
+					let pair = match ch {
+						'{' => Some(('{', '}')),
+						'[' => Some(('[', ']')),
+						'(' => Some(('(', ')')),
+						'"' => Some(('"', '"')),
+						'\'' => Some(('\'', '\'')),
+						'`' => Some(('`', '`')),
+						_ => None,
+					};
+					if let Some((open, close)) = pair {
+						// Functional wrapper logic: extract selection, delete it symmetrically, then substitute wrapped
+						let (start, end) = self.selection_range().unwrap();
+						let text = self.buffer().text.slice_to_string(start..end);
+						self.buffer_mut().delete_range(start, end);
+
+						let wrapped = format!("{}{}{}", open, text, close);
+						self.buffer_mut().insert_str(start, &wrapped);
+
+						// Maintain highlight selection bounding directly across the structurally wrapped characters
+						let new_end = start + wrapped.len();
+						let end_line = self.buffer().text.char_to_line(new_end);
+						let end_col = new_end - self.buffer().text.line_to_char(end_line);
+
+						let start_line = self.buffer().text.char_to_line(start);
+						let start_col = start - self.buffer().text.line_to_char(start_line);
+						
+						self.cursors.primary_mut().anchor = Cursor::new(start_line, start_col);
+						self.cursors.primary_mut().head = Cursor::new(end_line, end_col);
+						return;
+					}
+				}
+
 				self.delete_selection_if_active();
 				let pos = self.cursor_char_pos();
-				self.buffer_mut().insert_char(pos, ch);
-				let c = self.cursors.cursor();
-				// Move cursor forward and collapse selection (anchor = head)
-				self.cursors.set_cursor(c.line, c.col + 1);
+
+				let current_char = if pos < self.buffer().text.len_chars() {
+					self.buffer().text.char_at(pos)
+				} else {
+					'\0'
+				};
+
+				// "Step over" existing closing punctuation instead of duplicating it
+				if self.config.auto_close && current_char != '\0' && ch == current_char && matches!(ch, '}' | ']' | ')' | '"' | '\'' | '`') {
+					let line = self.buffer().text.char_to_line(pos + 1);
+					let col = (pos + 1) - self.buffer().text.line_to_char(line);
+					self.cursors.set_cursor(line, col);
+				} else {
+					self.buffer_mut().insert_char(pos, ch);
+
+					if self.config.auto_close {
+						// Only insert quotes if followed by whitespace/closing-bracket/eof to avoid breaking valid inline syntax (like "don't")
+						let should_close = match ch {
+							'"' | '\'' | '`' => current_char == '\0' || current_char.is_whitespace() || matches!(current_char, '}' | ']' | ')'),
+							'{' | '[' | '(' => true,
+							_ => false,
+						};
+						if should_close {
+							let pair = match ch {
+								'{' => '}',
+								'[' => ']',
+								'(' => ')',
+								'"' => '"',
+								'\'' => '\'',
+								'`' => '`',
+								_ => unreachable!(),
+							};
+							self.buffer_mut().insert_char(pos + 1, pair);
+						}
+					}
+
+					let new_pos = pos + 1;
+					let line = self.buffer().text.char_to_line(new_pos);
+					let col = new_pos - self.buffer().text.line_to_char(line);
+					self.cursors.set_cursor(line, col);
+				}
 			}
 			Command::InsertString(ref s) => {
 				self.delete_selection_if_active();
@@ -423,6 +556,25 @@ impl Editor {
 					let pos = self.cursor_char_pos();
 					if pos > 0 {
 						if c.col > 0 {
+							// Auto-delete pairs mapping
+							if self.config.auto_close && pos < self.buffer().text.len_chars() {
+								let current_char = self.buffer().text.char_at(pos);
+								let prev_char = self.buffer().text.char_at(pos - 1);
+								let is_pair = match prev_char {
+									'{' => current_char == '}',
+									'[' => current_char == ']',
+									'(' => current_char == ')',
+									'"' => current_char == '"',
+									'\'' => current_char == '\'',
+									'`' => current_char == '`',
+									_ => false,
+								};
+								if is_pair {
+									// Delete the trailing character too explicitly natively mapping frictionless IDE deletion
+									self.buffer_mut().delete_char(pos); 
+								}
+							}
+
 							// Deleting a char within the line — simple case
 							self.buffer_mut().delete_char(pos - 1);
 							self.cursors.set_cursor(c.line, c.col - 1);
@@ -959,8 +1111,12 @@ impl Editor {
 
 			Command::ToggleSyntax => {
 				self.config.syntax_highlight = !self.config.syntax_highlight;
+				let status = if self.config.syntax_highlight { "Syntax highlighting enabled" } else { "Syntax highlighting disabled" };
+				self.set_status(status);
 			}
-
+			Command::ToggleComment => {
+				self.toggle_comment();
+			}
 			Command::Noop => {}
 		}
 	}

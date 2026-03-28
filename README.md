@@ -22,8 +22,10 @@ Under the hood it uses a rope data structure for efficient editing of large file
 - **Bracketed paste** — multi-line paste from your system clipboard arrives as a single event, no garbled text
 - **Incremental search** — `Ctrl+F` to search, `Ctrl+G` to go to a line number, navigate matches with `Shift+Enter` / `Ctrl+Shift+G`
 - **Go-to-line** — `Ctrl+G` opens a prompt to jump directly to a line number
-- **Save As** — `Ctrl+A` to save the current buffer to a new file path, with overwrite confirmation
-- **Auto-indent** — pressing `Enter` automatically matches the indentation of the previous line
+- **Global Replace** — `Ctrl+R` opens a sequential batch Replace modal with interactive stepping (`y`, `n`, `a`, `q`) and atomic batch-undo bounds wrapper.
+- **Smart Line Commenting** — `Ctrl+/` automatically toggles languages-specific line comments (`//`, `#`, `--`, `<!--`) across selected layers instantly cleanly preserving indents!
+- **Auto-Closing Pairs** — Automatically injects paired brackets `({['"` during typing. Delete half? Both go! Select some text and type `"`, it natively functionally wraps the selection!
+- **Auto-Indent & Smart Tabs** — Automatically sniffs current buffer's indentation mapping (Spaces vs Tabs) preventing formatting corruption! Pressing `Enter` effortlessly aligns with structural cascades ahead of it.
 - **Line operations** — `Alt+Up/Down` to move lines, `Ctrl+K` to delete a line, `Ctrl+D` to duplicate
 - **Tab / Dedent** — `Tab` inserts a tab (or spaces), `Shift+Tab` dedents the current line
 - **TOML configuration** — customise tab width, expand tabs, line numbers, word wrap, active line highlight, scroll padding, status bar layout switches, and theme
@@ -103,6 +105,8 @@ Dan uses familiar GUI-style shortcuts. No modes — every key works the same way
 | `Alt+→`              | Move to next word (alternate)       |
 | `Page Up`            | Scroll up one page                  |
 | `Page Down`          | Scroll down one page                |
+| `Ctrl+Up` / `Ctrl+Down`| **Viewport Fast Scroll** - Slides viewport strictly holding cursor visual tether! (VSCode layout) |
+| `Ctrl+Shift+Up/Down` | **Cursor Fast Jump** - Jumps cursor `fast_scroll_steps` natively bounding across chunks. |
 
 ### Selection
 
@@ -141,6 +145,7 @@ Dan uses familiar GUI-style shortcuts. No modes — every key works the same way
 | `Ctrl+V`             | Paste                               |
 | `Ctrl+Z`             | Undo                                |
 | `Ctrl+Y`             | Redo                                |
+| `Ctrl+/`             | Toggle Line Comment (Smart)         |
 
 ### Search
 
@@ -152,6 +157,15 @@ Dan uses familiar GUI-style shortcuts. No modes — every key works the same way
 | `Ctrl+G` (in search) | Next match                          |
 | `Ctrl+Shift+G`       | Previous match                      |
 | `Esc`                | Cancel search                       |
+
+### Global Replace
+
+| Key                  | Action                              |
+|----------------------|-------------------------------------|
+| `Ctrl+R`             | Open Replace-All dialog             |
+| `(y)es` / `(n)o`     | Confirm or skip match substitution  |
+| `(a)ll`              | Overwrite all downstream hits       |
+| `(q)uit`             | Escape routine                      |
 
 ### Go-to-line
 
@@ -219,6 +233,12 @@ scroll_off = 5
 
 # Color theme (default: "default")
 theme = "default"
+
+# Fast scroll lines when jumping via Ctrl+Shift+Up/Down (default: 10)
+fast_scroll_steps = 10
+
+# Auto-close matched pairing structures (default: true)
+auto_close = true
 
 # Always show label "^H Help" in the toolbar
 show_help = true

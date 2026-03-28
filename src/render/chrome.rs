@@ -98,13 +98,14 @@ fn help_shortcuts() -> Vec<(&'static str, &'static str)> {
 		("^C", "Copy"),
 		("^X", "Cut"),
 		("^V", "Paste"),
-		("^F", "Search"),
+		("^F", "Find"),
 		("^R", "Replace"),
 		("^G", "Go to"),
 		("^D", "Duplicate line"),
 		("^K", "Delete line"),
 		("^W", "Wrap text"),
 		("^L", "Code highlight"),
+		("^/", "Comment"),
 		("^H", "Help"),
 	]
 }
