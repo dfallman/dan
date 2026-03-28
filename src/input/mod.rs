@@ -41,13 +41,9 @@ pub fn map_event(event: &Event, mode: Mode) -> Command {
 
 /// Key mapping while in the quit-confirmation prompt.
 fn map_confirm_quit_key(key: &KeyEvent) -> Command {
-	let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
 	match key.code {
-		// ^S = save and quit
-		KeyCode::Char('s') if ctrl => Command::SaveAndQuit,
-		// ^Y = yes, quit without saving
-		KeyCode::Char('y') if ctrl => Command::ForceQuit,
-		// Anything else (Esc, any key) cancels
+		KeyCode::Char('s') | KeyCode::Char('S') => Command::SaveAndQuit,
+		KeyCode::Char('f') | KeyCode::Char('F') => Command::ForceQuit,
 		_ => Command::CancelQuit,
 	}
 }
@@ -129,6 +125,7 @@ fn map_key(key: &KeyEvent) -> Command {
 			KeyCode::Right => Command::SelectWordForward,
 			KeyCode::Up    => Command::MoveFastUp,
 			KeyCode::Down  => Command::MoveFastDown,
+			KeyCode::Char('/') | KeyCode::Char('_') | KeyCode::Char('?') | KeyCode::Char('-') | KeyCode::Char('e') => Command::ToggleComment,
 			_ => Command::Noop,
 		};
 	}
@@ -157,7 +154,7 @@ fn map_key(key: &KeyEvent) -> Command {
 			KeyCode::Char('v') => Command::Paste,
 			KeyCode::Char('a') => Command::SaveAsOpen,
 			KeyCode::Char('f') => Command::SearchForward,
-			KeyCode::Char('/') | KeyCode::Char('_') => Command::ToggleComment,
+			KeyCode::Char('/') | KeyCode::Char('_') | KeyCode::Char('?') | KeyCode::Char('-') | KeyCode::Char('e') => Command::ToggleComment,
 			KeyCode::Char('g') => Command::GoToLineOpen,
 			KeyCode::Left      => Command::MoveWordBackward,
 			KeyCode::Right     => Command::MoveWordForward,

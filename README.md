@@ -2,9 +2,11 @@
 
 **Dan** is a friendly, fast, modeless, and (somewhat) opinionated terminal text editor written in Rust.
 
-It works the way you already know — type to insert text, use arrow keys to move, `Ctrl+S` to save, `Ctrl+Z` to undo. No modes to learn, no cheat sheet needed. If you can use Notepad or nano, you can use Dan.
+Creating Dan, the goal has been to create an ultra-fast, no-fuss, but powerful text editor for the terminal environment that just works the way you suppose an editor to work.
 
-Under the hood it uses a rope data structure for efficient editing of large files, full Unicode support (CJK, emoji, combining marks), and a batched rendering pipeline that stays smooth even over SSH.
+No strange modes to learn, no archaic keyboard shortcuts, no insanely long and complicated config files, and no cheat sheet needed. Dan, by design, is configurable and context-aware, but _somewhat_ opinionated. If you've used a text editor before, you can already use Dan. It comes with a sensible default configuration that will work for most users out of the box.
+
+Under the hood, Dan is written entirely in Rust, and it uses a rope data structure for efficient editing of large files, full Unicode support (supporting CJK, emoji, combining marks, and more), and a batched rendering pipeline that stays smooth even over SSH.
 
 
 ## Features
@@ -145,7 +147,7 @@ Dan uses familiar GUI-style shortcuts. No modes — every key works the same way
 | `Ctrl+V`             | Paste                               |
 | `Ctrl+Z`             | Undo                                |
 | `Ctrl+Y`             | Redo                                |
-| `Ctrl+/`             | Toggle Line Comment (Smart)         |
+| `Ctrl+/` / `Ctrl+E`  | Toggle Line Comment (Smart)         |
 
 ### Search
 

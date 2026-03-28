@@ -508,44 +508,100 @@ impl Editor {
 				}
 			}
 			Command::InsertTab => {
-				self.delete_selection_if_active();
-				let pos = self.cursor_char_pos();
-				let tw = self.tab_width();
-				let advance = if self.expand_tab() {
-					let spaces: String = " ".repeat(tw);
-					self.buffer_mut().insert_str(pos, &spaces);
-					tw
+				let (start_c, end_c) = self.cursors.primary().ordered();
+				let mut end_line = end_c.line;
+				
+				// Standard IDE behavior: don't indent the last line if selection ends at column 0.
+				if end_line > start_c.line && end_c.col == 0 {
+					end_line -= 1;
+				}
+
+				if self.has_selection() && start_c.line != end_line {
+					let tw = self.tab_width();
+					let expand = self.expand_tab();
+					let advance = if expand { tw } else { 1 };
+					let spaces = " ".repeat(tw);
+					let insert_str = if expand { &spaces } else { "\t" };
+
+					for line_idx in (start_c.line..=end_line).rev() {
+						let line_start = self.buffer().text.line_to_char(line_idx);
+						self.buffer_mut().insert_str(line_start, insert_str);
+					}
+					self.buffer_mut().commit_edits();
+
+					// Adjust selection columns
+					let p = self.cursors.primary_mut();
+					if p.anchor.line >= start_c.line && p.anchor.line <= end_line {
+						p.anchor.col += advance;
+					}
+					if p.head.line >= start_c.line && p.head.line <= end_line {
+						p.head.col += advance;
+					}
 				} else {
-					self.buffer_mut().insert_str(pos, "\t");
-					1
-				};
-				let c = self.cursors.cursor();
-				self.cursors.set_cursor(c.line, c.col + advance);
+					self.delete_selection_if_active();
+					let pos = self.cursor_char_pos();
+					let tw = self.tab_width();
+					let advance = if self.expand_tab() {
+						let spaces: String = " ".repeat(tw);
+						self.buffer_mut().insert_str(pos, &spaces);
+						tw
+					} else {
+						self.buffer_mut().insert_str(pos, "\t");
+						1
+					};
+					let c = self.cursors.cursor();
+					self.cursors.set_cursor(c.line, c.col + advance);
+				}
 			}
 			Command::Dedent => {
-				let c = self.cursors.cursor();
-				let line_start = self.buffer().text.line_to_char(c.line);
-				let line_slice = self.buffer().text.line_slice(c.line);
-				let tw = self.tab_width();
+				let (start_c, end_c) = self.cursors.primary().ordered();
+				let mut start_line = start_c.line;
+				let mut end_line = end_c.line;
 
-				// Count leading whitespace to remove:
-				// - a single '\t', or
-				// - up to `tab_width` leading spaces
-				let mut remove = 0usize;
-				for ch in line_slice.chars() {
-					if ch == '\t' && remove == 0 {
-						remove = 1;
-						break;
-					} else if ch == ' ' && remove < tw {
-						remove += 1;
-					} else {
-						break;
+				if self.has_selection() && end_line > start_line && end_c.col == 0 {
+					end_line -= 1;
+				}
+
+				if !self.has_selection() {
+					start_line = self.cursors.cursor().line;
+					end_line = start_line;
+				}
+
+				let tw = self.tab_width();
+				let mut removals = Vec::new();
+
+				for line_idx in (start_line..=end_line).rev() {
+					let line_start = self.buffer().text.line_to_char(line_idx);
+					let line_slice = self.buffer().text.line_slice(line_idx);
+
+					let mut remove = 0usize;
+					for ch in line_slice.chars() {
+						if ch == '\t' && remove == 0 {
+							remove = 1;
+							break;
+						} else if ch == ' ' && remove < tw {
+							remove += 1;
+						} else {
+							break;
+						}
+					}
+					
+					if remove > 0 {
+						self.buffer_mut().delete_range(line_start, line_start + remove);
+						removals.push((line_idx, remove));
 					}
 				}
-				if remove > 0 {
-					self.buffer_mut().delete_range(line_start, line_start + remove);
-					let new_col = c.col.saturating_sub(remove);
-					self.cursors.set_cursor(c.line, new_col);
+				self.buffer_mut().commit_edits();
+
+				// Safely adjust selection boundary tracking dynamically
+				let p = self.cursors.primary_mut();
+				for (line_idx, remove) in removals {
+					if p.anchor.line == line_idx {
+						p.anchor.col = p.anchor.col.saturating_sub(remove);
+					}
+					if p.head.line == line_idx {
+						p.head.col = p.head.col.saturating_sub(remove);
+					}
 				}
 			}
 			Command::DeleteBackward => {
@@ -1075,9 +1131,6 @@ impl Editor {
 			Command::Quit => {
 				if self.buffer().dirty {
 					self.mode = Mode::ConfirmQuit;
-					self.set_status(
-						"Unsaved changes! ^S Save and quit, ^Y Force quit, Esc Cancel"
-					);
 				} else {
 					self.should_quit = true;
 				}
