@@ -85,6 +85,8 @@ pub struct Editor {
 	pub fmt_rx: Option<std::sync::mpsc::Receiver<Result<String, String>>>,
 	/// Internal execution tag denoting background formatter blocks exclusively.
 	pub is_formatting: bool,
+	/// Tracker storing elapsed time bounds handling the async 5s Auto-Save shadow thread natively.
+	pub last_autosave: std::time::Instant,
 }
 
 impl Editor {
@@ -123,11 +125,26 @@ impl Editor {
 			save_as_pending_path: None,
 			fmt_rx: None,
 			is_formatting: false,
+			last_autosave: std::time::Instant::now(),
 		}
 	}
 
 	/// Evaluates unbound background systems actively verifying task payload receptions cleanly.
 	pub fn poll_async_tasks(&mut self) -> bool {
+		let mut did_work = false;
+		
+		let now = std::time::Instant::now();
+		if self.buffer().dirty && now.duration_since(self.last_autosave).as_secs() >= 5 {
+			if let Some(ref swp) = self.buffer().swp_path {
+				let content = self.buffer().text.to_string_full();
+				let p = swp.clone();
+				std::thread::spawn(move || {
+					crate::recovery::write_swap_atomic(&p, &content);
+				});
+			}
+			self.last_autosave = now;
+		}
+
 		if let Some(rx) = &self.fmt_rx {
 			if let Ok(res) = rx.try_recv() {
 				self.is_formatting = false;
@@ -163,15 +180,22 @@ impl Editor {
 						self.set_status(&e);
 					}
 				}
-				return true;
+				did_work = true;
 			}
 		}
-		false
+		did_work
 	}
 
 	/// Open a file into a new buffer and switch to it.
 	pub fn open_file(&mut self, path: &std::path::Path) -> std::io::Result<()> {
-		let buffer = Buffer::from_file(path)?;
+		let mut buffer = Buffer::from_file(path)?;
+		let swp_path = crate::recovery::get_swap_path(path);
+		
+		if crate::recovery::check_recovery(&swp_path).is_some() {
+			self.mode = Mode::RecoverSwap;
+		}
+		buffer.swp_path = Some(swp_path);
+
 		self.buffers.push(buffer);
 		self.active_buffer = self.buffers.len() - 1;
 		self.cursors = CursorSet::new();
@@ -1223,14 +1247,39 @@ impl Editor {
 				
 				let content = self.buffer().text.to_string_full();
 				let (tx, rx) = std::sync::mpsc::channel();
-				formatter::spawn_formatter(ext_str, content, tx);
+				crate::editor::formatter::spawn_formatter(ext_str, content, tx);
 				
 				self.fmt_rx = Some(rx);
 				self.is_formatting = true;
 				self.set_status("Formatting...");
 			}
+			Command::RecoverSwapAccept => {
+				if let Some(swp) = self.buffer().swp_path.clone() {
+					if let Some(payload) = crate::recovery::check_recovery(&swp) {
+						let len = self.buffer().text.len_chars();
+						self.buffer_mut().delete_range(0, len);
+						self.buffer_mut().insert_str(0, &payload);
+						self.buffer_mut().dirty = true;
+					}
+					crate::recovery::cleanup_swap(&swp);
+				}
+				self.mode = Mode::Editing;
+				self.clear_status();
+			}
+			Command::RecoverSwapDecline => {
+				if let Some(swp) = self.buffer().swp_path.clone() {
+					crate::recovery::cleanup_swap(&swp);
+				}
+				self.mode = Mode::Editing;
+				self.clear_status();
+			}
 			Command::ToggleComment => {
 				self.toggle_comment();
+			}
+			Command::ToggleSyntax => {
+				self.config.syntax_highlight = !self.config.syntax_highlight;
+				let status = if self.config.syntax_highlight { "Syntax highlighting enabled" } else { "Syntax highlighting disabled" };
+				self.set_status(status);
 			}
 			Command::Noop => {}
 		}

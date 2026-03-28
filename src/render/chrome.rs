@@ -101,12 +101,12 @@ fn help_shortcuts() -> Vec<(&'static str, &'static str)> {
 		("^F", "Find"),
 		("^R", "Replace"),
 		("^G", "Go to"),
-		("^D", "Duplicate line"),
-		("^K", "Delete line"),
+		("^D", "Duplicate"),
+		("^K", "Delete"),
 		("^W", "Wrap text"),
-		("^L", "Code highlight"),
-		("^E", "Comment"),
 		("^L", "Lint"),
+		("^E", "Comment"),
+		("^T", "Theme"),
 		("^H", "Help"),
 	]
 }
@@ -343,6 +343,17 @@ pub fn build_prompt(editor: &Editor, width: u16) -> Option<PromptLayout> {
 				PromptBlock { bg: Color::DarkGrey, fg: Color::Grey, text: hint },
 			];
 			Some(PromptLayout { rows, cursor_offset, blocks })
+		}
+		Mode::RecoverSwap => {
+			let label = " RECOVERY ".to_string();
+			let msg = " Swap file detected! Restore unsaved changes? (y)es, (n)o ".to_string();
+			let total = label.chars().count() + msg.chars().count();
+			let rows = ((total + w - 1) / w) as u16;
+			let blocks = vec![
+				PromptBlock { bg: Color::DarkRed, fg: Color::Black, text: label },
+				PromptBlock { bg: Color::DarkYellow, fg: Color::Black, text: msg },
+			];
+			Some(PromptLayout { rows, cursor_offset: 0, blocks })
 		}
 		Mode::SaveAs | Mode::ConfirmOverwrite => {
 			let label = " Save as: ".to_string();

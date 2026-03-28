@@ -1,5 +1,6 @@
 pub mod history;
 pub mod rope;
+pub mod config_loader;
 
 use std::io;
 use std::path::{Path, PathBuf};
@@ -23,6 +24,12 @@ pub struct Buffer {
 	pub expand_tab: Option<bool>,
 	/// File-local override for tab spacing width.
 	pub tab_width: Option<usize>,
+	/// Formats all excess spaces terminating lines globally during save commits.
+	pub trim_on_save: Option<bool>,
+	/// Line termination style requested statically (LF / CRLF).
+	pub newline_style: Option<String>,
+	/// Dynamic `.swp` crash-recovery tracking pipeline securely checking OS permissions.
+	pub swp_path: Option<PathBuf>,
 }
 
 impl Buffer {
@@ -36,6 +43,9 @@ impl Buffer {
 			encoding: encoding_rs::UTF_8,
 			expand_tab: None,
 			tab_width: None,
+			trim_on_save: None,
+			newline_style: None,
+			swp_path: None,
 		}
 	}
 
@@ -91,7 +101,7 @@ impl Buffer {
 			}
 		}
 
-		Ok(Self {
+		let mut buffer = Self {
 			text: TextRope::from_str(&content),
 			history: History::new(),
 			file_path: Some(path.to_path_buf()),
@@ -99,15 +109,56 @@ impl Buffer {
 			encoding,
 			expand_tab,
 			tab_width,
-		})
+			trim_on_save: None,
+			newline_style: None,
+			swp_path: None,
+		};
+
+		config_loader::load_project_settings(path, &mut buffer);
+
+		Ok(buffer)
+	}
+
+	/// Prepares the output buffer recursively enforcing `.editorconfig` bindings.
+	pub fn prepare_save_text(&self) -> String {
+		let mut text = self.text.to_string_full();
+		
+		if self.trim_on_save.unwrap_or(false) {
+			let mut processed = String::with_capacity(text.len());
+			for mut line in text.split_inclusive('\n') {
+				let has_nl = line.ends_with('\n');
+				let has_cr = line.ends_with("\r\n");
+				if has_nl {
+					line = if has_cr { &line[..line.len()-2] } else { &line[..line.len()-1] };
+				}
+				processed.push_str(line.trim_end_matches(|c| c == ' ' || c == '\t'));
+				if has_cr { processed.push_str("\r\n"); } else if has_nl { processed.push('\n'); }
+			}
+			text = processed;
+		}
+
+		if let Some(ref eol) = self.newline_style {
+			let is_crlf = eol.to_lowercase() == "crlf";
+			text = text.replace("\r\n", "\n");
+			if is_crlf {
+				text = text.replace('\n', "\r\n");
+			}
+		}
+
+		text
 	}
 
 	/// Save the buffer to its file.
 	pub fn save(&mut self) -> io::Result<()> {
 		if let Some(ref path) = self.file_path {
-			let text = self.text.to_string_full();
+			let text = self.prepare_save_text();
 			let (encoded_bytes, _, _) = self.encoding.encode(&text);
 			std::fs::write(path, encoded_bytes.as_ref())?;
+			
+			if let Some(ref swp) = self.swp_path {
+				crate::recovery::cleanup_swap(swp);
+			}
+			
 			self.dirty = false;
 			Ok(())
 		} else {
@@ -120,10 +171,15 @@ impl Buffer {
 
 	/// Save the buffer to a new path and adopt it as the buffer's file.
 	pub fn save_to(&mut self, path: &Path) -> io::Result<()> {
-		let text = self.text.to_string_full();
+		let text = self.prepare_save_text();
 		let (encoded_bytes, _, _) = self.encoding.encode(&text);
 		std::fs::write(path, encoded_bytes.as_ref())?;
 		self.file_path = Some(path.to_path_buf());
+		
+		if let Some(ref swp) = self.swp_path {
+			crate::recovery::cleanup_swap(swp);
+		}
+		
 		self.dirty = false;
 		Ok(())
 	}

@@ -100,9 +100,13 @@ pub enum Command {
 	SaveAndQuit,
 	CancelQuit,
 
+	RecoverSwapAccept,
+	RecoverSwapDecline,
+
 	// -- Misc --
 	ToggleWrap,
 	ToggleHelp,
+	ToggleSyntax,
 	ToggleComment,
 	Noop,
 }
