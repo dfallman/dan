@@ -32,19 +32,13 @@ impl Viewport {
 		editor.terminal_height = h;
 		// Status bar is always 1 row — it never changes.
 		let chrome: u16 = 1;
-		let has_prompt = matches!(
-			editor.mode,
-			Mode::Searching | Mode::GoToLine | Mode::SaveAs | Mode::ConfirmOverwrite
-		);
 		let mut overlay: u16 = 0;
 
-		// Automatically hide help if a prompt is showing above the toolbar
-		if editor.show_help && !has_prompt {
+		// Automatically compute overlay rows seamlessly evaluating the unified PromptLayout builder
+		if let Some(layout) = chrome::build_prompt(editor, w) {
+			overlay += layout.rows;
+		} else if editor.show_help {
 			overlay += chrome::help_row_count(w);
-		}
-		if has_prompt {
-			let (rows, _) = chrome::prompt_geometry(editor, w);
-			overlay += rows;
 		}
 		Self {
 			width: w,
@@ -266,33 +260,14 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 	// -- Render status bar (always the row just after text) --
 	chrome::render_status_bar(editor, w, &vp)?;
 
-	// -- Render help bar (only when toggled on & no prompt active) --
-	let has_prompt = matches!(
-		editor.mode,
-		Mode::Searching | Mode::GoToLine | Mode::SaveAs | Mode::ConfirmOverwrite
-	);
-	if editor.show_help && !has_prompt {
+	// -- Render help bar or dynamically derived Prompt Overlay (isolated by PromptLayout) --
+	let prompt_layout = chrome::build_prompt(editor, vp.width);
+	if prompt_layout.is_none() && editor.show_help {
 		chrome::render_help_bar(editor, w, &vp)?;
 	}
 
-	// -- Render search prompt (when in search mode) --
-	if editor.mode == Mode::Searching {
-		chrome::render_search_bar(editor, w, &vp)?;
-	}
-
-	// -- Render replace prompt (when in replace mode sequences) --
-	if matches!(editor.mode, Mode::ReplacingSearch | Mode::ReplacingWith | Mode::ReplacingStep) {
-		chrome::render_replace_bar(editor, w, &vp)?;
-	}
-
-	// -- Render go-to-line prompt (when in goto-line mode) --
-	if editor.mode == Mode::GoToLine {
-		chrome::render_goto_line_bar(editor, w, &vp)?;
-	}
-
-	// -- Render save-as prompt (when in save-as or confirm-overwrite mode) --
-	if editor.mode == Mode::SaveAs || editor.mode == Mode::ConfirmOverwrite {
-		chrome::render_save_as_bar(editor, w, &vp)?;
+	if let Some(layout) = &prompt_layout {
+		chrome::render_prompt_overlay(w, &vp, layout)?;
 	}
 
 	// -- Position the cursor --
@@ -346,20 +321,19 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 		}
 	}
 
-	let has_prompt = matches!(
-		editor.mode,
-		Mode::Searching | Mode::GoToLine | Mode::SaveAs | Mode::ConfirmOverwrite | Mode::ReplacingSearch | Mode::ReplacingWith
-	);
-
-	if has_prompt {
-		let (rows, offset) = chrome::prompt_geometry(editor, vp.width);
-		if rows > 0 {
+	if let Some(layout) = &prompt_layout {
+		let offset = layout.cursor_offset;
+		let rows = layout.rows;
+		if rows > 0 && offset > 0 { // offset > 0 effectively bounds cursor-showing modes
 			let prompt_y = vp.height.saturating_sub(1 + rows);
 			let cursor_x = offset % vp.width;
 			let cursor_y = prompt_y + (offset / vp.width);
 			w.queue(cursor::MoveTo(cursor_x, cursor_y))?;
 			w.queue(cursor::Show)?;
 			w.queue(cursor::SetCursorStyle::BlinkingBlock)?;
+		} else if matches!(editor.mode, Mode::ReplacingStep) {
+			// hide cursor during step evaluations specifically
+			w.queue(cursor::Hide)?;
 		}
 	} else {
 		// Normal mode — position cursor in the document.
