@@ -12,9 +12,10 @@ Under the hood it uses a rope data structure for efficient editing of large file
 - **No modes** — start typing immediately, just like nano or a GUI editor
 - **GUI-style keybindings** — `Ctrl+C` copy, `Ctrl+V` paste, `Ctrl+Z`/`Ctrl+Y` undo/redo, `Ctrl+F` search
 - **Syntax highlighting** — powered by [syntect](https://crates.io/crates/syntect) with automatic language detection by file extension; toggle on/off with `Ctrl+L`
-- **Word wrap** — toggle between soft-wrapping long lines and horizontal scrolling with `Ctrl+W`
-- **CJK & Unicode** — correct display widths for Chinese/Japanese/Korean characters, fullwidth forms, combining marks, and emoji
-- **Rope-backed buffer** — O(log n) insert/delete, handles large files without lag
+- **Dynamic Encoding Detection** — automatically sniffs and converts legacy byte formats (Shift-JIS, Windows-1252, etc.) cleanly into UTF-8 using `chardetng`, allowing seamless manipulation and resaving of foreign strings.
+- **Word wrap** — toggle between soft-wrapping long lines with smooth sub-line visual-row scrolling, and horizontal scrolling with `Ctrl+W`
+- **CJK & Unicode** — correct display widths for Chinese/Japanese/Korean characters, fullwidth forms, combining marks, and emoji, with flawless interactive prompt geometry alignments.
+- **Rope-backed buffer** — O(log n) insert/delete, handles large files without lag, with out-of-bounds mutation clamping ensuring cursor safety during multi-layer history undo/redo.
 - **Undo/redo** with edit grouping — related keystrokes are bundled into a single undo step
 - **Selections** — `Shift+Arrow` to select text, `Ctrl+Shift+Arrow` to select by word, `Ctrl+A` to select all
 - **Clipboard** — `Ctrl+X` cut, `Ctrl+C` copy, `Ctrl+V` paste
@@ -25,8 +26,8 @@ Under the hood it uses a rope data structure for efficient editing of large file
 - **Auto-indent** — pressing `Enter` automatically matches the indentation of the previous line
 - **Line operations** — `Alt+Up/Down` to move lines, `Ctrl+K` to delete a line, `Ctrl+D` to duplicate
 - **Tab / Dedent** — `Tab` inserts a tab (or spaces), `Shift+Tab` dedents the current line
-- **TOML configuration** — customise tab width, expand tabs, line numbers, word wrap, active line highlight, scroll padding, and theme
-- **Status bar** — shows file name, cursor position, mode, and contextual messages
+- **TOML configuration** — customise tab width, expand tabs, line numbers, word wrap, active line highlight, scroll padding, status bar layout switches, and theme
+- **Status bar** — shows file name, cursor position, active character encoding format, mode, and contextual messages
 - **Git hash in version** — `dan --version` prints the version and commit hash
 - **Cross-platform** — runs on Linux, macOS, and Windows (any terminal that supports ANSI)
 
@@ -218,6 +219,15 @@ scroll_off = 5
 
 # Color theme (default: "default")
 theme = "default"
+
+# Always show label "^H Help" in the toolbar
+show_help = true
+
+# Show active document character encoding in the toolbar (e.g. "utf-8")
+show_encoding = true
+
+# Show detected programming language in the toolbar (e.g. "Rust")
+show_lang = true
 ```
 
 ### Config locations by OS
@@ -329,6 +339,8 @@ Dan uses a deliberately small set of well-maintained Rust crates:
 | `dirs`                | Platform-specific config directory paths    |
 | `unicode-width`       | Correct display width for CJK, emoji, etc.  |
 | `unicode-segmentation`| UAX #29 word boundary detection             |
+| `chardetng`           | Aggressive document byte encoding tracker heuristics |
+| `encoding_rs`         | Resilient buffer text bytes decoder/encoder |
 
 No C dependencies. No build toolchain beyond `cargo`. No runtime dependencies.
 

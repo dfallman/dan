@@ -108,7 +108,7 @@ pub fn render_wrap<W: Write>(
 
 		let line_text = editor.buffer().text.line(buf_line);
 		let line_start_pos = editor.buffer().text.line_to_char(buf_line);
-		let tab_w = editor.config.tab_width;
+		let tab_w = editor.tab_width();
 
 		// Get per-char syntax colors for this line.
 		let syn_colors = syntax_colors_for_line(editor, &mut hi, &line_text);
@@ -358,7 +358,7 @@ pub fn render_nowrap<W: Write>(
 
 			let line_text = editor.buffer().text.line(line_idx);
 			let line_start_pos = editor.buffer().text.line_to_char(line_idx);
-			let tab_w = editor.config.tab_width;
+			let tab_w = editor.tab_width();
 
 			// Get per-char syntax colors for this line.
 			let syn_colors = syntax_colors_for_line(editor, &mut hi, &line_text);

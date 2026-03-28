@@ -134,6 +134,16 @@ impl Editor {
 		&mut self.buffers[self.active_buffer]
 	}
 
+	/// Returns the effective tab width for the active buffer.
+	pub fn tab_width(&self) -> usize {
+		self.buffer().tab_width.unwrap_or(self.config.tab_width)
+	}
+
+	/// Returns the effective expand_tab setting for the active buffer.
+	pub fn expand_tab(&self) -> bool {
+		self.buffer().expand_tab.unwrap_or(self.config.expand_tab)
+	}
+
 	/// Set a status message.
 	pub fn set_status(&mut self, msg: impl Into<String>) {
 		self.status_msg = Some(msg.into());
@@ -173,7 +183,7 @@ impl Editor {
 				let len = self.line_len_no_newline(c.line);
 				let line_text: String = self.buffer().text.line_slice(c.line).chars().collect();
 				self.cursors.primary_mut().head.set_col(len);
-				self.cursors.primary_mut().head.desired_vcol = crate::editor::visual_col::visual_col_at(&line_text, len, self.config.tab_width);
+				self.cursors.primary_mut().head.desired_vcol = crate::editor::visual_col::visual_col_at(&line_text, len, self.tab_width());
 				self.clear_selection();
 			}
 			Command::MoveWordForward => {
@@ -260,9 +270,9 @@ impl Editor {
 				self.begin_selection_if_needed();
 				let c = self.cursors.cursor();
 				let len = self.line_len_no_newline(c.line);
-				let line_text: String = self.buffer().text.line_slice(c.line).chars().collect();
-				self.cursors.primary_mut().head.set_col(len);
-				self.cursors.primary_mut().head.desired_vcol = crate::editor::visual_col::visual_col_at(&line_text, len, self.config.tab_width);
+				let line_text = self.buffer().text.line(c.line);
+				let len = line_text.len().saturating_sub(1);
+				self.cursors.primary_mut().head.desired_vcol = crate::editor::visual_col::visual_col_at(&line_text, len, self.tab_width());
 			}
 			Command::SelectAll => {
 				let last_line = self.buffer().line_count().saturating_sub(1);
@@ -330,8 +340,8 @@ impl Editor {
 			Command::InsertTab => {
 				self.delete_selection_if_active();
 				let pos = self.cursor_char_pos();
-				let tw = self.config.tab_width;
-				let advance = if self.config.expand_tab {
+				let tw = self.tab_width();
+				let advance = if self.expand_tab() {
 					let spaces: String = " ".repeat(tw);
 					self.buffer_mut().insert_str(pos, &spaces);
 					tw
@@ -346,7 +356,7 @@ impl Editor {
 				let c = self.cursors.cursor();
 				let line_start = self.buffer().text.line_to_char(c.line);
 				let line_slice = self.buffer().text.line_slice(c.line);
-				let tw = self.config.tab_width;
+				let tw = self.tab_width();
 
 				// Count leading whitespace to remove:
 				// - a single '\t', or
