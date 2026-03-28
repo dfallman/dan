@@ -127,6 +127,8 @@ fn map_key(key: &KeyEvent) -> Command {
 			KeyCode::Char('@') | KeyCode::Char('2') => Command::SelectAll,
 			KeyCode::Left  => Command::SelectWordBackward,
 			KeyCode::Right => Command::SelectWordForward,
+			KeyCode::Up    => Command::MoveFastUp,
+			KeyCode::Down  => Command::MoveFastDown,
 			_ => Command::Noop,
 		};
 	}
@@ -158,6 +160,8 @@ fn map_key(key: &KeyEvent) -> Command {
 			KeyCode::Char('g') => Command::GoToLineOpen,
 			KeyCode::Left      => Command::MoveWordBackward,
 			KeyCode::Right     => Command::MoveWordForward,
+			KeyCode::Up        => Command::ScrollViewportUp,
+			KeyCode::Down      => Command::ScrollViewportDown,
 			KeyCode::Home      => Command::MoveBufferTop,
 			KeyCode::End       => Command::MoveBufferBottom,
 			KeyCode::Char('k') => Command::DeleteLine,
