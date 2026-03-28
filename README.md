@@ -11,44 +11,66 @@ Under the hood, Dan is written entirely in Rust, and it uses a rope data structu
 
 ## Features
 
-### Core Editing Experience (Essential)
+### Editing
+
+- **No modes** — start typing immediately, just like your GUI editor
 
 - **Crash Recovery & Autosave System** — Protect your data dynamically! `dan` seamlessly shadows heavily modified files automatically via a silent 5-second asynchronous heartbeat thread natively writing directly over `.swp` caches (safely reverting `.swp` targets when `dan` saves `Ctrl+S`). Upon relaunching a crashed session, dynamic prompts smoothly execute state recovery over the loaded UI arrays natively!
-- **No modes** — start typing immediately, just like nano or a GUI editor
+
 - **GUI-style keybindings** — `Ctrl+C` copy, `Ctrl+V` paste, `Ctrl+Z`/`Ctrl+Y` undo/redo, `Ctrl+F` search
+
 - **Rope-backed buffer** — O(log n) insert/delete, handles large files without lag, with out-of-bounds mutation clamping ensuring cursor safety during multi-layer history undo/redo.
+
 - **Undo/redo** with edit grouping — related keystrokes are bundled into a single undo step
+
 - **Selections** — `Shift+Arrow` to select text, `Ctrl+Shift+Arrow` to select by word, `Ctrl+A` to select all
-- **Clipboard** — `Ctrl+X` cut, `Ctrl+C` copy, `Ctrl+V` paste
+
+- **Clipboard** — `Ctrl+X` cut, `Ctrl+C` copy, `Ctrl+V` paste. Tries its best to interact with the host OS's clipboard too, so you can copy and paste into other, non-terminal apps as well. 
+
 - **Word wrap** — toggle between soft-wrapping long lines with smooth sub-line visual-row scrolling, and horizontal scrolling with `Ctrl+W`
 
-### Advanced Developer Tools (Important)
+### For developers
+
+- **Syntax highlighting** — powered by [syntect](https://crates.io/crates/syntect) with automatic language detection by file extension; toggle on/off with `Ctrl+T`
 
 - **Asynchronous Code Clean Up** — Press `Ctrl+L` to pipe code seamlessly through native system formatters (`rustfmt`, `prettier`, and `ruff`) using entirely non-blocking background threads mapped to a hyper-fast 0(N) line-diffing structure protecting active cursors dynamically!
-- **Syntax highlighting** — powered by [syntect](https://crates.io/crates/syntect) with automatic language detection by file extension; toggle on/off with `Ctrl+T`
-- **Multi-Line Indenting** — Simply select text and hit `Tab` (Indent) or `Shift+Tab` (Dedent) to execute full-structure formatting loops smoothly bound to typical IDE block alignments!
+
 - **Smart Line Commenting** — `Ctrl+E` automatically toggles languages-specific line comments (`//`, `#`, `--`, `<!--`) across selected layers instantly cleanly preserving indents!
+
 - **Auto-Indent & Smart Tabs** — Automatically sniffs current buffer's indentation mapping (Spaces vs Tabs) preventing formatting corruption! Pressing `Enter` effortlessly aligns with structural cascades ahead of it.
+
+- **Multi-Line Indenting** — Simply select text and hit `Tab` (Indent) or `Shift+Tab` (Dedent) to execute full-structure formatting loops smoothly bound to typical IDE block alignments!
+
 - **Auto-Closing Pairs** — Automatically injects paired brackets `({['"` during typing. Delete half? Both go! Select some text and type `"`, it natively functionally wraps the selection!
 
-### Search & Navigation (Great to Have)
+### Search & navigation
 
 - **Incremental search** — `Ctrl+F` to search, `Ctrl+G` to go to a line number, navigate matches with `Shift+Enter` / `Ctrl+Shift+G`
+
 - **Global Replace** — `Ctrl+R` opens a sequential batch Replace modal with interactive stepping (`y`, `n`, `a`, `q`) and atomic batch-undo bounds wrapper.
+
 - **Go-to-line** — `Ctrl+G` opens a prompt to jump directly to a line number
+
 - **Line operations** — `Alt+Up/Down` to move lines, `Ctrl+K` to delete a line, `Ctrl+D` to duplicate
 
-### Internationalization & OS Compatibility (Good to Have)
+### Internationalization & OS compatibility
 
-- **Dynamic Encoding Detection** — automatically sniffs and converts legacy byte formats (Shift-JIS, Windows-1252, etc.) cleanly into UTF-8 using `chardetng`, allowing seamless manipulation and resaving of foreign strings.
-- **CJK & Unicode** — correct display widths for Chinese/Japanese/Korean characters, fullwidth forms, combining marks, and emoji, with flawless interactive prompt geometry alignments.
+- **Dynamic Encoding Detection** — automatically sniffs and converts legacy byte formats (such as Shift-JIS, Windows-1252, etc.) cleanly into UTF-8 using `chardetng`, allowing seamless manipulation and resaving of foreign strings.
+
+- **CJK & Unicode** — correct display widths for Chinese/Japanese/Korean characters, fullwidth forms, combining marks, and emoji, with flawless (that's the plan) interactive prompt geometry alignments.
+
 - **Bracketed paste** — multi-line paste from your system clipboard arrives as a single event, no garbled text
+
 - **Cross-platform** — runs on Linux, macOS, and Windows (any terminal that supports ANSI)
 
-### Customization & Environment (Good to Have)
+### Customization
 
 - **TOML configuration** — customise tab width, expand tabs, line numbers, word wrap, active line highlight, scroll padding, status bar layout switches, and theme
-- **Status bar** — shows file name, cursor position, active character encoding format, mode, and contextual messages
+
+- **.editorconfig** — respects (to the extent possible) your `.editorconfig` files for tab width, expand tabs, line numbers, word wrap, active line highlight, scroll padding, status bar layout switches, and theme
+
+### Misc
+
 - **Git hash in version** — `dan --version` prints the version and commit hash
 
 
