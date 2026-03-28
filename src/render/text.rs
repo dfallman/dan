@@ -222,8 +222,8 @@ pub fn render_wrap<W: Write>(
 						batch.clear();
 					}
 					if want_sel {
-						w.queue(SetBackgroundColor(Color::DarkBlue))?;
-						w.queue(SetForegroundColor(Color::White))?;
+						w.queue(SetBackgroundColor(Color::Cyan))?;
+						w.queue(SetForegroundColor(Color::Black))?;
 					} else if is_current_match {
 						w.queue(SetBackgroundColor(Color::Green))?;
 						w.queue(SetForegroundColor(Color::Black))?;
@@ -413,8 +413,8 @@ pub fn render_nowrap<W: Write>(
 						batch.clear();
 					}
 					if want_sel {
-						w.queue(SetBackgroundColor(Color::DarkBlue))?;
-						w.queue(SetForegroundColor(Color::White))?;
+						w.queue(SetBackgroundColor(Color::Cyan))?;
+						w.queue(SetForegroundColor(Color::Black))?;
 					} else if is_current_match {
 						w.queue(SetBackgroundColor(Color::DarkYellow))?;
 						w.queue(SetForegroundColor(Color::Black))?;

@@ -30,6 +30,8 @@ pub struct Config {
 	pub show_encoding: bool,
 	/// Show detected language in the toolbar.
 	pub show_lang: bool,
+	/// How many lines to jump for fast scroll navigation (Ctrl+Shift+Up/Down)
+	pub fast_scroll_steps: usize,
 }
 
 impl Default for Config {
@@ -47,6 +49,7 @@ impl Default for Config {
 			show_help: true,
 			show_encoding: true,
 			show_lang: true,
+			fast_scroll_steps: 10,
 		}
 	}
 }

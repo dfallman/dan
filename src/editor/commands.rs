@@ -16,6 +16,10 @@ pub enum Command {
 	MoveBufferBottom,
 	PageUp,
 	PageDown,
+	ScrollViewportUp,
+	ScrollViewportDown,
+	MoveFastUp,
+	MoveFastDown,
 
 	// -- Selection (shift+arrows) --
 	SelectLeft,
