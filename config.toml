@@ -27,8 +27,11 @@ scroll_off = 3
 # Color theme (currently only "default")
 theme = "default"
 
-# Show "^H Help" in the toolbar
+# Always show label "^H Help" in the toolbar
 show_help = true
 
-# Show detected language in the toolbar
+# Show character encoding in the toolbar (e.g. "utf-8")
+show_encoding = true
+
+# Show detected language in the toolbar (e.g. "Rust")
 show_lang = true

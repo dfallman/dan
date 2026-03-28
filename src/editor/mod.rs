@@ -458,10 +458,12 @@ impl Editor {
 			Command::Undo => {
 				self.clear_selection();
 				self.buffer_mut().undo();
+				self.clamp_cursors();
 			}
 			Command::Redo => {
 				self.clear_selection();
 				self.buffer_mut().redo();
+				self.clamp_cursors();
 			}
 
 			// -- Clipboard (GUI-style) --
@@ -655,7 +657,7 @@ impl Editor {
 					.unwrap_or_default();
 				self.save_as_cursor = self.save_as_input.len();
 				self.mode = Mode::SaveAs;
-				self.set_status("Save As: enter path, Enter to save, Esc to cancel");
+				self.set_status("Save as: type path, ⏎ Save, Esc Cancel");
 			}
 			Command::SaveAsInsertChar(ch) => {
 				self.save_as_input.insert(self.save_as_cursor, ch);
@@ -683,7 +685,7 @@ impl Editor {
 					self.save_as_input.clear();
 					self.save_as_cursor = 0;
 					self.mode = Mode::Editing;
-					self.set_status("Save As cancelled: no path given");
+					self.set_status("Save as cancelled: no path given");
 				} else {
 					let path = std::path::Path::new(&path_str);
 					// Check if parent directory exists.
@@ -735,7 +737,7 @@ impl Editor {
 			Command::CancelOverwrite => {
 				self.save_as_pending_path = None;
 				self.mode = Mode::SaveAs;
-				self.set_status("Save As: enter path, Enter to save, Esc to cancel");
+				self.set_status("Save as: Save as: type path, ⏎ Save, Esc Cancel");
 			}
 
 			// -- File --

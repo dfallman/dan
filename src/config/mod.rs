@@ -26,6 +26,8 @@ pub struct Config {
 	pub auto_indent: bool,
 	/// Show "^H Help" in the toolbar.
 	pub show_help: bool,
+	/// Show character encoding in the toolbar.
+	pub show_encoding: bool,
 	/// Show detected language in the toolbar.
 	pub show_lang: bool,
 }
@@ -43,6 +45,7 @@ impl Default for Config {
 			syntax_highlight: true,
 			auto_indent: true,
 			show_help: true,
+			show_encoding: true,
 			show_lang: true,
 		}
 	}

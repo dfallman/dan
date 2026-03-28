@@ -58,12 +58,15 @@ pub fn render_status_bar<W: Write>(
 	let c = editor.cursors.cursor();
 	let mut right_parts = Vec::new();
 	
+	if editor.config.show_help {
+		right_parts.push("^H Help".to_string());
+	}
 	if editor.config.show_lang {
 		let syntax = editor.highlighter.detect_syntax(editor.buffer().file_path.as_deref());
 		right_parts.push(syntax.name.clone());
 	}
-	if editor.config.show_help {
-		right_parts.push("^H Help".to_string());
+	if editor.config.show_encoding {
+		right_parts.push("utf-8".to_string());
 	}
 	right_parts.push(format!("Ln {:2}, Col {:2}", c.line + 1, c.col + 1));
 
@@ -88,7 +91,7 @@ pub fn render_status_bar<W: Write>(
 fn help_shortcuts() -> Vec<(&'static str, &'static str)> {
 	vec![
 		("^S", "Save"),
-		("^A", "Save As"),
+		("^A", "Save as"),
 		("^Q", "Quit"),
 		("^Z", "Undo"),
 		("^Y", "Redo"),
@@ -417,7 +420,7 @@ pub fn render_save_as_bar<W: Write>(
 	// Label
 	w.queue(SetBackgroundColor(Color::DarkGreen))?;
 	w.queue(SetForegroundColor(Color::Black))?;
-	let label = " Save As: ";
+	let label = " Save as: ";
 	w.queue(style::Print(label))?;
 	used += label.len();
 
