@@ -18,8 +18,8 @@ save. No vim modes, no emacs chords. GUI-style keybindings throughout.
 
 **Binary:** `dan`  
 **Entry point:** `src/main.rs`  
-**Build:** `cargo build --release`  
-**Tests:** `cargo test` (≈25 tests)  
+**Build:** `cargo build 2>&1`  
+**Tests:** `cargo test 2>&1` (Always use exactly this with stderr redirection; never use `cargo check` or `cargo test` unredirected)  
 **Version:** stored in `VERSION` file; git hash embedded by `build.rs`
 
 ---

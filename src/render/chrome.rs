@@ -6,6 +6,7 @@ use crossterm::{
 use std::io::{self, Write};
 
 use crate::editor::Editor;
+use crate::editor::mode::Mode;
 use super::{write_spaces, Viewport};
 
 /// Render the status bar.
@@ -53,9 +54,20 @@ pub fn render_status_bar<W: Write>(
 		used += msg_part.len();
 	}
 
-	// Right side: ^H Help toggle + cursor position
+	// Right side: Language + Help toggle + cursor position
 	let c = editor.cursors.cursor();
-	let right = format!(" ^H Help  Ln {}, Col {} ", c.line + 1, c.col + 1);
+	let mut right_parts = Vec::new();
+	
+	if editor.config.show_lang {
+		let syntax = editor.highlighter.detect_syntax(editor.buffer().file_path.as_deref());
+		right_parts.push(syntax.name.clone());
+	}
+	if editor.config.show_help {
+		right_parts.push("^H Help".to_string());
+	}
+	right_parts.push(format!("Ln {:2}, Col {:2}", c.line + 1, c.col + 1));
+
+	let right = format!(" {} ", right_parts.join("  "));
 	let padding = width.saturating_sub(used + right.len());
 	write_spaces(w, padding)?;
 	w.queue(style::Print(&right))?;
@@ -169,7 +181,7 @@ pub fn render_help_bar<W: Write>(
 
 		// Render shortcut items
 		for (key, label) in row_items {
-			w.queue(SetBackgroundColor(Color::DarkBlue))?;
+			w.queue(SetBackgroundColor(Color::Blue))?;
 			w.queue(SetForegroundColor(Color::Black))?;
 			w.queue(style::Print(key))?;
 			w.queue(SetBackgroundColor(Color::White))?;
@@ -210,15 +222,65 @@ pub fn render_help_bar<W: Write>(
 	Ok(())
 }
 
+/// Returns `(rows_needed, cursor_linear_offset)` for the active interactive prompt.
+/// `rows_needed` specifies how many terminal rows the prompt occupies.
+/// `cursor_linear_offset` is the 1D character position of the interactive cursor.
+pub fn prompt_geometry(editor: &Editor, width: u16) -> (u16, u16) {
+	if width == 0 {
+		return (0, 0);
+	}
+	let w = width as usize;
+	
+	match editor.mode {
+		Mode::Searching => {
+			let label_len = 10; // " Find term: "
+			let query_display_len = editor.search_query.len() + 2; // " {} "
+			let mut info_len = 0;
+			if !editor.search_matches.is_empty() {
+				let info = format!(" ({}/{}) ", editor.search_match_idx + 1, editor.search_matches.len());
+				info_len = info.len();
+			} else if !editor.search_query.is_empty() {
+				info_len = 5; // " (0) "
+			}
+			let total = label_len + query_display_len + info_len;
+			let rows = ((total + w - 1) / w) as u16;
+			
+			// Cursor is at the end of the query (before the trailing space)
+			let cursor_offset = (label_len + 1 + editor.search_query.len()) as u16;
+			(rows, cursor_offset)
+		}
+		Mode::GoToLine => {
+			let label_len = 10; // " Go to line: "
+			let input_display_len = editor.goto_line_input.len() + 2;
+			let hint_len = format!(" (1-{}) ", editor.buffer().line_count()).len();
+			let total = label_len + input_display_len + hint_len;
+			let rows = ((total + w - 1) / w) as u16;
+			
+			let cursor_offset = (label_len + 1 + editor.goto_line_input.len()) as u16;
+			(rows, cursor_offset)
+		}
+		Mode::SaveAs | Mode::ConfirmOverwrite => {
+			let label_len = 10; // " Save As: "
+			let input_display_len = editor.save_as_input.len() + 2;
+			let total = label_len + input_display_len;
+			let rows = ((total + w - 1) / w) as u16;
+			
+			let cursor_offset = (label_len + 1 + editor.save_as_cursor) as u16;
+			(rows, cursor_offset)
+		}
+		_ => (0, 0)
+	}
+}
+
 /// Render the search prompt bar (appears below the status bar).
 pub fn render_search_bar<W: Write>(
 	editor: &Editor,
 	w: &mut W,
 	vp: &Viewport,
 ) -> io::Result<()> {
-	// Search bar overlays above help (if shown) and above the status bar.
-	let help_offset = if editor.show_help { help_row_count(vp.width) } else { 0 };
-	let search_y = vp.height.saturating_sub(2 + help_offset);
+	let (rows, _) = prompt_geometry(editor, vp.width);
+	if rows == 0 { return Ok(()); }
+	let search_y = vp.height.saturating_sub(1 + rows);
 	w.queue(cursor::MoveTo(0, search_y))?;
 
 	let width = vp.width as usize;
@@ -258,8 +320,9 @@ pub fn render_search_bar<W: Write>(
 		used += info.len();
 	}
 
-	// Pad the rest
-	let remaining = width.saturating_sub(used);
+	// Pad the rest of the multi-line block
+	let total_cells = (rows as usize) * width;
+	let remaining = total_cells.saturating_sub(used);
 	if remaining > 0 {
 		w.queue(SetBackgroundColor(Color::DarkGrey))?;
 		write_spaces(w, remaining)?;
@@ -277,9 +340,9 @@ pub fn render_goto_line_bar<W: Write>(
 	w: &mut W,
 	vp: &Viewport,
 ) -> io::Result<()> {
-	// GoTo bar overlays above help (if shown) and above the status bar.
-	let help_offset = if editor.show_help { help_row_count(vp.width) } else { 0 };
-	let bar_y = vp.height.saturating_sub(2 + help_offset);
+	let (rows, _) = prompt_geometry(editor, vp.width);
+	if rows == 0 { return Ok(()); }
+	let bar_y = vp.height.saturating_sub(1 + rows);
 	w.queue(cursor::MoveTo(0, bar_y))?;
 
 	let width = vp.width as usize;
@@ -306,8 +369,9 @@ pub fn render_goto_line_bar<W: Write>(
 	w.queue(style::Print(&hint))?;
 	used += hint.len();
 
-	// Pad the rest
-	let remaining = width.saturating_sub(used);
+	// Pad the rest of the multi-line block
+	let total_cells = (rows as usize) * width;
+	let remaining = total_cells.saturating_sub(used);
 	if remaining > 0 {
 		w.queue(SetBackgroundColor(Color::DarkGrey))?;
 		write_spaces(w, remaining)?;
@@ -325,8 +389,9 @@ pub fn render_save_as_bar<W: Write>(
 	w: &mut W,
 	vp: &Viewport,
 ) -> io::Result<()> {
-	let help_offset = if editor.show_help { help_row_count(vp.width) } else { 0 };
-	let bar_y = vp.height.saturating_sub(2 + help_offset);
+	let (rows, _) = prompt_geometry(editor, vp.width);
+	if rows == 0 { return Ok(()); }
+	let bar_y = vp.height.saturating_sub(1 + rows);
 	w.queue(cursor::MoveTo(0, bar_y))?;
 
 	let width = vp.width as usize;
@@ -352,8 +417,9 @@ pub fn render_save_as_bar<W: Write>(
 	// w.queue(style::Print(hint))?;
 	// used += hint.len();
 
-	// Pad the rest
-	let remaining = width.saturating_sub(used);
+	// Pad the rest of the multi-line block
+	let total_cells = (rows as usize) * width;
+	let remaining = total_cells.saturating_sub(used);
 	if remaining > 0 {
 		w.queue(SetBackgroundColor(Color::DarkGrey))?;
 		write_spaces(w, remaining)?;
