@@ -51,7 +51,23 @@ impl Buffer {
 
 	/// Create a buffer from a file.
 	pub fn from_file(path: &Path) -> io::Result<Self> {
+		if path.is_dir() {
+			return Err(io::Error::new(
+				io::ErrorKind::IsADirectory,
+				"Is a directory",
+			));
+		}
+
 		let bytes = std::fs::read(path)?;
+		
+		// If the file explicitly contains null bytes globally, it is functionally a binary file.
+		if bytes.contains(&0) {
+			return Err(io::Error::new(
+				io::ErrorKind::InvalidData,
+				"File appears to be binary",
+			));
+		}
+
 		let (content, encoding) = if let Ok(s) = std::str::from_utf8(&bytes) {
 			(s.to_string(), encoding_rs::UTF_8)
 		} else {
