@@ -106,7 +106,7 @@ fn help_shortcuts() -> Vec<(&'static str, &'static str)> {
 		("^W", "Wrap text"),
 		("^L", "Code highlight"),
 		("^E", "Comment"),
-		("^L", "Clean up"),
+		("^L", "Lint"),
 		("^H", "Help"),
 	]
 }

@@ -101,9 +101,8 @@ pub enum Command {
 	CancelQuit,
 
 	// -- Misc --
-	ToggleHelp,
 	ToggleWrap,
-	ToggleSyntax,
+	ToggleHelp,
 	ToggleComment,
 	Noop,
 }

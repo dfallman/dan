@@ -1212,11 +1212,6 @@ impl Editor {
 				self.scroll_vrow = 0;
 			}
 
-			Command::ToggleSyntax => {
-				self.config.syntax_highlight = !self.config.syntax_highlight;
-				let status = if self.config.syntax_highlight { "Syntax highlighting enabled" } else { "Syntax highlighting disabled" };
-				self.set_status(status);
-			}
 			Command::FormatDocument => {
 				let ext_str = self.buffer()
 					.file_path
