@@ -57,6 +57,20 @@ fn main() -> io::Result<()> {
 	terminal::enable_raw_mode()?;
 	writer.get_mut().execute(EnterAlternateScreen)?;
 
+	// Ensure terminal state is gracefully recovered during fatal panics
+	let default_panic_hook = std::panic::take_hook();
+	std::panic::set_hook(Box::new(move |panic_info| {
+		let mut stdout = io::stdout();
+		let _ = crossterm::ExecutableCommand::execute(&mut stdout, crossterm::event::DisableBracketedPaste);
+		let _ = crossterm::ExecutableCommand::execute(&mut stdout, crossterm::style::ResetColor);
+		let _ = crossterm::ExecutableCommand::execute(&mut stdout, crossterm::style::SetAttribute(crossterm::style::Attribute::Reset));
+		let _ = crossterm::ExecutableCommand::execute(&mut stdout, crossterm::cursor::Show);
+		let _ = crossterm::ExecutableCommand::execute(&mut stdout, crossterm::cursor::SetCursorStyle::DefaultUserShape);
+		let _ = crossterm::ExecutableCommand::execute(&mut stdout, crossterm::terminal::LeaveAlternateScreen);
+		let _ = crossterm::terminal::disable_raw_mode();
+		default_panic_hook(panic_info);
+	}));
+
 	// Enable bracketed paste so the terminal sends paste as a
 	// single Event::Paste(String) instead of individual key events.
 	writer.get_mut().execute(crossterm::event::EnableBracketedPaste)?;
@@ -66,6 +80,10 @@ fn main() -> io::Result<()> {
 
 	// Restore terminal
 	writer.get_mut().execute(crossterm::event::DisableBracketedPaste)?;
+	writer.get_mut().execute(crossterm::style::ResetColor)?;
+	writer.get_mut().execute(crossterm::style::SetAttribute(crossterm::style::Attribute::Reset))?;
+	writer.get_mut().execute(crossterm::cursor::Show)?;
+	writer.get_mut().execute(crossterm::cursor::SetCursorStyle::DefaultUserShape)?;
 	writer.get_mut().execute(LeaveAlternateScreen)?;
 	terminal::disable_raw_mode()?;
 

@@ -28,8 +28,9 @@ Under the hood, Dan is written entirely in Rust, and it uses a rope data structu
 - **Smart Line Commenting** — `Ctrl+/` automatically toggles languages-specific line comments (`//`, `#`, `--`, `<!--`) across selected layers instantly cleanly preserving indents!
 - **Auto-Closing Pairs** — Automatically injects paired brackets `({['"` during typing. Delete half? Both go! Select some text and type `"`, it natively functionally wraps the selection!
 - **Auto-Indent & Smart Tabs** — Automatically sniffs current buffer's indentation mapping (Spaces vs Tabs) preventing formatting corruption! Pressing `Enter` effortlessly aligns with structural cascades ahead of it.
+- **Asynchronous Code Clean Up** — Press `Ctrl+L` to pipe code seamlessly through native system formatters (`rustfmt`, `prettier`, and `ruff`) using entirely non-blocking background threads mapped to a hyper-fast 0(N) line-diffing structure protecting active cursors dynamically!
 - **Line operations** — `Alt+Up/Down` to move lines, `Ctrl+K` to delete a line, `Ctrl+D` to duplicate
-- **Tab / Dedent** — `Tab` inserts a tab (or spaces), `Shift+Tab` dedents the current line
+- **Multi-Line Indenting** — Simply select text and hit `Tab` (Indent) or `Shift+Tab` (Dedent) to execute full-structure formatting loops smoothly bound to typical IDE block alignments!
 - **TOML configuration** — customise tab width, expand tabs, line numbers, word wrap, active line highlight, scroll padding, status bar layout switches, and theme
 - **Status bar** — shows file name, cursor position, active character encoding format, mode, and contextual messages
 - **Git hash in version** — `dan --version` prints the version and commit hash
@@ -129,8 +130,8 @@ Dan uses familiar GUI-style shortcuts. No modes — every key works the same way
 |----------------------|-------------------------------------|
 | Any character        | Insert text at cursor               |
 | `Enter`              | Insert newline                      |
-| `Tab`                | Insert tab (or spaces if configured)|
-| `Shift+Tab`          | Dedent current line                 |
+| `Tab`                | Insert tab / Indent Block           |
+| `Shift+Tab`          | Dedent current line / Block         |
 | `Backspace`          | Delete character before cursor      |
 | `Delete`             | Delete character after cursor       |
 | `Ctrl+K`             | Delete entire line                  |
@@ -195,7 +196,23 @@ Dan uses familiar GUI-style shortcuts. No modes — every key works the same way
 | `Ctrl+Shift+C`       | Force quit (discards any changes)   |
 | `Ctrl+H`             | Toggle help overlay                 |
 | `Ctrl+W`             | Toggle word wrap                    |
-| `Ctrl+L`             | Toggle syntax highlighting          |
+| `Ctrl+L`             | Auto-format document (Clean Up)     |
+
+
+## Supported Formatters
+
+Dan embraces an explicit and dynamic sub-system for executing format pipelines completely unblocking the native UI structure. When you trigger `Ctrl+L`, Dan examines your active file extension natively and routes it securely into the OS backend.
+
+In order for standard formatters to fire inside Dan, you must have them securely installed down into your system `$PATH`:
+
+- **Rust (`.rs`):** [`rustfmt`](https://github.com/rust-lang/rustfmt)
+  - Installed natively typically across `rustup component add rustfmt`
+- **Python (`.py`):** [`ruff`](https://docs.astral.sh/ruff/)
+  - Extremely fast Python linter installed via `pip install ruff` mapped natively as `ruff format -`.
+- **Web (`.js`, `.ts`, `.json`, `.css`, etc):** [`prettier`](https://prettier.io/)
+  - Installed via `npm install -g prettier` or simply downloaded securely globally.
+
+If Dan fails to boot a subsystem accurately, it will flash the exact failure securely across the Status Bar alerting you to precisely what binary wasn't resolved natively.
 
 
 ## Configuration
