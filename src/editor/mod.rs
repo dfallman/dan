@@ -516,7 +516,7 @@ impl Editor {
 					end_line -= 1;
 				}
 
-				if self.has_selection() && start_c.line != end_line {
+				if self.has_selection() {
 					let tw = self.tab_width();
 					let expand = self.expand_tab();
 					let advance = if expand { tw } else { 1 };
