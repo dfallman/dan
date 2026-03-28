@@ -42,7 +42,10 @@ fn main() -> io::Result<()> {
 	if args.len() > 1 {
 		let path = Path::new(&args[1]);
 		if path.exists() {
-			editor.open_file(path)?;
+			if let Err(e) = editor.open_file(path) {
+				eprintln!("dan: Could not open '{}': {}", path.display(), e);
+				std::process::exit(1);
+			}
 		} else {
 			// Create a new buffer with the target path for saving
 			editor.buffer_mut().file_path = Some(path.to_path_buf());
