@@ -42,6 +42,7 @@ pub enum Command {
 	DeleteForward,
 	DeleteLine,
 	DuplicateLineOrSelection,
+	FormatDocument,
 
 	// -- Undo / Redo --
 	Undo,

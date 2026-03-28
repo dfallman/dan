@@ -167,7 +167,7 @@ fn map_key(key: &KeyEvent) -> Command {
 			KeyCode::Char('w') => Command::ToggleWrap,
 			KeyCode::Char('h') => Command::ToggleHelp,
 			KeyCode::Char('r') => Command::ReplaceOpen,
-			KeyCode::Char('l') => Command::ToggleSyntax,
+			KeyCode::Char('l') => Command::FormatDocument,
 			_ => Command::Noop,
 		};
 	}

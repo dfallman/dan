@@ -1,1 +1,0 @@
-This is Windows-1252 encoded. € sign and letters like ä ö ü.
