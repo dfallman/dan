@@ -21,6 +21,8 @@ pub enum Mode {
 	ReplacingWith,
 	/// Interactive Replace confirmation step.
 	ReplacingStep,
+	/// Interactive `.swp` recovery lock structurally trapping users natively!
+	RecoverSwap,
 }
 
 impl Mode {
@@ -36,6 +38,7 @@ impl Mode {
 			Mode::ReplacingSearch => "REPL",
 			Mode::ReplacingWith => "RWTH",
 			Mode::ReplacingStep => "REPL",
+			Mode::RecoverSwap => "SWAP",
 		}
 	}
 
@@ -51,6 +54,7 @@ impl Mode {
 			Mode::ReplacingSearch => Color::DarkMagenta,
 			Mode::ReplacingWith => Color::DarkMagenta,
 			Mode::ReplacingStep => Color::DarkMagenta,
+			Mode::RecoverSwap => Color::DarkRed,
 		}
 	}
 }

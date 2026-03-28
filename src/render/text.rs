@@ -289,7 +289,7 @@ pub fn render_wrap<W: Write>(
 		w.queue(SetBackgroundColor(Color::Reset))?;
 		let mut cols_written: usize = 0;
 		if show_line_numbers {
-			let tilde_gutter = format!("{:>width$} ", "~", width = gutter_width);
+			let tilde_gutter = format!("{:>width$} ", ".", width = gutter_width);
 			w.queue(SetForegroundColor(Color::DarkGrey))?;
 			w.queue(style::Print(&tilde_gutter))?;
 			w.queue(SetForegroundColor(Color::Reset))?;

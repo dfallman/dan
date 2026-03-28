@@ -5,6 +5,7 @@ mod input;
 mod render;
 mod syntax;
 mod utils;
+pub mod recovery;
 
 use crossterm::event::{self, Event};
 use crossterm::terminal::{self, EnterAlternateScreen, LeaveAlternateScreen};

@@ -23,16 +23,13 @@ pub fn map_event(event: &Event, mode: Mode) -> Command {
 			if mode == Mode::ConfirmOverwrite {
 				return map_confirm_overwrite_key(key);
 			}
-			if mode == Mode::ReplacingSearch {
-				return map_replace_search_key(key);
+			match mode {
+				Mode::ReplacingSearch => map_replace_search_key(key),
+				Mode::ReplacingWith => map_replace_with_key(key),
+				Mode::ReplacingStep => map_replace_step_key(key),
+				Mode::RecoverSwap => map_recover_swap_key(key),
+				_ => map_key(key),
 			}
-			if mode == Mode::ReplacingWith {
-				return map_replace_with_key(key);
-			}
-			if mode == Mode::ReplacingStep {
-				return map_replace_step_key(key);
-			}
-			map_key(key)
 		}
 		Event::Paste(text) => Command::InsertString(text.clone()),
 		_ => Command::Noop,
@@ -99,14 +96,20 @@ fn map_replace_with_key(key: &KeyEvent) -> Command {
 
 /// Key mapping while interacting through Match Replacement Steps.
 fn map_replace_step_key(key: &KeyEvent) -> Command {
-	let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
-
 	match key.code {
-		KeyCode::Esc => Command::ReplaceCancel,
-		KeyCode::Char('y') | KeyCode::Char('Y') if !ctrl => Command::ReplaceActionYes,
-		KeyCode::Char('n') | KeyCode::Char('N') if !ctrl => Command::ReplaceActionNo,
-		KeyCode::Char('a') | KeyCode::Char('A') if !ctrl => Command::ReplaceActionAll,
-		KeyCode::Char('q') | KeyCode::Char('Q') if !ctrl => Command::ReplaceCancel,
+		KeyCode::Char('y') | KeyCode::Char('Y') => Command::ReplaceActionYes,
+		KeyCode::Char('n') | KeyCode::Char('N') => Command::ReplaceActionNo,
+		KeyCode::Char('a') | KeyCode::Char('A') => Command::ReplaceActionAll,
+		KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc => Command::ReplaceCancel,
+		_ => Command::Noop,
+	}
+}
+
+/// Key mapping for crash recovery prompt selections
+fn map_recover_swap_key(key: &KeyEvent) -> Command {
+	match key.code {
+		KeyCode::Char('y') | KeyCode::Char('Y') => Command::RecoverSwapAccept,
+		KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => Command::RecoverSwapDecline,
 		_ => Command::Noop,
 	}
 }
@@ -168,6 +171,7 @@ fn map_key(key: &KeyEvent) -> Command {
 			KeyCode::Char('h') => Command::ToggleHelp,
 			KeyCode::Char('r') => Command::ReplaceOpen,
 			KeyCode::Char('l') => Command::FormatDocument,
+			KeyCode::Char('t') => Command::ToggleSyntax,
 			_ => Command::Noop,
 		};
 	}

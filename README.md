@@ -12,28 +12,53 @@ Under the hood, Dan is written entirely in Rust, and it uses a rope data structu
 ## Features
 
 - **No modes** — start typing immediately, just like nano or a GUI editor
+
 - **GUI-style keybindings** — `Ctrl+C` copy, `Ctrl+V` paste, `Ctrl+Z`/`Ctrl+Y` undo/redo, `Ctrl+F` search
-- **Syntax highlighting** — powered by [syntect](https://crates.io/crates/syntect) with automatic language detection by file extension; toggle on/off with `Ctrl+L`
+
+- **Syntax highlighting** — powered by [syntect](https://crates.io/crates/syntect) with automatic language detection by file extension; toggle on/off with `Ctrl+T`
+
 - **Dynamic Encoding Detection** — automatically sniffs and converts legacy byte formats (Shift-JIS, Windows-1252, etc.) cleanly into UTF-8 using `chardetng`, allowing seamless manipulation and resaving of foreign strings.
+
 - **Word wrap** — toggle between soft-wrapping long lines with smooth sub-line visual-row scrolling, and horizontal scrolling with `Ctrl+W`
+
 - **CJK & Unicode** — correct display widths for Chinese/Japanese/Korean characters, fullwidth forms, combining marks, and emoji, with flawless interactive prompt geometry alignments.
+
 - **Rope-backed buffer** — O(log n) insert/delete, handles large files without lag, with out-of-bounds mutation clamping ensuring cursor safety during multi-layer history undo/redo.
+
 - **Undo/redo** with edit grouping — related keystrokes are bundled into a single undo step
+
 - **Selections** — `Shift+Arrow` to select text, `Ctrl+Shift+Arrow` to select by word, `Ctrl+A` to select all
+
 - **Clipboard** — `Ctrl+X` cut, `Ctrl+C` copy, `Ctrl+V` paste
+
 - **Bracketed paste** — multi-line paste from your system clipboard arrives as a single event, no garbled text
+
 - **Incremental search** — `Ctrl+F` to search, `Ctrl+G` to go to a line number, navigate matches with `Shift+Enter` / `Ctrl+Shift+G`
+
 - **Go-to-line** — `Ctrl+G` opens a prompt to jump directly to a line number
+
 - **Global Replace** — `Ctrl+R` opens a sequential batch Replace modal with interactive stepping (`y`, `n`, `a`, `q`) and atomic batch-undo bounds wrapper.
-- **Smart Line Commenting** — `Ctrl+/` automatically toggles languages-specific line comments (`//`, `#`, `--`, `<!--`) across selected layers instantly cleanly preserving indents!
+
+- **Smart Line Commenting** — `Ctrl+E` automatically toggles languages-specific line comments (`//`, `#`, `--`, `<!--`) across selected layers instantly cleanly preserving indents!
+
 - **Auto-Closing Pairs** — Automatically injects paired brackets `({['"` during typing. Delete half? Both go! Select some text and type `"`, it natively functionally wraps the selection!
+
 - **Auto-Indent & Smart Tabs** — Automatically sniffs current buffer's indentation mapping (Spaces vs Tabs) preventing formatting corruption! Pressing `Enter` effortlessly aligns with structural cascades ahead of it.
+
 - **Asynchronous Code Clean Up** — Press `Ctrl+L` to pipe code seamlessly through native system formatters (`rustfmt`, `prettier`, and `ruff`) using entirely non-blocking background threads mapped to a hyper-fast 0(N) line-diffing structure protecting active cursors dynamically!
+
 - **Line operations** — `Alt+Up/Down` to move lines, `Ctrl+K` to delete a line, `Ctrl+D` to duplicate
+
 - **Multi-Line Indenting** — Simply select text and hit `Tab` (Indent) or `Shift+Tab` (Dedent) to execute full-structure formatting loops smoothly bound to typical IDE block alignments!
+
+- **Crash Recovery & Autosave System** — Protect your data dynamically! `dan` seamlessly shadows heavily modified files automatically via a silent 5-second asynchronous heartbeat thread natively writing directly over `.swp` caches (safely reverting `.swp` targets when `dan` saves `Ctrl+S`). Upon relaunching a crashed session, dynamic prompts smoothly execute state recovery over the loaded UI arrays natively!
+
 - **TOML configuration** — customise tab width, expand tabs, line numbers, word wrap, active line highlight, scroll padding, status bar layout switches, and theme
+
 - **Status bar** — shows file name, cursor position, active character encoding format, mode, and contextual messages
+
 - **Git hash in version** — `dan --version` prints the version and commit hash
+
 - **Cross-platform** — runs on Linux, macOS, and Windows (any terminal that supports ANSI)
 
 
@@ -217,16 +242,25 @@ If Dan fails to boot a subsystem accurately, it will flash the exact failure sec
 
 ## Configuration
 
-Dan reads its configuration from `~/.config/dan/config.toml`. If the file doesn't exist, sensible defaults are used.
+Dan uses a strictly layered configuration environment structurally checking multiple schemas globally:
 
-To get started, copy the example config:
+1. **Hardcoded Defaults** (Standard IDE parameters)
+2. **Global User TOML:** `~/.config/dan/config.toml`
+3. **Local Project Requirements:** `.editorconfig`
 
-```bash
-mkdir -p ~/.config/dan
-cp config.toml ~/.config/dan/config.toml
-```
+### EditorConfig Integration (Level 3 Overrides)
+Dan fundamentally respects external structured `.editorconfig` definitions recursively parsed natively upon file loads! 
+If your project dictates specific tab structures, Dan will entirely mask out your global TOML bindings automatically masking the loaded buffer explicitly!
 
-### Options
+Supported EditorConfig overrides mapping natively around the `Buffer`:
+- `indent_style` → Automatically forces Tab/Space insertions bypassing Smart Identation!
+- `indent_size`  → Hard-binds indentation counts actively!
+- `trim_trailing_whitespace` → Mutates trailing space/tab closures explicitly during native OS file writes `(Ctrl+S)`.
+- `end_of_line` → Formats and strips `CRLF/LF` mutations prior to native file encodes perfectly avoiding byte garbage!
+
+---
+
+### Global TOML Options
 
 ```toml
 # Wrap long lines (true) or scroll horizontally (false).
