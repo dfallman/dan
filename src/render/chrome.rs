@@ -68,9 +68,15 @@ pub fn render_status_bar<W: Write>(
 	right_parts.push(format!("Ln {:2}, Col {:2}", c.line + 1, c.col + 1));
 
 	let right = format!(" {} ", right_parts.join("  "));
-	let padding = width.saturating_sub(used + right.len());
-	write_spaces(w, padding)?;
-	w.queue(style::Print(&right))?;
+	let available = width.saturating_sub(used);
+	if available >= right.len() {
+		let padding = available - right.len();
+		write_spaces(w, padding)?;
+		w.queue(style::Print(&right))?;
+	} else if available > 0 {
+		let truncated: String = right.chars().take(available).collect();
+		w.queue(style::Print(&truncated))?;
+	}
 
 	w.queue(SetBackgroundColor(Color::Reset))?;
 	w.queue(SetForegroundColor(Color::Reset))?;
@@ -198,14 +204,22 @@ pub fn render_help_bar<W: Write>(
 				crate::VERSION.trim(),
 				crate::GIT_HASH,
 			);
-			let remaining = width.saturating_sub(used + version_str.len());
-			if remaining > 0 {
+			let available = width.saturating_sub(used);
+			if available >= version_str.len() {
+				let remaining = available - version_str.len();
+				if remaining > 0 {
+					w.queue(SetBackgroundColor(Color::White))?;
+					write_spaces(w, remaining)?;
+				}
 				w.queue(SetBackgroundColor(Color::White))?;
-				write_spaces(w, remaining)?;
+				w.queue(SetForegroundColor(Color::DarkGrey))?;
+				w.queue(style::Print(&version_str))?;
+			} else {
+				if available > 0 {
+					w.queue(SetBackgroundColor(Color::White))?;
+					write_spaces(w, available)?;
+				}
 			}
-			w.queue(SetBackgroundColor(Color::White))?;
-			w.queue(SetForegroundColor(Color::DarkGrey))?;
-			w.queue(style::Print(&version_str))?;
 		} else {
 			// Pad remaining width with white background
 			let remaining = width.saturating_sub(used);
@@ -233,12 +247,13 @@ pub fn prompt_geometry(editor: &Editor, width: u16) -> (u16, u16) {
 	
 	match editor.mode {
 		Mode::Searching => {
-			let label_len = 10; // " Find term: "
-			let query_display_len = editor.search_query.len() + 2; // " {} "
+			let label_len = 13; // " Search for: "
+			let query_chars = editor.search_query.chars().count();
+			let query_display_len = query_chars + 2; // " {} "
 			let mut info_len = 0;
 			if !editor.search_matches.is_empty() {
 				let info = format!(" ({}/{}) ", editor.search_match_idx + 1, editor.search_matches.len());
-				info_len = info.len();
+				info_len = info.chars().count();
 			} else if !editor.search_query.is_empty() {
 				info_len = 5; // " (0) "
 			}
@@ -246,22 +261,24 @@ pub fn prompt_geometry(editor: &Editor, width: u16) -> (u16, u16) {
 			let rows = ((total + w - 1) / w) as u16;
 			
 			// Cursor is at the end of the query (before the trailing space)
-			let cursor_offset = (label_len + 1 + editor.search_query.len()) as u16;
+			let cursor_offset = (label_len + 1 + query_chars) as u16;
 			(rows, cursor_offset)
 		}
 		Mode::GoToLine => {
-			let label_len = 10; // " Go to line: "
-			let input_display_len = editor.goto_line_input.len() + 2;
-			let hint_len = format!(" (1-{}) ", editor.buffer().line_count()).len();
+			let label_len = 13; // " Go to line: "
+			let input_chars = editor.goto_line_input.chars().count();
+			let input_display_len = input_chars + 2;
+			let hint_len = format!(" (1-{}) ", editor.buffer().line_count()).chars().count();
 			let total = label_len + input_display_len + hint_len;
 			let rows = ((total + w - 1) / w) as u16;
 			
-			let cursor_offset = (label_len + 1 + editor.goto_line_input.len()) as u16;
+			let cursor_offset = (label_len + 1 + input_chars) as u16;
 			(rows, cursor_offset)
 		}
 		Mode::SaveAs | Mode::ConfirmOverwrite => {
 			let label_len = 10; // " Save As: "
-			let input_display_len = editor.save_as_input.len() + 2;
+			let input_chars = editor.save_as_input.chars().count();
+			let input_display_len = input_chars + 2;
 			let total = label_len + input_display_len;
 			let rows = ((total + w - 1) / w) as u16;
 			
@@ -289,16 +306,16 @@ pub fn render_search_bar<W: Write>(
 	// Label
 	w.queue(SetBackgroundColor(Color::DarkYellow))?;
 	w.queue(SetForegroundColor(Color::Black))?;
-	let label = "    → ";
+	let label = " Search for: ";
 	w.queue(style::Print(label))?;
-	used += label.len();
+	used += label.chars().count();
 
 	// Query text
 	w.queue(SetBackgroundColor(Color::DarkGrey))?;
 	w.queue(SetForegroundColor(Color::White))?;
 	let query_display = format!(" {} ", editor.search_query);
 	w.queue(style::Print(&query_display))?;
-	used += query_display.len();
+	used += query_display.chars().count();
 
 	// Match count
 	let info = if editor.search_matches.is_empty() {
@@ -317,7 +334,7 @@ pub fn render_search_bar<W: Write>(
 	if !info.is_empty() {
 		w.queue(SetForegroundColor(Color::White))?;
 		w.queue(style::Print(&info))?;
-		used += info.len();
+		used += info.chars().count();
 	}
 
 	// Pad the rest of the multi-line block
@@ -351,23 +368,23 @@ pub fn render_goto_line_bar<W: Write>(
 	// Label
 	w.queue(SetBackgroundColor(Color::DarkCyan))?;
 	w.queue(SetForegroundColor(Color::Black))?;
-	let label = "    → ";
+	let label = " Go to line: ";
 	w.queue(style::Print(label))?;
-	used += label.len();
+	used += label.chars().count();
 
 	// Line number input
 	w.queue(SetBackgroundColor(Color::DarkGrey))?;
 	w.queue(SetForegroundColor(Color::White))?;
 	let input_display = format!(" {} ", editor.goto_line_input);
 	w.queue(style::Print(&input_display))?;
-	used += input_display.len();
+	used += input_display.chars().count();
 
 	// Hint
 	let total_lines = editor.buffer().line_count();
 	let hint = format!(" (1-{}) ", total_lines);
 	w.queue(SetForegroundColor(Color::Grey))?;
 	w.queue(style::Print(&hint))?;
-	used += hint.len();
+	used += hint.chars().count();
 
 	// Pad the rest of the multi-line block
 	let total_cells = (rows as usize) * width;
