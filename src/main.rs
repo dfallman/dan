@@ -80,8 +80,17 @@ fn run_loop(editor: &mut Editor, writer: &mut BufWriter<io::Stdout>) -> io::Resu
 			break;
 		}
 
-		// Wait for the first event (blocking).
-		let evt = event::read()?;
+		// Wait for an event, polling async tasks continuously.
+		let evt = loop {
+			let did_work = editor.poll_async_tasks();
+			if did_work {
+				render::render(editor, writer)?;
+			}
+			
+			if event::poll(Duration::from_millis(25))? {
+				break event::read()?;
+			}
+		};
 
 		if matches!(evt, Event::Key(_) | Event::Paste(_))
 			&& editor.mode != crate::editor::mode::Mode::Searching

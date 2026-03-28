@@ -1,1 +1,0 @@
-This is ISO-8859-1 encoded. letters like ä ö ü, but no euro sign.

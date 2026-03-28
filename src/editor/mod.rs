@@ -1,6 +1,7 @@
 pub mod commands;
 pub mod cursor;
 mod editing;
+pub mod formatter;
 pub mod mode;
 mod navigation;
 mod search;
@@ -80,6 +81,10 @@ pub struct Editor {
 	pub save_as_cursor: usize,
 	/// Path pending overwrite confirmation.
 	pub save_as_pending_path: Option<String>,
+	/// Asynchronous background process payload receiver for formatting hooks.
+	pub fmt_rx: Option<std::sync::mpsc::Receiver<Result<String, String>>>,
+	/// Internal execution tag denoting background formatter blocks exclusively.
+	pub is_formatting: bool,
 }
 
 impl Editor {
@@ -116,7 +121,52 @@ impl Editor {
 			save_as_input: String::new(),
 			save_as_cursor: 0,
 			save_as_pending_path: None,
+			fmt_rx: None,
+			is_formatting: false,
 		}
+	}
+
+	/// Evaluates unbound background systems actively verifying task payload receptions cleanly.
+	pub fn poll_async_tasks(&mut self) -> bool {
+		if let Some(rx) = &self.fmt_rx {
+			if let Ok(res) = rx.try_recv() {
+				self.is_formatting = false;
+				self.fmt_rx = None;
+				match res {
+					Ok(formatted_text) => {
+						let content = self.buffer().text.to_string_full();
+						let content_chars: Vec<char> = content.chars().collect();
+						let formatted_chars: Vec<char> = formatted_text.chars().collect();
+
+						let mut prefix = 0;
+						while prefix < content_chars.len() && prefix < formatted_chars.len() && content_chars[prefix] == formatted_chars[prefix] {
+							prefix += 1;
+						}
+
+						let mut suffix = 0;
+						while suffix < content_chars.len() - prefix && suffix < formatted_chars.len() - prefix && content_chars[content_chars.len() - 1 - suffix] == formatted_chars[formatted_chars.len() - 1 - suffix] {
+							suffix += 1;
+						}
+
+						let end_char = content_chars.len() - suffix;
+						if prefix < end_char || prefix < formatted_chars.len() - suffix {
+							let insert_text: String = formatted_chars[prefix..formatted_chars.len() - suffix].iter().collect();
+							self.buffer_mut().delete_range(prefix, end_char);
+							self.buffer_mut().insert_str(prefix, &insert_text);
+							self.buffer_mut().commit_edits();
+							self.set_status("File formatted successfully");
+						} else {
+							self.set_status("File is already formatted");
+						}
+					}
+					Err(e) => {
+						self.set_status(&e);
+					}
+				}
+				return true;
+			}
+		}
+		false
 	}
 
 	/// Open a file into a new buffer and switch to it.
@@ -1166,6 +1216,23 @@ impl Editor {
 				self.config.syntax_highlight = !self.config.syntax_highlight;
 				let status = if self.config.syntax_highlight { "Syntax highlighting enabled" } else { "Syntax highlighting disabled" };
 				self.set_status(status);
+			}
+			Command::FormatDocument => {
+				let ext_str = self.buffer()
+					.file_path
+					.as_ref()
+					.and_then(|p| p.extension())
+					.and_then(|s| s.to_str())
+					.unwrap_or("js")
+					.to_string();
+				
+				let content = self.buffer().text.to_string_full();
+				let (tx, rx) = std::sync::mpsc::channel();
+				formatter::spawn_formatter(ext_str, content, tx);
+				
+				self.fmt_rx = Some(rx);
+				self.is_formatting = true;
+				self.set_status("Formatting...");
 			}
 			Command::ToggleComment => {
 				self.toggle_comment();
