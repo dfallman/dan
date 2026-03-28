@@ -6,7 +6,7 @@ impl Editor {
 	/// Move cursor horizontally by `delta` chars (-1 = left, 1 = right).
 	pub(crate) fn move_cursor_horizontal(&mut self, delta: i32) {
 		let c = self.cursors.cursor();
-		let tab_w = self.config.tab_width;
+		let tab_w = self.tab_width();
 		if delta < 0 {
 			if c.col > 0 {
 				let new_col = c.col - 1;
@@ -50,7 +50,7 @@ impl Editor {
 			if new_line != c.line {
 				let line_text: String = self.buffer().text.line_slice(new_line).chars().collect();
 				let line_len = self.line_len_no_newline(new_line);
-				let new_col = char_idx_for_visual_col(&line_text, line_len, 0, line_len, c.desired_vcol, self.config.tab_width, true);
+				let new_col = char_idx_for_visual_col(&line_text, line_len, 0, line_len, c.desired_vcol, self.tab_width(), true);
 				self.cursors.primary_mut().head.line = new_line;
 				self.cursors.primary_mut().head.set_col_keep_vcol(new_col);
 			}
@@ -62,7 +62,7 @@ impl Editor {
 		if text_area_width == 0 {
 			return;
 		}
-		let tab_w = self.config.tab_width;
+		let tab_w = self.tab_width();
 		let c = self.cursors.cursor();
 		let line_count = self.buffer().line_count();
 
@@ -159,7 +159,7 @@ impl Editor {
 			let line_start = text.line_to_char(line);
 			(line, pos - line_start)
 		};
-		let tab_w = self.config.tab_width;
+		let tab_w = self.tab_width();
 		let line_text: String = self.buffer().text.line_slice(line).chars().collect();
 		self.cursors.primary_mut().head.line = line;
 		self.cursors.primary_mut().head.set_col(col);
@@ -198,7 +198,7 @@ impl Editor {
 			let line_start = text.line_to_char(line);
 			(line, pos - line_start)
 		};
-		let tab_w = self.config.tab_width;
+		let tab_w = self.tab_width();
 		let line_text: String = self.buffer().text.line_slice(line).chars().collect();
 		self.cursors.primary_mut().head.line = line;
 		self.cursors.primary_mut().head.set_col(col);

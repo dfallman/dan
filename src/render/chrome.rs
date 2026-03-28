@@ -99,7 +99,7 @@ fn help_shortcuts() -> Vec<(&'static str, &'static str)> {
 		("^X", "Cut"),
 		("^V", "Paste"),
 		("^F", "Find"),
-		("^G", "Go to"),
+		("^G", "Goto"),
 		("^K", "Del ln"),
 		("^D", "Dupl"),
 		("^W", "Wrap"),

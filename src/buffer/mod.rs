@@ -19,6 +19,10 @@ pub struct Buffer {
 	pub dirty: bool,
 	/// The detected byte stream character encoding of the document.
 	pub encoding: &'static encoding_rs::Encoding,
+	/// File-local override for using spaces instead of tabs.
+	pub expand_tab: Option<bool>,
+	/// File-local override for tab spacing width.
+	pub tab_width: Option<usize>,
 }
 
 impl Buffer {
@@ -30,6 +34,8 @@ impl Buffer {
 			file_path: None,
 			dirty: false,
 			encoding: encoding_rs::UTF_8,
+			expand_tab: None,
+			tab_width: None,
 		}
 	}
 
@@ -45,12 +51,54 @@ impl Buffer {
 			let (dec, _, _) = enc.decode(&bytes);
 			(dec.into_owned(), enc)
 		};
+
+		// --- Smart Indentation Detection ---
+		let mut tabs_count = 0;
+		let mut spaces_count = 0;
+		let mut space_indents = std::collections::HashMap::new();
+
+		for line in content.lines().take(1000) {
+			if line.starts_with('\t') {
+				tabs_count += 1;
+			} else if line.starts_with(' ') {
+				let leading_spaces = line.chars().take_while(|&c| c == ' ').count();
+				if leading_spaces > 0 {
+					spaces_count += 1;
+					*space_indents.entry(leading_spaces).or_insert(0) += 1;
+				}
+			}
+		}
+
+		let mut expand_tab = None;
+		let mut tab_width = None;
+
+		if tabs_count > spaces_count {
+			expand_tab = Some(false);
+		} else if spaces_count > tabs_count {
+			expand_tab = Some(true);
+			// Find majority vote among valid structural sizes
+			let mut best_size = None;
+			let mut max_votes = 0;
+			for step in [2, 3, 4, 8] {
+				let votes = *space_indents.get(&step).unwrap_or(&0);
+				if votes > max_votes {
+					max_votes = votes;
+					best_size = Some(step);
+				}
+			}
+			if let Some(w) = best_size {
+				tab_width = Some(w);
+			}
+		}
+
 		Ok(Self {
 			text: TextRope::from_str(&content),
 			history: History::new(),
 			file_path: Some(path.to_path_buf()),
 			dirty: false,
 			encoding,
+			expand_tab,
+			tab_width,
 		})
 	}
 

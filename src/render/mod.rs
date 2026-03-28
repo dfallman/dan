@@ -106,7 +106,7 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 			line_number_width(line_count_tmp)
 		} else { 0 };
 		let taw_tmp = (vp.width as usize).saturating_sub(gw_tmp + 1);
-		let tab_w = editor.config.tab_width;
+		let tab_w = editor.tab_width();
 		if taw_tmp > 0 {
 			// Find which visual row the cursor is on within its buffer line.
 			let cur_text: String = editor.buffer().text.line_slice(cursor_line).chars().collect();
@@ -217,7 +217,7 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 	if !editor.config.wrap_lines {
 		// Compute the cursor's visual column so we can center scroll_x on it.
 		let cursor_pos = editor.cursors.cursor();
-		let tab_w = editor.config.tab_width;
+		let tab_w = editor.tab_width();
 		let cursor_vcol = if cursor_pos.line < line_count {
 			let lsl = editor.buffer().text.line_slice(cursor_pos.line);
 			let mut vc: usize = 0;
@@ -296,7 +296,7 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 		if let Some((saved_line, saved_col)) = editor.search_saved_cursor {
 			if saved_line >= editor.scroll_y && saved_line < editor.scroll_y + text_height {
 				let saved_screen_y = (saved_line - editor.scroll_y) as u16;
-				let tab_w = editor.config.tab_width;
+				let tab_w = editor.tab_width();
 				let saved_visual_col = if saved_line < line_count {
 					let line_slice = editor.buffer().text.line_slice(saved_line);
 					let mut vc: usize = 0;
@@ -359,7 +359,7 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 	} else {
 		// Normal mode — position cursor in the document.
 		let cursor_pos = editor.cursors.cursor();
-		let tab_w = editor.config.tab_width;
+		let tab_w = editor.tab_width();
 
 		let (screen_y, visual_col) = if editor.config.wrap_lines && text_area_width > 0 {
 			// Wrap mode: screen_y must count visual rows, visual_col is
