@@ -58,6 +58,10 @@ pub struct Editor {
 	pub show_help: bool,
 	/// Current search query string (populated during search mode).
 	pub search_query: String,
+	/// Target query string globally tracked for replace execution limits.
+	pub replace_query: String,
+	/// Target format payload tracking during step bindings natively.
+	pub replace_with: String,
 	/// All current matches as (start_char, end_char) pairs.
 	pub search_matches: Vec<(usize, usize)>,
 	/// Index of the currently-highlighted match.
@@ -101,6 +105,8 @@ impl Editor {
 			suppress_next_paste: false,
 			show_help: false,
 			search_query: String::new(),
+			replace_query: String::new(),
+			replace_with: String::new(),
 			search_matches: Vec::new(),
 			search_match_idx: 0,
 			search_saved_cursor: None,
@@ -269,7 +275,7 @@ impl Editor {
 			Command::SelectLineEnd => {
 				self.begin_selection_if_needed();
 				let c = self.cursors.cursor();
-				let len = self.line_len_no_newline(c.line);
+				let _len = self.line_len_no_newline(c.line);
 				let line_text = self.buffer().text.line(c.line);
 				let len = line_text.len().saturating_sub(1);
 				self.cursors.primary_mut().head.desired_vcol = crate::editor::visual_col::visual_col_at(&line_text, len, self.tab_width());
@@ -548,6 +554,127 @@ impl Editor {
 					self.cursors.set_cursor(new_line, new_col);
 					self.set_status("Pasted");
 				}
+			}
+
+			// -- Global Replace --
+			Command::ReplaceOpen => {
+				self.clear_selection();
+				self.replace_query = self.last_search_query.clone();
+				self.search_query.clear();
+				self.replace_with.clear();
+				self.search_matches.clear();
+				self.search_match_idx = 0;
+				let c = self.cursors.cursor();
+				self.search_saved_cursor = Some((c.line, c.col));
+				self.mode = Mode::ReplacingSearch;
+			}
+			Command::ReplaceInsertChar(ch) => {
+				if self.mode == Mode::ReplacingSearch {
+					self.replace_query.push(ch);
+					self.search_query = self.replace_query.clone();
+					self.refresh_search_matches();
+				} else if self.mode == Mode::ReplacingWith {
+					self.replace_with.push(ch);
+				}
+			}
+			Command::ReplaceDeleteChar => {
+				if self.mode == Mode::ReplacingSearch {
+					self.replace_query.pop();
+					self.search_query = self.replace_query.clone();
+					self.refresh_search_matches();
+				} else if self.mode == Mode::ReplacingWith {
+					self.replace_with.pop();
+				}
+			}
+			Command::ReplaceSearchConfirm => {
+				if !self.replace_query.is_empty() {
+					self.last_search_query = self.replace_query.clone();
+					self.mode = Mode::ReplacingWith;
+				} else {
+					self.mode = Mode::Editing;
+					self.search_query.clear();
+					self.clear_status();
+				}
+			}
+			Command::ReplaceWithConfirm => {
+				if self.search_matches.is_empty() {
+					self.mode = Mode::Editing;
+					self.search_query.clear();
+					self.clear_status();
+				} else {
+					self.mode = Mode::ReplacingStep;
+					self.jump_to_search_match();
+				}
+			}
+			Command::ReplaceActionYes => {
+				if let Some(&(start, end)) = self.search_matches.get(self.search_match_idx) {
+					let replacement = self.replace_with.clone();
+					self.buffer_mut().commit_edits(); // wrap
+					self.buffer_mut().delete_range(start, end);
+					self.buffer_mut().insert_str(start, &replacement);
+					self.buffer_mut().commit_edits();
+					
+					let new_pos = start + replacement.len();
+					let line = self.buffer().text.char_to_line(new_pos);
+					let col = new_pos - self.buffer().text.line_to_char(line);
+					self.search_saved_cursor = Some((line, col));
+					self.cursors.set_cursor(line, col);
+					self.refresh_search_matches();
+					
+					if self.search_matches.is_empty() {
+						self.mode = Mode::Editing;
+						self.search_query.clear();
+						self.clear_status();
+					} else {
+						// match idx is implicitly resync'd via refresh geometry bounding to the nearest next item naturally
+						self.jump_to_search_match();
+					}
+				} else {
+					self.mode = Mode::Editing;
+				}
+			}
+			Command::ReplaceActionNo => {
+				if !self.search_matches.is_empty() {
+					self.search_match_idx = (self.search_match_idx + 1) % self.search_matches.len();
+					self.jump_to_search_match();
+				} else {
+					self.mode = Mode::Editing;
+				}
+			}
+			Command::ReplaceActionAll => {
+				self.buffer_mut().commit_edits(); // Explicit history block grouping
+				let replacement = self.replace_with.clone();
+				
+				// Execute backwards to trivially retain string indexing locations dynamically
+				// Slicing from current index ensures we never retro-actively mangle skipped `(n)o` instances
+				let pending_matches = self.search_matches[self.search_match_idx..].to_vec();
+				for &(start, end) in pending_matches.iter().rev() {
+					self.buffer_mut().delete_range(start, end);
+					self.buffer_mut().insert_str(start, &replacement);
+				}
+				
+				self.buffer_mut().commit_edits();
+				self.clamp_cursors();
+				self.mode = Mode::Editing;
+				self.search_query.clear();
+				self.search_matches.clear();
+				self.search_match_idx = 0;
+				self.clear_status();
+			}
+			Command::ReplaceCancel => {
+				if !self.replace_query.is_empty() {
+					self.last_search_query = self.replace_query.clone();
+				}
+				if let Some((line, col)) = self.search_saved_cursor.take() {
+					self.cursors.set_cursor(line, col);
+				}
+				self.search_query.clear();
+				self.replace_query.clear();
+				self.replace_with.clear();
+				self.search_matches.clear();
+				self.search_match_idx = 0;
+				self.mode = Mode::Editing;
+				self.clear_status();
 			}
 
 			// -- Search --

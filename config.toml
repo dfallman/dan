@@ -28,13 +28,18 @@ scroll_off = 3
 # TODO: not implemented
 fast_scroll_steps = 10
 
-# Color theme (currently only "default")
+# Auto-close pairs: "'`({[
+# TODO: not implemented
+auto_close = true
+
+# Color theme
+# TODO: not implemented
 theme = "default"
 
 # Always show label "^H Help" in the toolbar
 show_help = true
 
-# Show character encoding in the toolbar (e.g. "utf-8")
+# Show document character encoding in the toolbar (e.g. "utf-8")
 show_encoding = true
 
 # Show detected language in the toolbar (e.g. "Rust")

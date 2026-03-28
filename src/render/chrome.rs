@@ -98,12 +98,13 @@ fn help_shortcuts() -> Vec<(&'static str, &'static str)> {
 		("^C", "Copy"),
 		("^X", "Cut"),
 		("^V", "Paste"),
-		("^F", "Find"),
-		("^G", "Goto"),
-		("^K", "Del ln"),
-		("^D", "Dupl"),
-		("^W", "Wrap"),
-		("^L", "Highl"),
+		("^F", "Search"),
+		("^R", "Replace"),
+		("^G", "Go to"),
+		("^D", "Duplicate line"),
+		("^K", "Delete line"),
+		("^W", "Wrap text"),
+		("^L", "Code highlight"),
 		("^H", "Help"),
 	]
 }
@@ -249,6 +250,38 @@ pub fn prompt_geometry(editor: &Editor, width: u16) -> (u16, u16) {
 	let w = width as usize;
 	
 	match editor.mode {
+		Mode::ReplacingSearch => {
+			let label_len = 15; // " Replace find: "
+			let query_chars = editor.replace_query.chars().count();
+			let query_display_len = query_chars + 2; // " {} "
+			let mut info_len = 0;
+			if !editor.search_matches.is_empty() {
+				let info = format!(" ({}/{}) ", editor.search_match_idx + 1, editor.search_matches.len());
+				info_len = info.chars().count();
+			} else if !editor.replace_query.is_empty() {
+				info_len = 5; // " (0) "
+			}
+			let total = label_len + query_display_len + info_len;
+			let rows = ((total + w - 1) / w) as u16;
+			
+			let cursor_offset = (label_len + 1 + query_chars) as u16;
+			(rows, cursor_offset)
+		}
+		Mode::ReplacingWith => {
+			let label_len = 15; // " Replace with: "
+			let query_chars = editor.replace_with.chars().count();
+			let query_display_len = query_chars + 2; // " {} "
+			let total = label_len + query_display_len;
+			let rows = ((total + w - 1) / w) as u16;
+			
+			let cursor_offset = (label_len + 1 + query_chars) as u16;
+			(rows, cursor_offset)
+		}
+		Mode::ReplacingStep => {
+			let label_len = 49; // " Replace? (y)es, (n)o, (a)ll, (q)uit, Esc Cancel "
+			let rows = ((label_len + w - 1) / w) as u16;
+			(rows, 0) // Fixed width, cursor hidden/frozen natively
+		}
 		Mode::Searching => {
 			let label_len = 13; // " Search for: "
 			let query_chars = editor.search_query.chars().count();
@@ -343,14 +376,88 @@ pub fn render_search_bar<W: Write>(
 	// Pad the rest of the multi-line block
 	let total_cells = (rows as usize) * width;
 	let remaining = total_cells.saturating_sub(used);
+	// Fill the rest with dark grey padding.
 	if remaining > 0 {
 		w.queue(SetBackgroundColor(Color::DarkGrey))?;
-		write_spaces(w, remaining)?;
+		w.queue(style::Print(" ".repeat(remaining)))?;
 	}
 
 	w.queue(SetBackgroundColor(Color::Reset))?;
 	w.queue(SetForegroundColor(Color::Reset))?;
+	Ok(())
+}
 
+/// Render the interactive multi-phase replace prompt sequence overlay
+pub fn render_replace_bar<W: Write>(
+	editor: &Editor,
+	w: &mut W,
+	vp: &Viewport,
+) -> io::Result<()> {
+	let (rows, _) = prompt_geometry(editor, vp.width);
+	if rows == 0 { return Ok(()); }
+	let search_y = vp.height.saturating_sub(1 + rows);
+	w.queue(cursor::MoveTo(0, search_y))?;
+
+	let width = vp.width as usize;
+	let mut used: usize = 0;
+
+	if editor.mode == Mode::ReplacingSearch {
+		w.queue(SetBackgroundColor(Color::DarkMagenta))?;
+		w.queue(SetForegroundColor(Color::Black))?;
+		let label = " Replace find: ";
+		w.queue(style::Print(label))?;
+		used += label.chars().count();
+
+		w.queue(SetBackgroundColor(Color::DarkGrey))?;
+		w.queue(SetForegroundColor(Color::White))?;
+		let query_display = format!(" {} ", editor.replace_query);
+		w.queue(style::Print(&query_display))?;
+		used += query_display.chars().count();
+
+		let info = if editor.search_matches.is_empty() {
+			if editor.replace_query.is_empty() {
+				String::new()
+			} else {
+				" (0) ".to_string()
+			}
+		} else {
+			format!(" ({}/{}) ", editor.search_match_idx + 1, editor.search_matches.len())
+		};
+		if !info.is_empty() {
+			w.queue(SetForegroundColor(Color::White))?;
+			w.queue(style::Print(&info))?;
+			used += info.chars().count();
+		}
+	} else if editor.mode == Mode::ReplacingWith {
+		w.queue(SetBackgroundColor(Color::DarkMagenta))?;
+		w.queue(SetForegroundColor(Color::Black))?;
+		let label = " Replace with: ";
+		w.queue(style::Print(label))?;
+		used += label.chars().count();
+
+		w.queue(SetBackgroundColor(Color::DarkGrey))?;
+		w.queue(SetForegroundColor(Color::White))?;
+		let query_display = format!(" {} ", editor.replace_with);
+		w.queue(style::Print(&query_display))?;
+		used += query_display.chars().count();
+	} else if editor.mode == Mode::ReplacingStep {
+		w.queue(SetBackgroundColor(Color::DarkMagenta))?;
+		w.queue(SetForegroundColor(Color::Black))?;
+		let label = " Replace? (y)es, (n)o, (a)ll, (q)uit: ";
+		w.queue(style::Print(label))?;
+		used += label.chars().count();
+	}
+
+	// Fill padding securely
+	let total_cells = (rows as usize) * width;
+	let remaining = total_cells.saturating_sub(used);
+	if remaining > 0 {
+		w.queue(SetBackgroundColor(Color::DarkGrey))?;
+		w.queue(style::Print(" ".repeat(remaining)))?;
+	}
+
+	w.queue(SetBackgroundColor(Color::Reset))?;
+	w.queue(SetForegroundColor(Color::Reset))?;
 	Ok(())
 }
 
