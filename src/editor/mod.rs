@@ -1196,10 +1196,14 @@ impl Editor {
 
 			// -- File --
 			Command::Save => {
-				self.buffer_mut().commit_edits();
-				match self.buffer_mut().save() {
-					Ok(()) => self.set_status("Saved"),
-					Err(e) => self.set_status(format!("Save failed: {}", e)),
+				if self.buffer().file_path.is_none() {
+					self.execute(Command::SaveAsOpen);
+				} else {
+					self.buffer_mut().commit_edits();
+					match self.buffer_mut().save() {
+						Ok(()) => self.set_status("Saved"),
+						Err(e) => self.set_status(format!("Save failed: {}", e)),
+					}
 				}
 			}
 			Command::Quit => {
@@ -1213,12 +1217,16 @@ impl Editor {
 				self.should_quit = true;
 			}
 			Command::SaveAndQuit => {
-				self.buffer_mut().commit_edits();
-				match self.buffer_mut().save() {
-					Ok(()) => self.should_quit = true,
-					Err(e) => {
-						self.mode = Mode::Editing;
-						self.set_status(format!("Save failed: {}", e));
+				if self.buffer().file_path.is_none() {
+					self.execute(Command::SaveAsOpen);
+				} else {
+					self.buffer_mut().commit_edits();
+					match self.buffer_mut().save() {
+						Ok(()) => self.should_quit = true,
+						Err(e) => {
+							self.mode = Mode::Editing;
+							self.set_status(format!("Save failed: {}", e));
+						}
 					}
 				}
 			}
