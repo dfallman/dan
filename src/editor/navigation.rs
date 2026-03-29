@@ -11,19 +11,31 @@ impl Editor {
 			if c.col > 0 {
 				let new_col = c.col - 1;
 				self.cursors.primary_mut().head.set_col(new_col);
-				self.cursors.primary_mut().head.desired_vcol = visual_col_at(self.buffer().text.line_slice(c.line).chars(), new_col, tab_w);
+				self.cursors.primary_mut().head.desired_vcol = visual_col_at(
+					self.buffer().text.line_slice(c.line).chars(),
+					new_col,
+					tab_w,
+				);
 			} else if c.line > 0 {
 				let prev_len = self.line_len_no_newline(c.line - 1);
 				self.cursors.primary_mut().head.line = c.line - 1;
 				self.cursors.primary_mut().head.set_col(prev_len);
-				self.cursors.primary_mut().head.desired_vcol = visual_col_at(self.buffer().text.line_slice(c.line - 1).chars(), prev_len, tab_w);
+				self.cursors.primary_mut().head.desired_vcol = visual_col_at(
+					self.buffer().text.line_slice(c.line - 1).chars(),
+					prev_len,
+					tab_w,
+				);
 			}
 		} else {
 			let line_len = self.line_len_no_newline(c.line);
 			if c.col < line_len {
 				let new_col = c.col + 1;
 				self.cursors.primary_mut().head.set_col(new_col);
-				self.cursors.primary_mut().head.desired_vcol = visual_col_at(self.buffer().text.line_slice(c.line).chars(), new_col, tab_w);
+				self.cursors.primary_mut().head.desired_vcol = visual_col_at(
+					self.buffer().text.line_slice(c.line).chars(),
+					new_col,
+					tab_w,
+				);
 			} else if c.line + 1 < self.buffer().line_count() {
 				self.cursors.primary_mut().head.line = c.line + 1;
 				self.cursors.primary_mut().head.set_col(0);
@@ -46,7 +58,15 @@ impl Editor {
 
 			if new_line != c.line {
 				let line_len = self.line_len_no_newline(new_line);
-				let new_col = char_idx_for_visual_col(self.buffer().text.line_slice(new_line).chars(), line_len, 0, line_len, c.desired_vcol, self.tab_width(), true);
+				let new_col = char_idx_for_visual_col(
+					self.buffer().text.line_slice(new_line).chars(),
+					line_len,
+					0,
+					line_len,
+					c.desired_vcol,
+					self.tab_width(),
+					true,
+				);
 				self.cursors.primary_mut().head.line = new_line;
 				self.cursors.primary_mut().head.set_col_keep_vcol(new_col);
 			}
@@ -64,7 +84,11 @@ impl Editor {
 
 		let cur_line_len = self.line_len_no_newline(c.line);
 
-		let rows = visual_rows_for(self.buffer().text.line_slice(c.line).chars(), tab_w, text_area_width);
+		let rows = visual_rows_for(
+			self.buffer().text.line_slice(c.line).chars(),
+			tab_w,
+			text_area_width,
+		);
 
 		// Which visual row is the cursor on within its buffer line?
 		let mut cur_vrow: usize = 0;
@@ -81,16 +105,36 @@ impl Editor {
 				// Stay on same buffer line, move to next visual row.
 				let next_idx = cur_vrow + 1;
 				let next_row = rows[next_idx];
-				let new_col = char_idx_for_visual_col(self.buffer().text.line_slice(c.line).chars(), cur_line_len, next_row.0, next_row.1, c.desired_vcol, tab_w, next_idx == rows.len() - 1);
+				let new_col = char_idx_for_visual_col(
+					self.buffer().text.line_slice(c.line).chars(),
+					cur_line_len,
+					next_row.0,
+					next_row.1,
+					c.desired_vcol,
+					tab_w,
+					next_idx == rows.len() - 1,
+				);
 				self.cursors.primary_mut().head.set_col_keep_vcol(new_col);
 			} else {
 				// Move to next buffer line (first visual row).
 				let next_line = c.line + 1;
 				if next_line < line_count {
 					let next_len = self.line_len_no_newline(next_line);
-					let next_rows = visual_rows_for(self.buffer().text.line_slice(next_line).chars(), tab_w, text_area_width);
+					let next_rows = visual_rows_for(
+						self.buffer().text.line_slice(next_line).chars(),
+						tab_w,
+						text_area_width,
+					);
 					let first = next_rows[0];
-					let new_col = char_idx_for_visual_col(self.buffer().text.line_slice(next_line).chars(), next_len, first.0, first.1, c.desired_vcol, tab_w, next_rows.len() == 1);
+					let new_col = char_idx_for_visual_col(
+						self.buffer().text.line_slice(next_line).chars(),
+						next_len,
+						first.0,
+						first.1,
+						c.desired_vcol,
+						tab_w,
+						next_rows.len() == 1,
+					);
 					self.cursors.primary_mut().head.line = next_line;
 					self.cursors.primary_mut().head.set_col_keep_vcol(new_col);
 				}
@@ -101,16 +145,36 @@ impl Editor {
 				// Stay on same buffer line, move to previous visual row.
 				let prev_idx = cur_vrow - 1;
 				let prev_row = rows[prev_idx];
-				let new_col = char_idx_for_visual_col(self.buffer().text.line_slice(c.line).chars(), cur_line_len, prev_row.0, prev_row.1, c.desired_vcol, tab_w, prev_idx == rows.len() - 1);
+				let new_col = char_idx_for_visual_col(
+					self.buffer().text.line_slice(c.line).chars(),
+					cur_line_len,
+					prev_row.0,
+					prev_row.1,
+					c.desired_vcol,
+					tab_w,
+					prev_idx == rows.len() - 1,
+				);
 				self.cursors.primary_mut().head.set_col_keep_vcol(new_col);
 			} else {
 				// Move to previous buffer line (last visual row).
 				if c.line > 0 {
 					let prev_line = c.line - 1;
 					let prev_len = self.line_len_no_newline(prev_line);
-					let prev_rows = visual_rows_for(self.buffer().text.line_slice(prev_line).chars(), tab_w, text_area_width);
+					let prev_rows = visual_rows_for(
+						self.buffer().text.line_slice(prev_line).chars(),
+						tab_w,
+						text_area_width,
+					);
 					let last = prev_rows[prev_rows.len() - 1];
-					let new_col = char_idx_for_visual_col(self.buffer().text.line_slice(prev_line).chars(), prev_len, last.0, last.1, c.desired_vcol, tab_w, true);
+					let new_col = char_idx_for_visual_col(
+						self.buffer().text.line_slice(prev_line).chars(),
+						prev_len,
+						last.0,
+						last.1,
+						c.desired_vcol,
+						tab_w,
+						true,
+					);
 					self.cursors.primary_mut().head.line = prev_line;
 					self.cursors.primary_mut().head.set_col_keep_vcol(new_col);
 				}
@@ -169,7 +233,8 @@ impl Editor {
 		let tab_w = self.tab_width();
 		self.cursors.primary_mut().head.line = line;
 		self.cursors.primary_mut().head.set_col(col);
-		self.cursors.primary_mut().head.desired_vcol = visual_col_at(self.buffer().text.line_slice(line).chars(), col, tab_w);
+		self.cursors.primary_mut().head.desired_vcol =
+			visual_col_at(self.buffer().text.line_slice(line).chars(), col, tab_w);
 	}
 
 	/// Move cursor backward one word, skipping spaces to land on the start of the previous word.
@@ -221,6 +286,7 @@ impl Editor {
 		let tab_w = self.tab_width();
 		self.cursors.primary_mut().head.line = line;
 		self.cursors.primary_mut().head.set_col(col);
-		self.cursors.primary_mut().head.desired_vcol = visual_col_at(self.buffer().text.line_slice(line).chars(), col, tab_w);
+		self.cursors.primary_mut().head.desired_vcol =
+			visual_col_at(self.buffer().text.line_slice(line).chars(), col, tab_w);
 	}
 }

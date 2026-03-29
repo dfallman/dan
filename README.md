@@ -51,7 +51,7 @@ Under the hood, Dan is written entirely in Rust, and it uses a rope data structu
 
 - **Go-to-line** — `Ctrl+G` opens a prompt to jump directly to a line number
 
-- **Line operations** — `Alt+Up/Down` to move lines, `Ctrl+K` to delete a line, `Ctrl+D` to duplicate
+- **Line operations** — `Alt+↑/↓` to move lines, `Ctrl+K` to delete a line, `Ctrl+D` to duplicate
 
 ### Internationalization & OS compatibility
 
@@ -145,8 +145,8 @@ Dan uses familiar GUI-style shortcuts. No modes — every key works the same way
 | `Alt+→`              | Move to next word (alternate)       |
 | `Page Up`            | Scroll up one page                  |
 | `Page Down`          | Scroll down one page                |
-| `Ctrl+Up` / `Ctrl+Down`| **Viewport Fast Scroll** - Slides viewport strictly holding cursor visual tether! (VSCode layout) |
-| `Ctrl+Shift+Up/Down` | **Cursor Fast Jump** - Jumps cursor `fast_scroll_steps` natively bounding across chunks. |
+| `Ctrl+↑` / `Ctrl+↓`| **Viewport Fast Scroll** - Slides viewport strictly holding cursor visual tether! (VSCode layout) |
+| `Ctrl+Shift+↑/↓` | **Cursor Fast Jump** - Jumps cursor `fast_scroll_steps` natively bounding across chunks. |
 
 ### Selection
 

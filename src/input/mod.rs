@@ -126,11 +126,15 @@ fn map_key(key: &KeyEvent) -> Command {
 		return match key.code {
 			KeyCode::Char('c') | KeyCode::Char('C') => Command::ForceQuit,
 			KeyCode::Char('@') | KeyCode::Char('2') => Command::SelectAll,
-			KeyCode::Left  => Command::SelectWordBackward,
+			KeyCode::Left => Command::SelectWordBackward,
 			KeyCode::Right => Command::SelectWordForward,
-			KeyCode::Up    => Command::MoveFastUp,
-			KeyCode::Down  => Command::MoveFastDown,
-			KeyCode::Char('/') | KeyCode::Char('_') | KeyCode::Char('?') | KeyCode::Char('-') | KeyCode::Char('e') => Command::ToggleComment,
+			KeyCode::Up => Command::MoveFastUp,
+			KeyCode::Down => Command::MoveFastDown,
+			KeyCode::Char('/')
+			| KeyCode::Char('_')
+			| KeyCode::Char('?')
+			| KeyCode::Char('-')
+			| KeyCode::Char('e') => Command::ToggleComment,
 			_ => Command::Noop,
 		};
 	}
@@ -138,10 +142,10 @@ fn map_key(key: &KeyEvent) -> Command {
 	// -- Alt+Shift shortcuts (selection by word / line) --
 	if alt && shift {
 		return match key.code {
-			KeyCode::Left  => Command::SelectWordBackward,
+			KeyCode::Left => Command::SelectWordBackward,
 			KeyCode::Right => Command::SelectWordForward,
-			KeyCode::Up    => Command::SelectUp,
-			KeyCode::Down  => Command::SelectDown,
+			KeyCode::Up => Command::SelectUp,
+			KeyCode::Down => Command::SelectDown,
 			_ => Command::Noop,
 		};
 	}
@@ -159,14 +163,18 @@ fn map_key(key: &KeyEvent) -> Command {
 			KeyCode::Char('v') => Command::Paste,
 			KeyCode::Char('a') => Command::SaveAsOpen,
 			KeyCode::Char('f') => Command::SearchForward,
-			KeyCode::Char('/') | KeyCode::Char('_') | KeyCode::Char('?') | KeyCode::Char('-') | KeyCode::Char('e') => Command::ToggleComment,
+			KeyCode::Char('/')
+			| KeyCode::Char('_')
+			| KeyCode::Char('?')
+			| KeyCode::Char('-')
+			| KeyCode::Char('e') => Command::ToggleComment,
 			KeyCode::Char('g') => Command::GoToLineOpen,
-			KeyCode::Left      => Command::MoveWordBackward,
-			KeyCode::Right     => Command::MoveWordForward,
-			KeyCode::Up        => Command::ScrollViewportUp,
-			KeyCode::Down      => Command::ScrollViewportDown,
-			KeyCode::Home      => Command::MoveBufferTop,
-			KeyCode::End       => Command::MoveBufferBottom,
+			KeyCode::Left => Command::MoveWordBackward,
+			KeyCode::Right => Command::MoveWordForward,
+			KeyCode::Up => Command::ScrollViewportUp,
+			KeyCode::Down => Command::ScrollViewportDown,
+			KeyCode::Home => Command::MoveBufferTop,
+			KeyCode::End => Command::MoveBufferBottom,
 			KeyCode::Char('k') => Command::DeleteLine,
 			KeyCode::Char('d') => Command::DuplicateLineOrSelection,
 			KeyCode::Char('w') => Command::ToggleWrap,
@@ -181,10 +189,10 @@ fn map_key(key: &KeyEvent) -> Command {
 	// -- Alt/Option shortcuts (word jump + line swap) --
 	if alt {
 		return match key.code {
-			KeyCode::Left  => Command::MoveWordBackward,
+			KeyCode::Left => Command::MoveWordBackward,
 			KeyCode::Right => Command::MoveWordForward,
-			KeyCode::Up    => Command::SwapLineUp,
-			KeyCode::Down  => Command::SwapLineDown,
+			KeyCode::Up => Command::SwapLineUp,
+			KeyCode::Down => Command::SwapLineDown,
 			_ => Command::Noop,
 		};
 	}
@@ -192,12 +200,12 @@ fn map_key(key: &KeyEvent) -> Command {
 	// -- Shift+arrow = select --
 	if shift {
 		return match key.code {
-			KeyCode::Left  => Command::SelectLeft,
+			KeyCode::Left => Command::SelectLeft,
 			KeyCode::Right => Command::SelectRight,
-			KeyCode::Up    => Command::SelectUp,
-			KeyCode::Down  => Command::SelectDown,
-			KeyCode::Home  => Command::SelectLineStart,
-			KeyCode::End   => Command::SelectLineEnd,
+			KeyCode::Up => Command::SelectUp,
+			KeyCode::Down => Command::SelectDown,
+			KeyCode::Home => Command::SelectLineStart,
+			KeyCode::End => Command::SelectLineEnd,
 			KeyCode::BackTab => Command::Dedent,
 			// Shift+char — insert uppercase / shifted character
 			KeyCode::Char(ch) => Command::InsertChar(ch),
@@ -208,22 +216,22 @@ fn map_key(key: &KeyEvent) -> Command {
 	// -- Regular keys --
 	match key.code {
 		// Navigation
-		KeyCode::Left     => Command::MoveLeft,
-		KeyCode::Right    => Command::MoveRight,
-		KeyCode::Up       => Command::MoveUp,
-		KeyCode::Down     => Command::MoveDown,
-		KeyCode::Home     => Command::MoveLineStart,
-		KeyCode::End      => Command::MoveLineEnd,
-		KeyCode::PageUp   => Command::PageUp,
+		KeyCode::Left => Command::MoveLeft,
+		KeyCode::Right => Command::MoveRight,
+		KeyCode::Up => Command::MoveUp,
+		KeyCode::Down => Command::MoveDown,
+		KeyCode::Home => Command::MoveLineStart,
+		KeyCode::End => Command::MoveLineEnd,
+		KeyCode::PageUp => Command::PageUp,
 		KeyCode::PageDown => Command::PageDown,
 
 		// Editing — direct insert, no mode switch needed
-		KeyCode::Enter     => Command::InsertNewline,
-		KeyCode::Tab       => Command::InsertTab,
-		KeyCode::BackTab   => Command::Dedent,
+		KeyCode::Enter => Command::InsertNewline,
+		KeyCode::Tab => Command::InsertTab,
+		KeyCode::BackTab => Command::Dedent,
 		KeyCode::Backspace => Command::DeleteBackward,
-		KeyCode::Delete    => Command::DeleteForward,
-		KeyCode::Char(ch)  => Command::InsertChar(ch),
+		KeyCode::Delete => Command::DeleteForward,
+		KeyCode::Char(ch) => Command::InsertChar(ch),
 
 		// F7 = open search (works even when Ctrl+F is intercepted by the terminal)
 		KeyCode::F(7) => Command::SearchForward,

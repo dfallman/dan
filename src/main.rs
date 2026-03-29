@@ -2,10 +2,10 @@ mod buffer;
 mod config;
 mod editor;
 mod input;
+pub mod recovery;
 mod render;
 mod syntax;
 mod utils;
-pub mod recovery;
 
 use crossterm::event::{self, Event};
 use crossterm::terminal::{self, EnterAlternateScreen, LeaveAlternateScreen};
@@ -65,29 +65,49 @@ fn main() -> io::Result<()> {
 	let default_panic_hook = std::panic::take_hook();
 	std::panic::set_hook(Box::new(move |panic_info| {
 		let mut stdout = io::stdout();
-		let _ = crossterm::ExecutableCommand::execute(&mut stdout, crossterm::event::DisableBracketedPaste);
+		let _ = crossterm::ExecutableCommand::execute(
+			&mut stdout,
+			crossterm::event::DisableBracketedPaste,
+		);
 		let _ = crossterm::ExecutableCommand::execute(&mut stdout, crossterm::style::ResetColor);
-		let _ = crossterm::ExecutableCommand::execute(&mut stdout, crossterm::style::SetAttribute(crossterm::style::Attribute::Reset));
+		let _ = crossterm::ExecutableCommand::execute(
+			&mut stdout,
+			crossterm::style::SetAttribute(crossterm::style::Attribute::Reset),
+		);
 		let _ = crossterm::ExecutableCommand::execute(&mut stdout, crossterm::cursor::Show);
-		let _ = crossterm::ExecutableCommand::execute(&mut stdout, crossterm::cursor::SetCursorStyle::DefaultUserShape);
-		let _ = crossterm::ExecutableCommand::execute(&mut stdout, crossterm::terminal::LeaveAlternateScreen);
+		let _ = crossterm::ExecutableCommand::execute(
+			&mut stdout,
+			crossterm::cursor::SetCursorStyle::DefaultUserShape,
+		);
+		let _ = crossterm::ExecutableCommand::execute(
+			&mut stdout,
+			crossterm::terminal::LeaveAlternateScreen,
+		);
 		let _ = crossterm::terminal::disable_raw_mode();
 		default_panic_hook(panic_info);
 	}));
 
 	// Enable bracketed paste so the terminal sends paste as a
 	// single Event::Paste(String) instead of individual key events.
-	writer.get_mut().execute(crossterm::event::EnableBracketedPaste)?;
+	writer
+		.get_mut()
+		.execute(crossterm::event::EnableBracketedPaste)?;
 
 	// Main loop
 	let result = run_loop(&mut editor, &mut writer);
 
 	// Restore terminal
-	writer.get_mut().execute(crossterm::event::DisableBracketedPaste)?;
+	writer
+		.get_mut()
+		.execute(crossterm::event::DisableBracketedPaste)?;
 	writer.get_mut().execute(crossterm::style::ResetColor)?;
-	writer.get_mut().execute(crossterm::style::SetAttribute(crossterm::style::Attribute::Reset))?;
+	writer.get_mut().execute(crossterm::style::SetAttribute(
+		crossterm::style::Attribute::Reset,
+	))?;
 	writer.get_mut().execute(crossterm::cursor::Show)?;
-	writer.get_mut().execute(crossterm::cursor::SetCursorStyle::DefaultUserShape)?;
+	writer
+		.get_mut()
+		.execute(crossterm::cursor::SetCursorStyle::DefaultUserShape)?;
 	writer.get_mut().execute(LeaveAlternateScreen)?;
 	terminal::disable_raw_mode()?;
 
@@ -108,7 +128,7 @@ fn run_loop(editor: &mut Editor, writer: &mut BufWriter<io::Stdout>) -> io::Resu
 			if did_work {
 				render::render(editor, writer)?;
 			}
-			
+
 			if event::poll(Duration::from_millis(25))? {
 				break event::read()?;
 			}
@@ -138,8 +158,8 @@ fn run_loop(editor: &mut Editor, writer: &mut BufWriter<io::Stdout>) -> io::Resu
 			let evt = event::read()?;
 			if matches!(evt, Event::Key(_) | Event::Paste(_))
 				&& editor.mode != crate::editor::mode::Mode::Searching
-			&& editor.mode != crate::editor::mode::Mode::ConfirmQuit
-			&& editor.mode != crate::editor::mode::Mode::SaveAs
+				&& editor.mode != crate::editor::mode::Mode::ConfirmQuit
+				&& editor.mode != crate::editor::mode::Mode::SaveAs
 			{
 				editor.clear_status();
 			}

@@ -1,22 +1,13 @@
-use crossterm::{
-	cursor,
-	style::{self, Color, SetBackgroundColor, SetForegroundColor},
-	QueueableCommand,
-};
-use std::io::{self, Write};
+use crossterm::style::Color;
 
-use crate::editor::Editor;
+use super::Viewport;
 use crate::editor::mode::Mode;
-use super::{write_spaces, Viewport};
+use crate::editor::Editor;
 
 /// Render the status bar.
-pub fn render_status_bar<W: Write>(
-	editor: &Editor,
-	w: &mut W,
-	vp: &Viewport,
-) -> io::Result<()> {
+pub fn render_status_bar(editor: &Editor, screen: &mut super::buffer::ScreenBuffer, vp: &Viewport) {
 	let status_y = vp.height.saturating_sub(vp.chrome_rows);
-	w.queue(cursor::MoveTo(0, status_y))?;
+	screen.mov_to(0, status_y);
 
 	let width = vp.width as usize;
 	let mut used: usize = 0;
@@ -28,41 +19,43 @@ pub fn render_status_bar<W: Write>(
 		(editor.mode.color(), editor.mode.label())
 	};
 	let mode_label = format!(" {} ", mode_text);
-	w.queue(SetBackgroundColor(mode_bg))?;
-	w.queue(SetForegroundColor(Color::Black))?;
-	w.queue(style::Print(&mode_label))?;
+	screen.set_bg(mode_bg);
+	screen.set_fg(Color::Black);
+	screen.put_str(&mode_label);
 	used += mode_label.len();
 
-	w.queue(SetBackgroundColor(Color::White))?;
-	w.queue(SetForegroundColor(Color::Black))?;
+	screen.set_bg(Color::White);
+	screen.set_fg(Color::Black);
 
 	// File name
 	let name = editor.buffer().display_name();
 	let dirty = if editor.buffer().dirty { " [+]" } else { "" };
 	let file_part = format!(" {}{} ", name, dirty);
-	w.queue(style::Print(&file_part))?;
+	screen.put_str(&file_part);
 	used += file_part.len();
 
 	// Status message (if any)
 	if let Some(ref msg) = editor.status_msg {
 		let msg_part = format!(" {} ", msg);
-		w.queue(SetBackgroundColor(Color::Blue))?;
-		w.queue(SetForegroundColor(Color::Black))?;
-		w.queue(style::Print(&msg_part))?;
-		w.queue(SetBackgroundColor(Color::White))?;
-		w.queue(SetForegroundColor(Color::Black))?;
+		screen.set_bg(Color::Blue);
+		screen.set_fg(Color::Black);
+		screen.put_str(&msg_part);
+		screen.set_bg(Color::White);
+		screen.set_fg(Color::Black);
 		used += msg_part.len();
 	}
 
 	// Right side: Language + Help toggle + cursor position
 	let c = editor.cursors.cursor();
 	let mut right_parts = Vec::new();
-	
+
 	if editor.config.show_help {
 		right_parts.push("^H Help".to_string());
 	}
 	if editor.config.show_lang {
-		let syntax = editor.highlighter.detect_syntax(editor.buffer().file_path.as_deref());
+		let syntax = editor
+			.highlighter
+			.detect_syntax(editor.buffer().file_path.as_deref());
 		right_parts.push(syntax.name.clone());
 	}
 	if editor.config.show_encoding {
@@ -74,17 +67,16 @@ pub fn render_status_bar<W: Write>(
 	let available = width.saturating_sub(used);
 	if available >= right.len() {
 		let padding = available - right.len();
-		write_spaces(w, padding)?;
-		w.queue(style::Print(&right))?;
+		for _ in 0..padding {
+			screen.put_char(' ');
+		}
+		screen.put_str(&right);
 	} else if available > 0 {
 		let truncated: String = right.chars().take(available).collect();
-		w.queue(style::Print(&truncated))?;
+		screen.put_str(&truncated);
 	}
 
-	w.queue(SetBackgroundColor(Color::Reset))?;
-	w.queue(SetForegroundColor(Color::Reset))?;
-
-	Ok(())
+	screen.reset_colors();
 }
 
 /// Shortcut definitions for the help bar.
@@ -124,7 +116,9 @@ const HELP_LABEL_WIDTH: usize = 6; // " HELP "
 pub fn help_row_count(term_width: u16) -> u16 {
 	let shortcuts = help_shortcuts();
 	let width = term_width as usize;
-	if width == 0 { return 1; }
+	if width == 0 {
+		return 1;
+	}
 
 	// First row starts after the " HELP " label.
 	let mut rows: u16 = 1;
@@ -146,11 +140,7 @@ pub fn help_row_count(term_width: u16) -> u16 {
 /// Render the pico-style help bar at the bottom of the screen.
 /// Builds upward from the row above the status bar when it needs
 /// multiple lines.
-pub fn render_help_bar<W: Write>(
-	_editor: &Editor,
-	w: &mut W,
-	vp: &Viewport,
-) -> io::Result<()> {
+pub fn render_help_bar(_editor: &Editor, screen: &mut super::buffer::ScreenBuffer, vp: &Viewport) {
 	let shortcuts = help_shortcuts();
 	let width = vp.width as usize;
 	let num_rows = help_row_count(vp.width) as usize;
@@ -179,67 +169,66 @@ pub fn render_help_bar<W: Write>(
 	for (row_idx, row_items) in rows.iter().enumerate() {
 		// Rows render top-to-bottom, row 0 is the topmost.
 		let y = base_y.saturating_sub((num_rows - 1 - row_idx) as u16);
-		w.queue(cursor::MoveTo(0, y))?;
+		screen.mov_to(0, y);
 
 		let mut used: usize = 0;
 
 		if row_idx == 0 {
 			// First row: " HELP " label in yellow (like mode labels)
-			w.queue(SetBackgroundColor(Color::DarkYellow))?;
-			w.queue(SetForegroundColor(Color::Black))?;
-			w.queue(style::Print(" HELP "))?;
+			screen.set_bg(Color::DarkYellow);
+			screen.set_fg(Color::Black);
+			screen.put_str(" HELP ");
 			used += HELP_LABEL_WIDTH;
 		}
 
 		// Render shortcut items
 		for (key, label) in row_items {
-			w.queue(SetBackgroundColor(Color::Blue))?;
-			w.queue(SetForegroundColor(Color::Black))?;
-			w.queue(style::Print(key))?;
-			w.queue(SetBackgroundColor(Color::White))?;
-			w.queue(SetForegroundColor(Color::Black))?;
+			screen.set_bg(Color::Blue);
+			screen.set_fg(Color::Black);
+			screen.put_str(key);
+			screen.set_bg(Color::White);
+			screen.set_fg(Color::Black);
 			let lbl = format!(" {} ", label);
-			w.queue(style::Print(&lbl))?;
+			screen.put_str(&lbl);
 			used += key.len() + lbl.len();
 		}
 
 		// On the last row, right-align the version string
 		if row_idx == rows.len() - 1 {
-			let version_str = format!(
-				"Dan v{} ({}) ",
-				crate::VERSION.trim(),
-				crate::GIT_HASH,
-			);
+			let version_str = format!("Dan v{} ({}) ", crate::VERSION.trim(), crate::GIT_HASH,);
 			let available = width.saturating_sub(used);
 			if available >= version_str.len() {
 				let remaining = available - version_str.len();
 				if remaining > 0 {
-					w.queue(SetBackgroundColor(Color::White))?;
-					write_spaces(w, remaining)?;
+					screen.set_bg(Color::White);
+					for _ in 0..remaining {
+						screen.put_char(' ');
+					}
 				}
-				w.queue(SetBackgroundColor(Color::White))?;
-				w.queue(SetForegroundColor(Color::Black))?;
-				w.queue(style::Print(&version_str))?;
+				screen.set_bg(Color::White);
+				screen.set_fg(Color::Black);
+				screen.put_str(&version_str);
 			} else {
 				if available > 0 {
-					w.queue(SetBackgroundColor(Color::White))?;
-					write_spaces(w, available)?;
+					screen.set_bg(Color::White);
+					for _ in 0..available {
+						screen.put_char(' ');
+					}
 				}
 			}
 		} else {
 			// Pad remaining width with white background
 			let remaining = width.saturating_sub(used);
 			if remaining > 0 {
-				w.queue(SetBackgroundColor(Color::White))?;
-				write_spaces(w, remaining)?;
+				screen.set_bg(Color::White);
+				for _ in 0..remaining {
+					screen.put_char(' ');
+				}
 			}
 		}
 	}
 
-	w.queue(SetForegroundColor(Color::Reset))?;
-	w.queue(SetBackgroundColor(Color::Reset))?;
-
-	Ok(())
+	screen.reset_colors();
 }
 
 pub struct PromptBlock {
@@ -256,7 +245,9 @@ pub struct PromptLayout {
 
 /// Dynamically format and dimension the interactive overlay component natively supporting bounds.
 pub fn build_prompt(editor: &Editor, width: u16) -> Option<PromptLayout> {
-	if width == 0 { return None; }
+	if width == 0 {
+		return None;
+	}
 	let w = width as usize;
 
 	match editor.mode {
@@ -264,23 +255,49 @@ pub fn build_prompt(editor: &Editor, width: u16) -> Option<PromptLayout> {
 			let label = " Replace find: ".to_string();
 			let query_display = format!(" {} ", editor.replace_query);
 			let info = if editor.search_matches.is_empty() {
-				if editor.replace_query.is_empty() { String::new() } else { " (0) ".to_string() }
+				if editor.replace_query.is_empty() {
+					String::new()
+				} else {
+					" (0) ".to_string()
+				}
 			} else {
-				format!(" ({}/{}) ", editor.search_match_idx + 1, editor.search_matches.len())
+				format!(
+					" ({}/{}) ",
+					editor.search_match_idx + 1,
+					editor.search_matches.len()
+				)
 			};
 
-			let total = label.chars().count() + query_display.chars().count() + info.chars().count();
+			let total =
+				label.chars().count() + query_display.chars().count() + info.chars().count();
 			let rows = ((total + w - 1) / w) as u16;
-			let cursor_offset = (label.chars().count() + 1 + editor.replace_query.chars().count()) as u16;
+			let cursor_offset =
+				(label.chars().count() + 1 + editor.replace_query.chars().count()) as u16;
 
 			let mut blocks = vec![
-				PromptBlock { bg: Color::DarkMagenta, fg: Color::Black, text: label },
-				PromptBlock { bg: Color::DarkGrey, fg: Color::White, text: query_display },
+				PromptBlock {
+					bg: Color::DarkMagenta,
+					fg: Color::Black,
+					text: label,
+				},
+				PromptBlock {
+					bg: Color::DarkGrey,
+					fg: Color::White,
+					text: query_display,
+				},
 			];
 			if !info.is_empty() {
-				blocks.push(PromptBlock { bg: Color::DarkGrey, fg: Color::White, text: info });
+				blocks.push(PromptBlock {
+					bg: Color::DarkGrey,
+					fg: Color::White,
+					text: info,
+				});
 			}
-			Some(PromptLayout { rows, cursor_offset, blocks })
+			Some(PromptLayout {
+				rows,
+				cursor_offset,
+				blocks,
+			})
 		}
 		Mode::ReplacingWith => {
 			let label = " Replace with: ".to_string();
@@ -288,44 +305,89 @@ pub fn build_prompt(editor: &Editor, width: u16) -> Option<PromptLayout> {
 
 			let total = label.chars().count() + query_display.chars().count();
 			let rows = ((total + w - 1) / w) as u16;
-			let cursor_offset = (label.chars().count() + 1 + editor.replace_with.chars().count()) as u16;
+			let cursor_offset =
+				(label.chars().count() + 1 + editor.replace_with.chars().count()) as u16;
 
 			let blocks = vec![
-				PromptBlock { bg: Color::DarkMagenta, fg: Color::Black, text: label },
-				PromptBlock { bg: Color::DarkGrey, fg: Color::White, text: query_display },
+				PromptBlock {
+					bg: Color::DarkMagenta,
+					fg: Color::Black,
+					text: label,
+				},
+				PromptBlock {
+					bg: Color::DarkGrey,
+					fg: Color::White,
+					text: query_display,
+				},
 			];
-			Some(PromptLayout { rows, cursor_offset, blocks })
+			Some(PromptLayout {
+				rows,
+				cursor_offset,
+				blocks,
+			})
 		}
 		Mode::ReplacingStep => {
 			let label = " Replace? (y)es, (n)o, (a)ll, (q)uit: ".to_string();
 			let rows = ((label.chars().count() + w - 1) / w) as u16;
 
-			let blocks = vec![
-				PromptBlock { bg: Color::DarkMagenta, fg: Color::Black, text: label },
-			];
-			Some(PromptLayout { rows, cursor_offset: 0, blocks })
+			let blocks = vec![PromptBlock {
+				bg: Color::DarkMagenta,
+				fg: Color::Black,
+				text: label,
+			}];
+			Some(PromptLayout {
+				rows,
+				cursor_offset: 0,
+				blocks,
+			})
 		}
 		Mode::Searching => {
 			let label = " Search for: ".to_string();
 			let query_display = format!(" {} ", editor.search_query);
 			let info = if editor.search_matches.is_empty() {
-				if editor.search_query.is_empty() { String::new() } else { " (0) ".to_string() }
+				if editor.search_query.is_empty() {
+					String::new()
+				} else {
+					" (0) ".to_string()
+				}
 			} else {
-				format!(" ({}/{}) ", editor.search_match_idx + 1, editor.search_matches.len())
+				format!(
+					" ({}/{}) ",
+					editor.search_match_idx + 1,
+					editor.search_matches.len()
+				)
 			};
 
-			let total = label.chars().count() + query_display.chars().count() + info.chars().count();
+			let total =
+				label.chars().count() + query_display.chars().count() + info.chars().count();
 			let rows = ((total + w - 1) / w) as u16;
-			let cursor_offset = (label.chars().count() + 1 + editor.search_query.chars().count()) as u16;
+			let cursor_offset =
+				(label.chars().count() + 1 + editor.search_query.chars().count()) as u16;
 
 			let mut blocks = vec![
-				PromptBlock { bg: Color::DarkYellow, fg: Color::Black, text: label },
-				PromptBlock { bg: Color::DarkGrey, fg: Color::White, text: query_display },
+				PromptBlock {
+					bg: Color::DarkYellow,
+					fg: Color::Black,
+					text: label,
+				},
+				PromptBlock {
+					bg: Color::DarkGrey,
+					fg: Color::White,
+					text: query_display,
+				},
 			];
 			if !info.is_empty() {
-				blocks.push(PromptBlock { bg: Color::DarkGrey, fg: Color::White, text: info });
+				blocks.push(PromptBlock {
+					bg: Color::DarkGrey,
+					fg: Color::White,
+					text: info,
+				});
 			}
-			Some(PromptLayout { rows, cursor_offset, blocks })
+			Some(PromptLayout {
+				rows,
+				cursor_offset,
+				blocks,
+			})
 		}
 		Mode::GoToLine => {
 			let label = " Go to line: ".to_string();
@@ -333,16 +395,34 @@ pub fn build_prompt(editor: &Editor, width: u16) -> Option<PromptLayout> {
 			let total_lines = editor.buffer().line_count();
 			let hint = format!(" (1-{}) ", total_lines);
 
-			let total = label.chars().count() + input_display.chars().count() + hint.chars().count();
+			let total =
+				label.chars().count() + input_display.chars().count() + hint.chars().count();
 			let rows = ((total + w - 1) / w) as u16;
-			let cursor_offset = (label.chars().count() + 1 + editor.goto_line_input.chars().count()) as u16;
+			let cursor_offset =
+				(label.chars().count() + 1 + editor.goto_line_input.chars().count()) as u16;
 
 			let blocks = vec![
-				PromptBlock { bg: Color::DarkCyan, fg: Color::Black, text: label },
-				PromptBlock { bg: Color::DarkGrey, fg: Color::White, text: input_display },
-				PromptBlock { bg: Color::DarkGrey, fg: Color::Grey, text: hint },
+				PromptBlock {
+					bg: Color::DarkCyan,
+					fg: Color::Black,
+					text: label,
+				},
+				PromptBlock {
+					bg: Color::DarkGrey,
+					fg: Color::White,
+					text: input_display,
+				},
+				PromptBlock {
+					bg: Color::DarkGrey,
+					fg: Color::Grey,
+					text: hint,
+				},
 			];
-			Some(PromptLayout { rows, cursor_offset, blocks })
+			Some(PromptLayout {
+				rows,
+				cursor_offset,
+				blocks,
+			})
 		}
 		Mode::RecoverSwap => {
 			let label = " RECOVERY ".to_string();
@@ -350,10 +430,22 @@ pub fn build_prompt(editor: &Editor, width: u16) -> Option<PromptLayout> {
 			let total = label.chars().count() + msg.chars().count();
 			let rows = ((total + w - 1) / w) as u16;
 			let blocks = vec![
-				PromptBlock { bg: Color::DarkRed, fg: Color::Black, text: label },
-				PromptBlock { bg: Color::DarkYellow, fg: Color::Black, text: msg },
+				PromptBlock {
+					bg: Color::DarkRed,
+					fg: Color::Black,
+					text: label,
+				},
+				PromptBlock {
+					bg: Color::DarkYellow,
+					fg: Color::Black,
+					text: msg,
+				},
 			];
-			Some(PromptLayout { rows, cursor_offset: 0, blocks })
+			Some(PromptLayout {
+				rows,
+				cursor_offset: 0,
+				blocks,
+			})
 		}
 		Mode::SaveAs | Mode::ConfirmOverwrite => {
 			let label = " Save as: ".to_string();
@@ -364,55 +456,82 @@ pub fn build_prompt(editor: &Editor, width: u16) -> Option<PromptLayout> {
 			let cursor_offset = (label.chars().count() + 1 + editor.save_as_cursor) as u16;
 
 			let blocks = vec![
-				PromptBlock { bg: Color::DarkGreen, fg: Color::Black, text: label },
-				PromptBlock { bg: Color::DarkGrey, fg: Color::White, text: input_display },
+				PromptBlock {
+					bg: Color::DarkGreen,
+					fg: Color::Black,
+					text: label,
+				},
+				PromptBlock {
+					bg: Color::DarkGrey,
+					fg: Color::White,
+					text: input_display,
+				},
 			];
-			Some(PromptLayout { rows, cursor_offset, blocks })
+			Some(PromptLayout {
+				rows,
+				cursor_offset,
+				blocks,
+			})
 		}
 		Mode::ConfirmQuit => {
 			let label1 = " Quit warning: ".to_string();
-			let label2 = " Unsaved changes! (s)ave and quit, (f)orce quit, Esc to cancel ".to_string();
-			
+			let label2 =
+				" Unsaved changes! (s)ave and quit, (f)orce quit, Esc to cancel ".to_string();
+
 			let total = label1.chars().count() + label2.chars().count();
 			let rows = ((total + w - 1) / w) as u16;
 
 			let blocks = vec![
-				PromptBlock { bg: Color::DarkRed, fg: Color::Black, text: label1 },
-				PromptBlock { bg: Color::Blue, fg: Color::Black, text: label2 },
+				PromptBlock {
+					bg: Color::DarkRed,
+					fg: Color::Black,
+					text: label1,
+				},
+				PromptBlock {
+					bg: Color::Blue,
+					fg: Color::Black,
+					text: label2,
+				},
 			];
-			Some(PromptLayout { rows, cursor_offset: 0, blocks })
+			Some(PromptLayout {
+				rows,
+				cursor_offset: 0,
+				blocks,
+			})
 		}
-		_ => None
+		_ => None,
 	}
 }
 
 /// Uniform renderer interpreting constructed runtime blocks natively.
-pub fn render_prompt_overlay<W: Write>(
-	w: &mut W,
+pub fn render_prompt_overlay(
+	screen: &mut super::buffer::ScreenBuffer,
 	vp: &Viewport,
 	layout: &PromptLayout,
-) -> io::Result<()> {
-	if layout.rows == 0 { return Ok(()); }
+) {
+	if layout.rows == 0 {
+		return;
+	}
 	let bar_y = vp.height.saturating_sub(1 + layout.rows);
-	w.queue(cursor::MoveTo(0, bar_y))?;
+	screen.mov_to(0, bar_y);
 
 	let mut used: usize = 0;
 
 	for block in &layout.blocks {
-		w.queue(SetBackgroundColor(block.bg))?;
-		w.queue(SetForegroundColor(block.fg))?;
-		w.queue(style::Print(&block.text))?;
+		screen.set_bg(block.bg);
+		screen.set_fg(block.fg);
+		screen.put_str(&block.text);
 		used += block.text.chars().count();
 	}
 
 	let total_cells = (layout.rows as usize) * (vp.width as usize);
 	let remaining = total_cells.saturating_sub(used);
 	if remaining > 0 {
-		w.queue(SetBackgroundColor(Color::DarkGrey))?;
-		write_spaces(w, remaining)?;
+		screen.set_bg(Color::DarkGrey);
+		for _ in 0..remaining {
+			screen.put_char(' ');
+		}
 	}
 
-	w.queue(SetBackgroundColor(Color::Reset))?;
-	w.queue(SetForegroundColor(Color::Reset))?;
-	Ok(())
+	screen.reset_colors();
 }

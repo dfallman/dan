@@ -1,5 +1,5 @@
-use std::path::Path;
 use crate::buffer::Buffer;
+use std::path::Path;
 
 /// Deeply inspects the nested path hierarchy natively parsing applicable `.editorconfig` components and strictly applies mapped constraints natively cleanly mutating Buffer defaults.
 pub fn load_project_settings(path: &Path, buffer: &mut Buffer) {

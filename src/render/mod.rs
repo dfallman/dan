@@ -1,17 +1,17 @@
-mod chrome;
-mod text;
+pub mod buffer;
+pub mod chrome;
+pub mod text;
 
 use crossterm::{
 	cursor,
-	style::{self, Color, SetBackgroundColor, SetForegroundColor},
+	style::Color,
 	terminal,
-	QueueableCommand,
 };
 use std::io::{self, Write};
 
-use crate::editor::Editor;
 use crate::editor::mode::Mode;
 use crate::editor::visual_rows_for;
+use crate::editor::Editor;
 use crate::utils::char_width;
 
 /// Viewport dimensions, cached from the Editor.
@@ -60,20 +60,6 @@ impl Viewport {
 	}
 }
 
-/// A reusable buffer of spaces for padding lines — avoids allocating
-/// a new `String` every time we need to pad.
-const PAD_CHUNK: &str = "                                                                                                                                                                                                                                                                ";
-
-/// Write `n` space characters by repeatedly printing from PAD_CHUNK.
-fn write_spaces<W: Write>(w: &mut W, n: usize) -> io::Result<()> {
-	let mut remaining = n;
-	while remaining > 0 {
-		let chunk = remaining.min(PAD_CHUNK.len());
-		w.queue(style::Print(&PAD_CHUNK[..chunk]))?;
-		remaining -= chunk;
-	}
-	Ok(())
-}
 
 /// Calculate the width needed for line numbers.
 fn line_number_width(total_lines: usize) -> usize {
@@ -91,19 +77,29 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 
 	// Adjust scroll to keep cursor visible (with scroll_off padding)
 	let cursor_line = editor.cursors.cursor().line;
-	let scroll_off = if vp.height <= 20 { 0 } else { editor.config.scroll_off };
+	let scroll_off = if vp.height <= 20 {
+		0
+	} else {
+		editor.config.scroll_off
+	};
 	if editor.config.wrap_lines {
 		// Wrap mode: scroll must account for visual rows, not just buffer lines.
 		// Re-derive text_area_width for the helper (gutter not computed yet, use temp)
 		let line_count_tmp = editor.buffer().line_count();
 		let gw_tmp = if editor.config.line_numbers {
 			line_number_width(line_count_tmp)
-		} else { 0 };
+		} else {
+			0
+		};
 		let taw_tmp = (vp.width as usize).saturating_sub(gw_tmp + 1);
 		let tab_w = editor.tab_width();
 		if taw_tmp > 0 {
 			// Find which visual row the cursor is on within its buffer line.
-			let cur_vrows = visual_rows_for(editor.buffer().text.line_slice(cursor_line).chars(), tab_w, taw_tmp);
+			let cur_vrows = visual_rows_for(
+				editor.buffer().text.line_slice(cursor_line).chars(),
+				tab_w,
+				taw_tmp,
+			);
 			let cursor_col = editor.cursors.cursor().col;
 			let mut cur_vrow_idx = cur_vrows.len().saturating_sub(1);
 			for (i, &(start, end)) in cur_vrows.iter().enumerate() {
@@ -128,24 +124,43 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 				if editor.scroll_y == cursor_line {
 					rows_above = cur_vrow_idx.saturating_sub(editor.scroll_vrow);
 				} else {
-					let vrows_in_top = visual_rows_for(editor.buffer().text.line_slice(editor.scroll_y).chars(), tab_w, taw_tmp).len();
+					let vrows_in_top = visual_rows_for(
+						editor.buffer().text.line_slice(editor.scroll_y).chars(),
+						tab_w,
+						taw_tmp,
+					)
+					.len();
 					rows_above += vrows_in_top.saturating_sub(editor.scroll_vrow);
-					
+
 					for bl in (editor.scroll_y + 1)..cursor_line {
-						rows_above += visual_rows_for(editor.buffer().text.line_slice(bl).chars(), tab_w, taw_tmp).len();
+						rows_above += visual_rows_for(
+							editor.buffer().text.line_slice(bl).chars(),
+							tab_w,
+							taw_tmp,
+						)
+						.len();
 					}
 					rows_above += cur_vrow_idx;
 				}
 
-				if rows_above >= scroll_off { break; }
-				if editor.scroll_y == 0 && editor.scroll_vrow == 0 { break; }
-				
+				if rows_above >= scroll_off {
+					break;
+				}
+				if editor.scroll_y == 0 && editor.scroll_vrow == 0 {
+					break;
+				}
+
 				// Scroll UP one visual row
 				if editor.scroll_vrow > 0 {
 					editor.scroll_vrow -= 1;
 				} else {
 					editor.scroll_y -= 1;
-					let count = visual_rows_for(editor.buffer().text.line_slice(editor.scroll_y).chars(), tab_w, taw_tmp).len();
+					let count = visual_rows_for(
+						editor.buffer().text.line_slice(editor.scroll_y).chars(),
+						tab_w,
+						taw_tmp,
+					)
+					.len();
 					editor.scroll_vrow = count.saturating_sub(1);
 				}
 			}
@@ -158,21 +173,36 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 				if editor.scroll_y == cursor_line {
 					vrow_from_top = cur_vrow_idx.saturating_sub(editor.scroll_vrow);
 				} else {
-					let vrows_in_top = visual_rows_for(editor.buffer().text.line_slice(editor.scroll_y).chars(), tab_w, taw_tmp).len();
+					let vrows_in_top = visual_rows_for(
+						editor.buffer().text.line_slice(editor.scroll_y).chars(),
+						tab_w,
+						taw_tmp,
+					)
+					.len();
 					vrow_from_top += vrows_in_top.saturating_sub(editor.scroll_vrow);
-					
+
 					for bl in (editor.scroll_y + 1)..cursor_line {
-						vrow_from_top += visual_rows_for(editor.buffer().text.line_slice(bl).chars(), tab_w, taw_tmp).len();
+						vrow_from_top += visual_rows_for(
+							editor.buffer().text.line_slice(bl).chars(),
+							tab_w,
+							taw_tmp,
+						)
+						.len();
 					}
 					vrow_from_top += cur_vrow_idx;
 				}
-				
+
 				if vrow_from_top <= max_row {
 					break;
 				}
-				
+
 				// Scroll DOWN one visual row
-				let count = visual_rows_for(editor.buffer().text.line_slice(editor.scroll_y).chars(), tab_w, taw_tmp).len();
+				let count = visual_rows_for(
+					editor.buffer().text.line_slice(editor.scroll_y).chars(),
+					tab_w,
+					taw_tmp,
+				)
+				.len();
 				if editor.scroll_vrow + 1 < count {
 					editor.scroll_vrow += 1;
 				} else {
@@ -209,9 +239,14 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 			let lsl = editor.buffer().text.line_slice(cursor_pos.line);
 			let mut vc: usize = 0;
 			for (i, ch) in lsl.chars().enumerate() {
-				if i >= cursor_pos.col { break; }
-				if ch == '\t' { vc += tab_w - (vc % tab_w); }
-				else { vc += char_width(ch, tab_w); }
+				if i >= cursor_pos.col {
+					break;
+				}
+				if ch == '\t' {
+					vc += tab_w - (vc % tab_w);
+				} else {
+					vc += char_width(ch, tab_w);
+				}
 			}
 			vc
 		} else {
@@ -222,14 +257,15 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 			editor.scroll_x = cursor_vcol.saturating_sub(h_margin);
 		}
 		if cursor_vcol >= editor.scroll_x + text_area_width.saturating_sub(h_margin) {
-			editor.scroll_x = cursor_vcol.saturating_sub(text_area_width.saturating_sub(h_margin + 1));
+			editor.scroll_x =
+				cursor_vcol.saturating_sub(text_area_width.saturating_sub(h_margin + 1));
 		}
 	} else {
 		editor.scroll_x = 0;
 	}
 
-	w.queue(cursor::Hide)?;
-	w.queue(cursor::MoveTo(0, 0))?;
+	// Initialize Active Rendering Frame
+	let mut screen = buffer::ScreenBuffer::new(vp.width, vp.height);
 
 	// -- Render text lines --
 	// Get selection range for highlighting
@@ -238,33 +274,50 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 
 	if editor.config.wrap_lines {
 		text::render_wrap(
-			editor, w, &vp, text_height, gutter_width,
-			show_line_numbers, text_area_width, sel_range,
-			highlight_active, cursor_line,
-		)?;
+			editor,
+			&mut screen,
+			&vp,
+			text_height,
+			gutter_width,
+			show_line_numbers,
+			text_area_width,
+			sel_range,
+			highlight_active,
+			cursor_line,
+		);
 	} else {
 		text::render_nowrap(
-			editor, w, &vp, text_height, gutter_width,
-			show_line_numbers, text_area_width, sel_range,
-			highlight_active, cursor_line,
-		)?;
+			editor,
+			&mut screen,
+			&vp,
+			text_height,
+			gutter_width,
+			show_line_numbers,
+			text_area_width,
+			sel_range,
+			highlight_active,
+			cursor_line,
+		);
 	}
 
 	// -- Render status bar (always the row just after text) --
-	chrome::render_status_bar(editor, w, &vp)?;
+	chrome::render_status_bar(editor, &mut screen, &vp);
 
 	// -- Render help bar or dynamically derived Prompt Overlay (isolated by PromptLayout) --
 	let prompt_layout = chrome::build_prompt(editor, vp.width);
 	if prompt_layout.is_none() && editor.show_help {
-		chrome::render_help_bar(editor, w, &vp)?;
+		chrome::render_help_bar(editor, &mut screen, &vp);
 	}
 
 	if let Some(layout) = &prompt_layout {
-		chrome::render_prompt_overlay(w, &vp, layout)?;
+		chrome::render_prompt_overlay(&mut screen, &vp, layout);
 	}
 
 	// -- Position the cursor --
-	if matches!(editor.mode, Mode::Searching | Mode::ReplacingSearch | Mode::ReplacingWith) {
+	if matches!(
+		editor.mode,
+		Mode::Searching | Mode::ReplacingSearch | Mode::ReplacingWith
+	) {
 		// During search, draw an outline cursor in the document at the saved position.
 		if let Some((saved_line, saved_col)) = editor.search_saved_cursor {
 			if saved_line >= editor.scroll_y && saved_line < editor.scroll_y + text_height {
@@ -288,29 +341,36 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 					saved_col
 				};
 				let max_w = (vp.width.saturating_sub(1)) as usize;
-				let outline_x = (gutter_width + 1 + saved_visual_col.saturating_sub(editor.scroll_x)).min(max_w) as u16;
+				let outline_x = (gutter_width
+					+ 1 + saved_visual_col.saturating_sub(editor.scroll_x))
+				.min(max_w) as u16;
 				// Draw the character (or space) at that position with an underline-style outline.
-				w.queue(cursor::MoveTo(outline_x, saved_screen_y))?;
-				w.queue(SetBackgroundColor(Color::DarkGrey))?;
-				w.queue(SetForegroundColor(Color::White))?;
-				w.queue(style::SetAttribute(style::Attribute::Underlined))?;
+				// Draw the character (or space) at that position with an underline-style outline.
+				screen.mov_to(outline_x, saved_screen_y);
+				screen.set_bg(Color::DarkGrey);
+				screen.set_fg(Color::White);
+				screen.set_underline(true);
+
 				// Print the actual character at the cursor position, or a space if past EOL.
 				let outline_ch = if saved_line < line_count {
 					let line_slice = editor.buffer().text.line_slice(saved_line);
-					line_slice.chars().nth(saved_col)
+					line_slice
+						.chars()
+						.nth(saved_col)
 						.filter(|c| *c != '\n' && *c != '\r')
 						.unwrap_or(' ')
 				} else {
 					' '
 				};
 				if outline_ch == '\t' {
-					w.queue(style::Print(" "))?;
+					screen.put_str(" ");
 				} else {
-					w.queue(style::Print(format!("{}", outline_ch)))?;
+					screen.put_char(outline_ch);
 				}
-				w.queue(style::SetAttribute(style::Attribute::NoUnderline))?;
-				w.queue(SetBackgroundColor(Color::Reset))?;
-				w.queue(SetForegroundColor(Color::Reset))?;
+
+				screen.set_underline(false);
+				screen.set_bg(Color::Reset);
+				screen.set_fg(Color::Reset);
 			}
 		}
 	}
@@ -318,16 +378,18 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 	if let Some(layout) = &prompt_layout {
 		let offset = layout.cursor_offset;
 		let rows = layout.rows;
-		if rows > 0 && offset > 0 { // offset > 0 effectively bounds cursor-showing modes
+		if rows > 0 && offset > 0 {
+			// offset > 0 effectively bounds cursor-showing modes
 			let prompt_y = vp.height.saturating_sub(1 + rows);
 			let cursor_x = offset % vp.width;
 			let cursor_y = prompt_y + (offset / vp.width);
-			w.queue(cursor::MoveTo(cursor_x, cursor_y))?;
-			w.queue(cursor::Show)?;
-			w.queue(cursor::SetCursorStyle::BlinkingBlock)?;
+			screen.term_cursor_x = cursor_x;
+			screen.term_cursor_y = cursor_y;
+			screen.hide_cursor = false;
+			screen.cursor_style = cursor::SetCursorStyle::BlinkingBlock;
 		} else if matches!(editor.mode, Mode::ReplacingStep) {
 			// hide cursor during step evaluations specifically
-			w.queue(cursor::Hide)?;
+			screen.hide_cursor = true;
 		}
 	} else {
 		// Normal mode — position cursor in the document.
@@ -339,11 +401,20 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 			// relative to the start of the cursor's visual row.
 			let mut sy: usize = 0;
 			for bl in editor.scroll_y..cursor_pos.line.min(line_count) {
-				sy += visual_rows_for(editor.buffer().text.line_slice(bl).chars(), tab_w, text_area_width).len();
+				sy += visual_rows_for(
+					editor.buffer().text.line_slice(bl).chars(),
+					tab_w,
+					text_area_width,
+				)
+				.len();
 			}
 			// Find cursor's visual row within its buffer line.
 			let (vrow_idx, vrow_start) = if cursor_pos.line < line_count {
-				let vrows = visual_rows_for(editor.buffer().text.line_slice(cursor_pos.line).chars(), tab_w, text_area_width);
+				let vrows = visual_rows_for(
+					editor.buffer().text.line_slice(cursor_pos.line).chars(),
+					tab_w,
+					text_area_width,
+				);
 				let mut idx = vrows.len().saturating_sub(1);
 				for (i, &(start, end)) in vrows.iter().enumerate() {
 					if cursor_pos.col >= start && (cursor_pos.col < end || i == vrows.len() - 1) {
@@ -363,10 +434,17 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 				let line_slice = editor.buffer().text.line_slice(cursor_pos.line);
 				let mut v: usize = 0;
 				for (i, ch) in line_slice.chars().enumerate() {
-					if i < vrow_start { continue; }
-					if i >= cursor_pos.col { break; }
-					if ch == '\t' { v += tab_w - (v % tab_w); }
-					else { v += char_width(ch, tab_w); }
+					if i < vrow_start {
+						continue;
+					}
+					if i >= cursor_pos.col {
+						break;
+					}
+					if ch == '\t' {
+						v += tab_w - (v % tab_w);
+					} else {
+						v += char_width(ch, tab_w);
+					}
 				}
 				v
 			} else {
@@ -380,9 +458,14 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 				let line_slice = editor.buffer().text.line_slice(cursor_pos.line);
 				let mut v: usize = 0;
 				for (i, ch) in line_slice.chars().enumerate() {
-					if i >= cursor_pos.col { break; }
-					if ch == '\t' { v += tab_w - (v % tab_w); }
-					else { v += char_width(ch, tab_w); }
+					if i >= cursor_pos.col {
+						break;
+					}
+					if ch == '\t' {
+						v += tab_w - (v % tab_w);
+					} else {
+						v += char_width(ch, tab_w);
+					}
 				}
 				v
 			} else {
@@ -391,15 +474,27 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 			(sy, vc)
 		};
 		let max_w = (vp.width.saturating_sub(1)) as usize;
-		let screen_x = (gutter_width + 1 + visual_col.saturating_sub(editor.scroll_x)).min(max_w) as u16;
+		let screen_x =
+			(gutter_width + 1 + visual_col.saturating_sub(editor.scroll_x)).min(max_w) as u16;
 		let screen_y = screen_y.min(u16::MAX as usize) as u16;
-		w.queue(cursor::MoveTo(screen_x, screen_y))?;
-		w.queue(cursor::Show)?;
+		screen.term_cursor_x = screen_x;
+		screen.term_cursor_y = screen_y;
+		screen.hide_cursor = false;
 
 		// Pico-style: always use a steady block cursor (like a normal text editor)
-		w.queue(cursor::SetCursorStyle::SteadyBlock)?;
+		screen.cursor_style = cursor::SetCursorStyle::SteadyBlock;
 	}
 
-	w.flush()?;
+	// -- Execution Front/Back Matrix Flush --
+	if let Some(ref old_screen) = editor.last_screen {
+		screen.diff(old_screen, w)?;
+	} else {
+		// No bounds to diff against globally (initial load mapping completely rendering bounds)
+		let empty = buffer::ScreenBuffer::new(0, 0);
+		screen.diff(&empty, w)?;
+	}
+
+	editor.last_screen = Some(screen);
+
 	Ok(())
 }
