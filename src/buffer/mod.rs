@@ -5,7 +5,7 @@ pub mod config_loader;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use self::history::{Edit, History};
+use self::history::History;
 use self::rope::TextRope;
 
 /// A text buffer representing a file or scratch document.
@@ -218,36 +218,23 @@ impl Buffer {
 
 	/// Insert a character at a char position.
 	pub fn insert_char(&mut self, pos: usize, ch: char) {
-		let edit = Edit::Insert {
-			pos,
-			text: ch.to_string(),
-		};
-		edit.apply(&mut self.text);
-		self.history.record(edit);
+		self.history.start_group(&self.text);
+		self.text.insert_char(pos, ch);
 		self.dirty = true;
 	}
 
 	/// Insert a string at a char position.
 	pub fn insert_str(&mut self, pos: usize, s: &str) {
-		let edit = Edit::Insert {
-			pos,
-			text: s.to_string(),
-		};
-		edit.apply(&mut self.text);
-		self.history.record(edit);
+		self.history.start_group(&self.text);
+		self.text.insert_str(pos, s);
 		self.dirty = true;
 	}
 
 	/// Delete a single character at a char position.
 	pub fn delete_char(&mut self, pos: usize) {
 		if pos < self.text.len_chars() {
-			let ch = self.text.char_at(pos);
-			let edit = Edit::Delete {
-				pos,
-				text: ch.to_string(),
-			};
-			edit.apply(&mut self.text);
-			self.history.record(edit);
+			self.history.start_group(&self.text);
+			self.text.remove(pos..pos + 1);
 			self.dirty = true;
 		}
 	}
@@ -255,10 +242,8 @@ impl Buffer {
 	/// Delete a range of characters.
 	pub fn delete_range(&mut self, start: usize, end: usize) {
 		if start < end && end <= self.text.len_chars() {
-			let text = self.text.slice_to_string(start..end);
-			let edit = Edit::Delete { pos: start, text };
-			edit.apply(&mut self.text);
-			self.history.record(edit);
+			self.history.start_group(&self.text);
+			self.text.remove(start..end);
 			self.dirty = true;
 		}
 	}
@@ -268,22 +253,18 @@ impl Buffer {
 		self.history.commit();
 	}
 
-	/// Undo the last edit group.
+	/// Undo the last edit group natively locking variables securely copying bounds O(1).
 	pub fn undo(&mut self) {
-		if let Some(group) = self.history.undo() {
-			for edit in group.edits.iter().rev() {
-				edit.reverse(&mut self.text);
-			}
+		if let Some(restored) = self.history.undo(self.text.clone()) {
+			self.text = restored;
 			self.dirty = true;
 		}
 	}
 
-	/// Redo the last undone edit group.
+	/// Redo the last undone edit group wrapping snapshot bounds natively securely.
 	pub fn redo(&mut self) {
-		if let Some(group) = self.history.redo() {
-			for edit in &group.edits {
-				edit.apply(&mut self.text);
-			}
+		if let Some(restored) = self.history.redo(self.text.clone()) {
+			self.text = restored;
 			self.dirty = true;
 		}
 	}

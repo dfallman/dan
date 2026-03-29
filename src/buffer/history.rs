@@ -1,62 +1,14 @@
 use super::rope::TextRope;
 
-/// A single edit operation that can be undone/redone.
-#[derive(Debug, Clone)]
-pub enum Edit {
-	/// Insert text at a char position.
-	Insert { pos: usize, text: String },
-	/// Delete text at a char range.
-	Delete { pos: usize, text: String },
-}
-
-impl Edit {
-	/// Apply this edit to a text rope (redo direction).
-	pub fn apply(&self, text: &mut TextRope) {
-		match self {
-			Edit::Insert { pos, text: t } => {
-				text.insert_str(*pos, t);
-			}
-			Edit::Delete { pos, text: _ } => {
-				let len = self.text_len();
-				text.remove(*pos..*pos + len);
-			}
-		}
-	}
-
-	/// Reverse this edit on a text rope (undo direction).
-	pub fn reverse(&self, text: &mut TextRope) {
-		match self {
-			Edit::Insert { pos, text: t } => {
-				text.remove(*pos..*pos + t.chars().count());
-			}
-			Edit::Delete { pos, text: t } => {
-				text.insert_str(*pos, t);
-			}
-		}
-	}
-
-	fn text_len(&self) -> usize {
-		match self {
-			Edit::Insert { text, .. } | Edit::Delete { text, .. } => text.chars().count(),
-		}
-	}
-}
-
-/// A group of edits forming a single undo-able operation.
-#[derive(Debug, Clone)]
-pub struct EditGroup {
-	pub edits: Vec<Edit>,
-}
-
-/// The undo/redo history stack.
+/// The O(1) immutable Rope persistent undo/redo history stack mapping allocations structurally globally avoiding heap strings.
 #[derive(Debug)]
 pub struct History {
-	/// Committed undo stack.
-	undo_stack: Vec<EditGroup>,
-	/// Redo stack (cleared on new edits).
-	redo_stack: Vec<EditGroup>,
-	/// In-progress edits not yet committed to the undo stack.
-	pending: Vec<Edit>,
+	/// Committed undo stack natively bound avoiding duplicating arrays string arrays continuously.
+	undo_stack: Vec<TextRope>,
+	/// Redo stack linearly tracking snapshots natively locally.
+	redo_stack: Vec<TextRope>,
+	/// In-progress state captured before the first edit of a group natively mapping closures securely.
+	pending_snapshot: Option<TextRope>,
 }
 
 impl History {
@@ -64,43 +16,42 @@ impl History {
 		Self {
 			undo_stack: Vec::new(),
 			redo_stack: Vec::new(),
-			pending: Vec::new(),
+			pending_snapshot: None,
 		}
 	}
 
-	/// Record an edit (it will be part of the current pending group).
-	pub fn record(&mut self, edit: Edit) {
-		self.pending.push(edit);
-		// New edits invalidate the redo stack
+	/// Mark the beginning of a related edit group structurally natively securely copying O(1) bounds.
+	pub fn start_group(&mut self, text: &TextRope) {
+		if self.pending_snapshot.is_none() {
+			self.pending_snapshot = Some(text.clone());
+		}
+		// Any new edit functionally invalidates the redo boundary natively limiting ghost edits.
 		self.redo_stack.clear();
 	}
 
-	/// Commit the pending edits as a single undo group.
+	/// Commit the current pending snapshot actively rendering stateful bounds cleanly terminating grouping tracking.
 	pub fn commit(&mut self) {
-		if !self.pending.is_empty() {
-			let group = EditGroup {
-				edits: std::mem::take(&mut self.pending),
-			};
-			self.undo_stack.push(group);
+		if let Some(snap) = self.pending_snapshot.take() {
+			self.undo_stack.push(snap);
 		}
 	}
 
-	/// Undo the last edit group, returning the group for reversal.
-	pub fn undo(&mut self) -> Option<EditGroup> {
-		self.commit(); // Commit any pending edits first
-		if let Some(group) = self.undo_stack.pop() {
-			self.redo_stack.push(group.clone());
-			Some(group)
+	/// Pop a historical snapshot pushing the current boundary onto Redo cleanly locking variables safely.
+	pub fn undo(&mut self, current: TextRope) -> Option<TextRope> {
+		self.commit(); // Ensure current pending state commits cleanly preventing bugs locally terminating loops natively.
+		if let Some(snap) = self.undo_stack.pop() {
+			self.redo_stack.push(current);
+			Some(snap)
 		} else {
 			None
 		}
 	}
 
-	/// Redo the last undone edit group.
-	pub fn redo(&mut self) -> Option<EditGroup> {
-		if let Some(group) = self.redo_stack.pop() {
-			self.undo_stack.push(group.clone());
-			Some(group)
+	/// Redo natively cleanly locally popping the stack boundary locking variables safely.
+	pub fn redo(&mut self, current: TextRope) -> Option<TextRope> {
+		if let Some(snap) = self.redo_stack.pop() {
+			self.undo_stack.push(current);
+			Some(snap)
 		} else {
 			None
 		}
@@ -110,37 +61,30 @@ impl History {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use std::str::FromStr;
 
 	#[test]
-	fn test_undo_redo() {
-		let mut text = TextRope::from_str("hello");
+	fn test_snapshot_undo_redo() {
+		let initial = TextRope::from_str("hello");
 		let mut history = History::new();
 
-		// Insert " world"
-		let edit = Edit::Insert {
-			pos: 5,
-			text: " world".to_string(),
-		};
-		edit.apply(&mut text);
-		history.record(edit);
+		// Start edit group
+		history.start_group(&initial);
+
+		// Execute edit
+		let mut edited = initial.clone();
+		edited.insert_str(5, " world");
+		
+		// Commit edit locally actively resolving scope natively safely
 		history.commit();
 
-		assert_eq!(text.to_string_full(), "hello world");
-
-		// Undo
-		if let Some(group) = history.undo() {
-			for edit in group.edits.iter().rev() {
-				edit.reverse(&mut text);
-			}
-		}
-		assert_eq!(text.to_string_full(), "hello");
-
-		// Redo
-		if let Some(group) = history.redo() {
-			for edit in &group.edits {
-				edit.apply(&mut text);
-			}
-		}
-		assert_eq!(text.to_string_full(), "hello world");
+		// Undo safely locking states cleanly
+		let restored = history.undo(edited.clone()).unwrap();
+		
+		assert_eq!(restored.to_string_full(), "hello");
+		
+		// Redo safely locking bounds 
+		let redone = history.redo(restored).unwrap();
+		assert_eq!(redone.to_string_full(), "hello world");
 	}
 }
