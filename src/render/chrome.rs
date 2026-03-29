@@ -46,7 +46,7 @@ pub fn render_status_bar<W: Write>(
 	// Status message (if any)
 	if let Some(ref msg) = editor.status_msg {
 		let msg_part = format!(" {} ", msg);
-		w.queue(SetBackgroundColor(Color::DarkBlue))?;
+		w.queue(SetBackgroundColor(Color::Blue))?;
 		w.queue(SetForegroundColor(Color::Black))?;
 		w.queue(style::Print(&msg_part))?;
 		w.queue(SetBackgroundColor(Color::White))?;
@@ -106,7 +106,7 @@ fn help_shortcuts() -> Vec<(&'static str, &'static str)> {
 		("^W", "Wrap text"),
 		("^L", "Lint"),
 		("^E", "Comment"),
-		("^T", "Theme"),
+		("^T", "Syntax highl"),
 		("^H", "Help"),
 	]
 }
@@ -218,7 +218,7 @@ pub fn render_help_bar<W: Write>(
 					write_spaces(w, remaining)?;
 				}
 				w.queue(SetBackgroundColor(Color::White))?;
-				w.queue(SetForegroundColor(Color::DarkGrey))?;
+				w.queue(SetForegroundColor(Color::Black))?;
 				w.queue(style::Print(&version_str))?;
 			} else {
 				if available > 0 {
