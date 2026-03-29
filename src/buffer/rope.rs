@@ -47,6 +47,11 @@ impl TextRope {
 		self.rope.insert(char_pos, s);
 	}
 
+	/// Insert a char at a given char offset — O(log n).
+	pub fn insert_char(&mut self, char_pos: usize, ch: char) {
+		self.rope.insert_char(char_pos, ch);
+	}
+
 	/// Remove a range of characters — O(log n).
 	pub fn remove(&mut self, range: Range<usize>) {
 		self.rope.remove(range);

@@ -136,9 +136,10 @@ impl Editor {
 		let now = std::time::Instant::now();
 		if self.buffer().dirty && now.duration_since(self.last_autosave).as_secs() >= 5 {
 			if let Some(ref swp) = self.buffer().swp_path {
-				let content = self.buffer().text.to_string_full();
+				let text_clone = self.buffer().text.clone(); // O(1) Arc shallow clone
 				let p = swp.clone();
 				std::thread::spawn(move || {
+					let content = text_clone.to_string_full();
 					crate::recovery::write_swap_atomic(&p, &content);
 				});
 			}
