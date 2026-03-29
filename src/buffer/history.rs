@@ -61,8 +61,6 @@ impl History {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use std::str::FromStr;
-
 	#[test]
 	fn test_snapshot_undo_redo() {
 		let initial = TextRope::from_str("hello");
@@ -74,16 +72,16 @@ mod tests {
 		// Execute edit
 		let mut edited = initial.clone();
 		edited.insert_str(5, " world");
-		
+
 		// Commit edit locally actively resolving scope natively safely
 		history.commit();
 
 		// Undo safely locking states cleanly
 		let restored = history.undo(edited.clone()).unwrap();
-		
+
 		assert_eq!(restored.to_string_full(), "hello");
-		
-		// Redo safely locking bounds 
+
+		// Redo safely locking bounds
 		let redone = history.redo(restored).unwrap();
 		assert_eq!(redone.to_string_full(), "hello world");
 	}

@@ -3,14 +3,17 @@
 /// A visual column counts terminal columns from the left margin.  It differs
 /// from a char index whenever the line contains tabs (variable-width) or wide
 /// characters (CJK, fullwidth).
-
 use crate::utils::char_width;
 
 /// Compute the visual column at a given char index within a line of text.
 ///
 /// Tabs use the tabstop formula `tab_w - (vc % tab_w)` so that they snap to
 /// the next tabstop boundary.
-pub(crate) fn visual_col_at<I: IntoIterator<Item = char>>(chars: I, char_idx: usize, tab_w: usize) -> usize {
+pub(crate) fn visual_col_at<I: IntoIterator<Item = char>>(
+	chars: I,
+	char_idx: usize,
+	tab_w: usize,
+) -> usize {
 	let mut vc: usize = 0;
 	for (i, ch) in chars.into_iter().enumerate() {
 		if i >= char_idx {
@@ -120,39 +123,60 @@ mod tests {
 	// ── char_idx_for_visual_col ───────────────────────────────────
 	#[test]
 	fn ascii_char_idx() {
-		assert_eq!(char_idx_for_visual_col("hello".chars(), 5, 0, 5, 3, 4, true), 3);
+		assert_eq!(
+			char_idx_for_visual_col("hello".chars(), 5, 0, 5, 3, 4, true),
+			3
+		);
 	}
 
 	#[test]
 	fn tab_snap_start() {
 		// "\thello" (len=6): target vcol 2 → inside the tab → snap to idx 1 (after tab)
-		assert_eq!(char_idx_for_visual_col("\thello".chars(), 6, 0, 6, 2, 4, true), 1);
+		assert_eq!(
+			char_idx_for_visual_col("\thello".chars(), 6, 0, 6, 2, 4, true),
+			1
+		);
 	}
 
 	#[test]
 	fn tab_exact_boundary() {
 		// target vcol 4 → exactly at the end of the tab → idx 1
-		assert_eq!(char_idx_for_visual_col("\thello".chars(), 6, 0, 6, 4, 4, true), 1);
+		assert_eq!(
+			char_idx_for_visual_col("\thello".chars(), 6, 0, 6, 4, 4, true),
+			1
+		);
 	}
 
 	#[test]
 	fn cjk_snap() {
 		// "ab龙cd": a=vcol0, b=vcol1, 龙=vcol2..3 (2-wide), c=vcol4, d=vcol5
 		// target vcol 3 → inside right half of 龙 → snaps to idx 3 ('c')
-		assert_eq!(char_idx_for_visual_col("ab龙cd".chars(), 5, 0, 5, 3, 4, true), 3);
+		assert_eq!(
+			char_idx_for_visual_col("ab龙cd".chars(), 5, 0, 5, 3, 4, true),
+			3
+		);
 		// target vcol 2 → exactly at start of 龙 → returns idx 2 (龙)
-		assert_eq!(char_idx_for_visual_col("ab龙cd".chars(), 5, 0, 5, 2, 4, true), 2);
+		assert_eq!(
+			char_idx_for_visual_col("ab龙cd".chars(), 5, 0, 5, 2, 4, true),
+			2
+		);
 	}
 
 	#[test]
 	fn short_line_clamp() {
-		assert_eq!(char_idx_for_visual_col("hi".chars(), 2, 0, 2, 10, 4, true), 2);
+		assert_eq!(
+			char_idx_for_visual_col("hi".chars(), 2, 0, 2, 10, 4, true),
+			2
+		);
 	}
 
 	#[test]
 	fn non_last_row_clamp() {
 		// On a non-last row, cap at row_end - 1
-		assert_eq!(char_idx_for_visual_col("hello world".chars(), 11, 0, 5, 99, 4, false), 4);
+		assert_eq!(
+			char_idx_for_visual_col("hello world".chars(), 11, 0, 5, 99, 4, false),
+			4
+		);
 	}
 
 	#[test]
@@ -170,7 +194,15 @@ mod tests {
 		assert_eq!(short_col, 2); // at end
 
 		// Move down to long line again — restores to visual column
-		let restored_col = char_idx_for_visual_col(long.chars(), long.chars().count(), 0, long.chars().count(), start_vcol, tab_w, true);
+		let restored_col = char_idx_for_visual_col(
+			long.chars(),
+			long.chars().count(),
+			0,
+			long.chars().count(),
+			start_vcol,
+			tab_w,
+			true,
+		);
 		assert_eq!(restored_col, 15); // back to original
 	}
 }

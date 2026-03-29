@@ -1,6 +1,6 @@
+pub mod config_loader;
 pub mod history;
 pub mod rope;
-pub mod config_loader;
 
 use std::io;
 use std::path::{Path, PathBuf};
@@ -59,7 +59,7 @@ impl Buffer {
 		}
 
 		let bytes = std::fs::read(path)?;
-		
+
 		// If the file explicitly contains null bytes globally, it is functionally a binary file.
 		if bytes.contains(&0) {
 			return Err(io::Error::new(
@@ -138,17 +138,25 @@ impl Buffer {
 	/// Prepares the output buffer recursively enforcing `.editorconfig` bindings.
 	pub fn prepare_save_text(&self) -> String {
 		let mut text = self.text.to_string_full();
-		
+
 		if self.trim_on_save.unwrap_or(false) {
 			let mut processed = String::with_capacity(text.len());
 			for mut line in text.split_inclusive('\n') {
 				let has_nl = line.ends_with('\n');
 				let has_cr = line.ends_with("\r\n");
 				if has_nl {
-					line = if has_cr { &line[..line.len()-2] } else { &line[..line.len()-1] };
+					line = if has_cr {
+						&line[..line.len() - 2]
+					} else {
+						&line[..line.len() - 1]
+					};
 				}
 				processed.push_str(line.trim_end_matches(|c| c == ' ' || c == '\t'));
-				if has_cr { processed.push_str("\r\n"); } else if has_nl { processed.push('\n'); }
+				if has_cr {
+					processed.push_str("\r\n");
+				} else if has_nl {
+					processed.push('\n');
+				}
 			}
 			text = processed;
 		}
@@ -170,11 +178,11 @@ impl Buffer {
 			let text = self.prepare_save_text();
 			let (encoded_bytes, _, _) = self.encoding.encode(&text);
 			std::fs::write(path, encoded_bytes.as_ref())?;
-			
+
 			if let Some(ref swp) = self.swp_path {
 				crate::recovery::cleanup_swap(swp);
 			}
-			
+
 			self.dirty = false;
 			Ok(())
 		} else {
@@ -191,11 +199,11 @@ impl Buffer {
 		let (encoded_bytes, _, _) = self.encoding.encode(&text);
 		std::fs::write(path, encoded_bytes.as_ref())?;
 		self.file_path = Some(path.to_path_buf());
-		
+
 		if let Some(ref swp) = self.swp_path {
 			crate::recovery::cleanup_swap(swp);
 		}
-		
+
 		self.dirty = false;
 		Ok(())
 	}

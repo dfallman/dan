@@ -14,12 +14,11 @@ pub(crate) use viewport::visual_rows_for;
 use crate::buffer::Buffer;
 use crate::config::Config;
 use crate::editor::commands::Command;
-use crate::editor::cursor::{CursorSet, Cursor};
+use crate::editor::cursor::{Cursor, CursorSet};
 use crate::editor::mode::Mode;
 use crate::syntax::Highlighter;
 
 use crossterm::terminal;
-
 
 /// Core editor state — pico-style modeless editor.
 pub struct Editor {
@@ -87,6 +86,8 @@ pub struct Editor {
 	pub is_formatting: bool,
 	/// Tracker storing elapsed time bounds handling the async 5s Auto-Save shadow thread natively.
 	pub last_autosave: std::time::Instant,
+	/// Active rendering double-buffer tracking stateful matrices natively isolating ANSI boundaries.
+	pub last_screen: Option<crate::render::buffer::ScreenBuffer>,
 }
 
 impl Editor {
@@ -126,13 +127,14 @@ impl Editor {
 			fmt_rx: None,
 			is_formatting: false,
 			last_autosave: std::time::Instant::now(),
+			last_screen: None,
 		}
 	}
 
 	/// Evaluates unbound background systems actively verifying task payload receptions cleanly.
 	pub fn poll_async_tasks(&mut self) -> bool {
 		let mut did_work = false;
-		
+
 		let now = std::time::Instant::now();
 		if self.buffer().dirty && now.duration_since(self.last_autosave).as_secs() >= 5 {
 			if let Some(ref swp) = self.buffer().swp_path {
@@ -157,18 +159,28 @@ impl Editor {
 						let formatted_chars: Vec<char> = formatted_text.chars().collect();
 
 						let mut prefix = 0;
-						while prefix < content_chars.len() && prefix < formatted_chars.len() && content_chars[prefix] == formatted_chars[prefix] {
+						while prefix < content_chars.len()
+							&& prefix < formatted_chars.len()
+							&& content_chars[prefix] == formatted_chars[prefix]
+						{
 							prefix += 1;
 						}
 
 						let mut suffix = 0;
-						while suffix < content_chars.len() - prefix && suffix < formatted_chars.len() - prefix && content_chars[content_chars.len() - 1 - suffix] == formatted_chars[formatted_chars.len() - 1 - suffix] {
+						while suffix < content_chars.len() - prefix
+							&& suffix < formatted_chars.len() - prefix
+							&& content_chars[content_chars.len() - 1 - suffix]
+								== formatted_chars[formatted_chars.len() - 1 - suffix]
+						{
 							suffix += 1;
 						}
 
 						let end_char = content_chars.len() - suffix;
 						if prefix < end_char || prefix < formatted_chars.len() - suffix {
-							let insert_text: String = formatted_chars[prefix..formatted_chars.len() - suffix].iter().collect();
+							let insert_text: String = formatted_chars
+								[prefix..formatted_chars.len() - suffix]
+								.iter()
+								.collect();
 							self.buffer_mut().delete_range(prefix, end_char);
 							self.buffer_mut().insert_str(prefix, &insert_text);
 							self.buffer_mut().commit_edits();
@@ -191,7 +203,7 @@ impl Editor {
 	pub fn open_file(&mut self, path: &std::path::Path) -> std::io::Result<()> {
 		let mut buffer = Buffer::from_file(path)?;
 		let swp_path = crate::recovery::get_swap_path(path);
-		
+
 		if crate::recovery::check_recovery(&swp_path).is_some() {
 			self.mode = Mode::RecoverSwap;
 		}
@@ -235,17 +247,27 @@ impl Editor {
 		self.status_msg = None;
 	}
 
-
-
 	/// Toggle comments for the selected lines (or current line) using syntax-aware prefixes.
 	pub fn toggle_comment(&mut self) {
-		let syntax = self.highlighter.detect_syntax(self.buffer().file_path.as_deref());
+		let syntax = self
+			.highlighter
+			.detect_syntax(self.buffer().file_path.as_deref());
 		let prefix = match syntax.name.as_str() {
-			"Python" | "Ruby" | "Shell-Unix-Generic" | "Bourne Again Shell (bash)" | "YAML" | "TOML" | "Makefile" | "Perl" | "PowerShell" | "R" | "Elixir" => "#",
+			"Python"
+			| "Ruby"
+			| "Shell-Unix-Generic"
+			| "Bourne Again Shell (bash)"
+			| "YAML"
+			| "TOML"
+			| "Makefile"
+			| "Perl"
+			| "PowerShell"
+			| "R"
+			| "Elixir" => "#",
 			"Lua" | "SQL" | "Haskell" | "Ada" | "AppleScript" => "--",
 			"HTML" | "XML" | "Markdown" => "<!--", // Note: HTML usually requires `-->` block suffix, simplistic fallback used
-			"CSS" => "/*", // simplistic fallback used
-			_ => "//", // Rust, C, C++, JS, TS, Java, Go, Swift, PHP, D, etc.
+			"CSS" => "/*",                         // simplistic fallback used
+			_ => "//",                             // Rust, C, C++, JS, TS, Java, Go, Swift, PHP, D, etc.
 		};
 
 		let (start_line, end_line) = if self.has_selection() {
@@ -273,11 +295,11 @@ impl Editor {
 		for line_idx in (start_line..=end_line).rev() {
 			let line_text: String = self.buffer().text.line_slice(line_idx).chars().collect();
 			let stripped = line_text.trim_start();
-			
+
 			if stripped.is_empty() {
 				continue;
 			}
-			
+
 			let indent_len = line_text.chars().count() - stripped.chars().count();
 			let insert_pos = self.buffer().text.line_to_char(line_idx) + indent_len;
 
@@ -288,10 +310,12 @@ impl Editor {
 				} else {
 					prefix.chars().count()
 				};
-				self.buffer_mut().delete_range(insert_pos, insert_pos + to_remove);
+				self.buffer_mut()
+					.delete_range(insert_pos, insert_pos + to_remove);
 			} else {
 				// Inject comment natively pushing boundaries
-				self.buffer_mut().insert_str(insert_pos, &format!("{} ", prefix));
+				self.buffer_mut()
+					.insert_str(insert_pos, &format!("{} ", prefix));
 			}
 		}
 
@@ -326,7 +350,12 @@ impl Editor {
 				let c = self.cursors.cursor();
 				let len = self.line_len_no_newline(c.line);
 				self.cursors.primary_mut().head.set_col(len);
-				self.cursors.primary_mut().head.desired_vcol = crate::editor::visual_col::visual_col_at(self.buffer().text.line_slice(c.line).chars(), len, self.tab_width());
+				self.cursors.primary_mut().head.desired_vcol =
+					crate::editor::visual_col::visual_col_at(
+						self.buffer().text.line_slice(c.line).chars(),
+						len,
+						self.tab_width(),
+					);
 				self.clear_selection();
 			}
 			Command::MoveWordForward => {
@@ -384,7 +413,9 @@ impl Editor {
 				let visible_height = self.terminal_height.saturating_sub(2) as usize;
 				let cursor_line = self.cursors.cursor().line;
 				// Maintain VSCode-style viewport tether: push cursor back up if it would fall out of the bottom bound
-				if cursor_line >= self.scroll_y + visible_height.saturating_sub(self.config.scroll_off) {
+				if cursor_line
+					>= self.scroll_y + visible_height.saturating_sub(self.config.scroll_off)
+				{
 					self.move_cursor_vertical(-1);
 				}
 				self.clear_selection();
@@ -446,7 +477,12 @@ impl Editor {
 				let _len = self.line_len_no_newline(c.line);
 				let line_text = self.buffer().text.line_slice(c.line);
 				let len = self.line_len_no_newline(c.line);
-				self.cursors.primary_mut().head.desired_vcol = crate::editor::visual_col::visual_col_at(line_text.chars(), len, self.tab_width());
+				self.cursors.primary_mut().head.desired_vcol =
+					crate::editor::visual_col::visual_col_at(
+						line_text.chars(),
+						len,
+						self.tab_width(),
+					);
 			}
 			Command::SelectAll => {
 				let last_line = self.buffer().line_count().saturating_sub(1);
@@ -485,7 +521,7 @@ impl Editor {
 
 						let start_line = self.buffer().text.char_to_line(start);
 						let start_col = start - self.buffer().text.line_to_char(start_line);
-						
+
 						self.cursors.primary_mut().anchor = Cursor::new(start_line, start_col);
 						self.cursors.primary_mut().head = Cursor::new(end_line, end_col);
 						return;
@@ -502,7 +538,11 @@ impl Editor {
 				};
 
 				// "Step over" existing closing punctuation instead of duplicating it
-				if self.config.auto_close && current_char != '\0' && ch == current_char && matches!(ch, '}' | ']' | ')' | '"' | '\'' | '`') {
+				if self.config.auto_close
+					&& current_char != '\0'
+					&& ch == current_char
+					&& matches!(ch, '}' | ']' | ')' | '"' | '\'' | '`')
+				{
 					let line = self.buffer().text.char_to_line(pos + 1);
 					let col = (pos + 1) - self.buffer().text.line_to_char(line);
 					self.cursors.set_cursor(line, col);
@@ -512,7 +552,11 @@ impl Editor {
 					if self.config.auto_close {
 						// Only insert quotes if followed by whitespace/closing-bracket/eof to avoid breaking valid inline syntax (like "don't")
 						let should_close = match ch {
-							'"' | '\'' | '`' => current_char == '\0' || current_char.is_whitespace() || matches!(current_char, '}' | ']' | ')'),
+							'"' | '\'' | '`' => {
+								current_char == '\0'
+									|| current_char.is_whitespace()
+									|| matches!(current_char, '}' | ']' | ')')
+							}
 							'{' | '[' | '(' => true,
 							_ => false,
 						};
@@ -563,7 +607,9 @@ impl Editor {
 					let line_slice = self.buffer().text.line_slice(c.line);
 					let mut indent = String::new();
 					for (i, ch) in line_slice.chars().enumerate() {
-						if i >= c.col { break; }
+						if i >= c.col {
+							break;
+						}
 						if ch == ' ' || ch == '\t' {
 							indent.push(ch);
 						} else {
@@ -584,7 +630,7 @@ impl Editor {
 			Command::InsertTab => {
 				let (start_c, end_c) = self.cursors.primary().ordered();
 				let mut end_line = end_c.line;
-				
+
 				// Standard IDE behavior: don't indent the last line if selection ends at column 0.
 				if end_line > start_c.line && end_c.col == 0 {
 					end_line -= 1;
@@ -659,9 +705,10 @@ impl Editor {
 							break;
 						}
 					}
-					
+
 					if remove > 0 {
-						self.buffer_mut().delete_range(line_start, line_start + remove);
+						self.buffer_mut()
+							.delete_range(line_start, line_start + remove);
 						removals.push((line_idx, remove));
 					}
 				}
@@ -701,7 +748,7 @@ impl Editor {
 								};
 								if is_pair {
 									// Delete the trailing character too explicitly natively mapping frictionless IDE deletion
-									self.buffer_mut().delete_char(pos); 
+									self.buffer_mut().delete_char(pos);
 								}
 							}
 
@@ -842,7 +889,7 @@ impl Editor {
 					return;
 				}
 				self.delete_selection_if_active();
-				
+
 				let mut text = String::new();
 				if let Some(clip) = &mut self.sys_clipboard {
 					if let Ok(sys_text) = clip.get_text() {
@@ -926,14 +973,14 @@ impl Editor {
 					self.buffer_mut().delete_range(start, end);
 					self.buffer_mut().insert_str(start, &replacement);
 					self.buffer_mut().commit_edits();
-					
+
 					let new_pos = start + replacement.len();
 					let line = self.buffer().text.char_to_line(new_pos);
 					let col = new_pos - self.buffer().text.line_to_char(line);
 					self.search_saved_cursor = Some((line, col));
 					self.cursors.set_cursor(line, col);
 					self.refresh_search_matches();
-					
+
 					if self.search_matches.is_empty() {
 						self.mode = Mode::Editing;
 						self.search_query.clear();
@@ -957,7 +1004,7 @@ impl Editor {
 			Command::ReplaceActionAll => {
 				self.buffer_mut().commit_edits(); // Explicit history block grouping
 				let replacement = self.replace_with.clone();
-				
+
 				// Execute backwards to trivially retain string indexing locations dynamically
 				// Slicing from current index ensures we never retro-actively mangle skipped `(n)o` instances
 				let pending_matches = self.search_matches[self.search_match_idx..].to_vec();
@@ -965,7 +1012,7 @@ impl Editor {
 					self.buffer_mut().delete_range(start, end);
 					self.buffer_mut().insert_str(start, &replacement);
 				}
-				
+
 				self.buffer_mut().commit_edits();
 				self.clamp_cursors();
 				self.mode = Mode::Editing;
@@ -1054,8 +1101,7 @@ impl Editor {
 			}
 			Command::SearchNext => {
 				if !self.search_matches.is_empty() {
-					self.search_match_idx =
-						(self.search_match_idx + 1) % self.search_matches.len();
+					self.search_match_idx = (self.search_match_idx + 1) % self.search_matches.len();
 					self.jump_to_search_match();
 				}
 			}
@@ -1104,7 +1150,8 @@ impl Editor {
 			// -- Save As --
 			Command::SaveAsOpen => {
 				// Pre-populate with current file path if one exists.
-				self.save_as_input = self.buffer()
+				self.save_as_input = self
+					.buffer()
 					.file_path
 					.as_ref()
 					.map(|p| p.to_string_lossy().to_string())
@@ -1145,7 +1192,10 @@ impl Editor {
 					// Check if parent directory exists.
 					if let Some(parent) = path.parent() {
 						if !parent.as_os_str().is_empty() && !parent.exists() {
-							self.set_status(format!("Directory does not exist: {}", parent.display()));
+							self.set_status(format!(
+								"Directory does not exist: {}",
+								parent.display()
+							));
 							return;
 						}
 					}
@@ -1245,18 +1295,19 @@ impl Editor {
 			}
 
 			Command::FormatDocument => {
-				let ext_str = self.buffer()
+				let ext_str = self
+					.buffer()
 					.file_path
 					.as_ref()
 					.and_then(|p| p.extension())
 					.and_then(|s| s.to_str())
 					.unwrap_or("js")
 					.to_string();
-				
+
 				let content = self.buffer().text.to_string_full();
 				let (tx, rx) = std::sync::mpsc::channel();
 				crate::editor::formatter::spawn_formatter(ext_str, content, tx);
-				
+
 				self.fmt_rx = Some(rx);
 				self.is_formatting = true;
 				self.set_status("Formatting...");
@@ -1286,7 +1337,11 @@ impl Editor {
 			}
 			Command::ToggleSyntax => {
 				self.config.syntax_highlight = !self.config.syntax_highlight;
-				let status = if self.config.syntax_highlight { "Syntax highlighting enabled" } else { "Syntax highlighting disabled" };
+				let status = if self.config.syntax_highlight {
+					"Syntax highlighting enabled"
+				} else {
+					"Syntax highlighting disabled"
+				};
 				self.set_status(status);
 			}
 			Command::Noop => {}

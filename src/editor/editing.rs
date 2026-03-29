@@ -30,7 +30,7 @@ impl Editor {
 	/// where the cursors might otherwise point to non-existent lines or columns.
 	pub(crate) fn clamp_cursors(&mut self) {
 		let max_line = self.buffer().line_count().saturating_sub(1);
-		
+
 		// Clamp Head
 		if self.cursors.primary().head.line > max_line {
 			self.cursors.primary_mut().head.line = max_line;
@@ -271,18 +271,15 @@ impl Editor {
 
 			// Decode common HTML entities.
 			if ch == '&' {
-				let entity: String = chars
-					.by_ref()
-					.take_while(|c| *c != ';')
-					.collect();
+				let entity: String = chars.by_ref().take_while(|c| *c != ';').collect();
 				match entity.as_str() {
 					"nbsp" => out.push(' '),
-					"amp"  => out.push('&'),
-					"lt"   => out.push('<'),
-					"gt"   => out.push('>'),
+					"amp" => out.push('&'),
+					"lt" => out.push('<'),
+					"gt" => out.push('>'),
 					"quot" => out.push('"'),
 					"apos" => out.push('\''),
-					"tab"  => out.push('\t'),
+					"tab" => out.push('\t'),
 					_ => {
 						// Unknown entity — preserve as-is.
 						out.push('&');

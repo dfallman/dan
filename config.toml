@@ -1,44 +1,39 @@
-# dan editor configuration
-# Copy to ~/.config/dan/config.toml to customise
-
-# Wrap long lines (true) or scroll horizontally (false)
-# Note: toggle in app with ^G
+# Wrap long lines (true) or scroll horizontally (false).
+# Toggle at runtime with Ctrl+W.
 wrap_lines = true
 
-# Tab width in spaces.
+# Tab width in spaces (default: 4)
 tab_width = 4
 
-# Expand tabs to spaces (true = spaces, false = literal tabs)
-expand_tab = false
+# Expand tabs to spaces on insert (default: false)
+# true  = pressing Tab inserts spaces
+# false = pressing Tab inserts a literal tab character
+expand_tab = true
 
-# Show line numbers in the toolbar
+# Show line numbers in the gutter (default: true)
 line_numbers = true
 
-# Highlight active line
-highlight_active = true 
+# Highlight the active (cursor) line (default: true)
+highlight_active = true
 
-# Enable syntax highlighting based on file extension
-syntax_highlight = true
+# Scroll padding — lines to keep visible above/below cursor (default: 5)
+scroll_off = 5
 
-# Fast scroll lines when jumping via Ctrl+Shift+Up/Down
-fast_scroll_steps = 10
- 
-# Lines of offset/padding to keep above/below the cursor when scrolling
-# Note: If the terminal window has less than 20 lines, the offset is automatically 0
-scroll_off = 3
-
-# Auto-close pairs: "'`({[
-auto_close = true
-
-# Color theme
-# TODO: not implemented
+# Color theme (default: "default")
 theme = "default"
+
+# Fast scroll lines when jumping via Ctrl+Shift+Up/Down (default: 10)
+fast_scroll_steps = 10
+
+# Auto-close matched pairing structures (default: true)
+auto_close = true
 
 # Always show label "^H Help" in the toolbar
 show_help = true
 
-# Show document character encoding in the toolbar (e.g. "utf-8")
+# Show active document character encoding in the toolbar (e.g. "utf-8")
 show_encoding = true
 
-# Show detected language in the toolbar (e.g. "Rust")
+# Show detected programming language in the toolbar (e.g. "Rust")
 show_lang = true
+

@@ -15,18 +15,15 @@ impl Tool {
 		match ext {
 			"rs" => Tool::Rustfmt,
 			"py" => Tool::Ruff,
-			"js" | "jsx" | "ts" | "tsx" | "json" | "css" | "scss" | "html" | "md" | "yaml" | "yml" => Tool::Prettier,
+			"js" | "jsx" | "ts" | "tsx" | "json" | "css" | "scss" | "html" | "md" | "yaml"
+			| "yml" => Tool::Prettier,
 			_ => Tool::Unknown(ext.to_string()),
 		}
 	}
 }
 
 /// Spawns an external unblocking structural thread evaluating specific language payloads safely reporting exclusively over an MPSC boundary.
-pub fn spawn_formatter(
-	ext_str: String,
-	content: String,
-	tx: mpsc::Sender<Result<String, String>>,
-) {
+pub fn spawn_formatter(ext_str: String, content: String, tx: mpsc::Sender<Result<String, String>>) {
 	thread::spawn(move || {
 		let tool = Tool::from_extension(&ext_str);
 
@@ -65,10 +62,12 @@ pub fn spawn_formatter(
 				match c.wait_with_output() {
 					Ok(output) => {
 						if output.status.success() {
-							let _ = tx.send(Ok(String::from_utf8_lossy(&output.stdout).to_string()));
+							let _ =
+								tx.send(Ok(String::from_utf8_lossy(&output.stdout).to_string()));
 						} else {
 							let err_str = String::from_utf8_lossy(&output.stderr);
-							let first_line = err_str.lines().next().unwrap_or("Formatter syntax error");
+							let first_line =
+								err_str.lines().next().unwrap_or("Formatter syntax error");
 							let _ = tx.send(Err(first_line.to_string()));
 						}
 					}
@@ -85,7 +84,10 @@ pub fn spawn_formatter(
 						Tool::Ruff => "ruff",
 						_ => "formatter",
 					};
-					let _ = tx.send(Err(format!("Formatter '{}' not found in $PATH", binary_name)));
+					let _ = tx.send(Err(format!(
+						"Formatter '{}' not found in $PATH",
+						binary_name
+					)));
 				} else {
 					let _ = tx.send(Err(format!("Error spawning formatter: {}", e)));
 				}
