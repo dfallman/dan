@@ -1,6 +1,6 @@
 use crossterm::style::Color;
 
-/// Editor mode — pico-style: editing is the default, no modal switching.
+/// Editor mode — editing is the default, no modal switching.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
 	/// Normal editing — typing inserts text, arrows move cursor.
@@ -61,7 +61,7 @@ impl Mode {
 
 impl std::fmt::Display for Mode {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		write!(f, "{}", self.label())
+		write!(f, "{}🭀", self.label())
 	}
 }
 

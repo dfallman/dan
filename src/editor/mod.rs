@@ -324,9 +324,8 @@ impl Editor {
 			Command::MoveLineEnd => {
 				let c = self.cursors.cursor();
 				let len = self.line_len_no_newline(c.line);
-				let line_text: String = self.buffer().text.line_slice(c.line).chars().collect();
 				self.cursors.primary_mut().head.set_col(len);
-				self.cursors.primary_mut().head.desired_vcol = crate::editor::visual_col::visual_col_at(&line_text, len, self.tab_width());
+				self.cursors.primary_mut().head.desired_vcol = crate::editor::visual_col::visual_col_at(self.buffer().text.line_slice(c.line).chars(), len, self.tab_width());
 				self.clear_selection();
 			}
 			Command::MoveWordForward => {
@@ -444,9 +443,9 @@ impl Editor {
 				self.begin_selection_if_needed();
 				let c = self.cursors.cursor();
 				let _len = self.line_len_no_newline(c.line);
-				let line_text = self.buffer().text.line(c.line);
-				let len = line_text.len().saturating_sub(1);
-				self.cursors.primary_mut().head.desired_vcol = crate::editor::visual_col::visual_col_at(&line_text, len, self.tab_width());
+				let line_text = self.buffer().text.line_slice(c.line);
+				let len = self.line_len_no_newline(c.line);
+				self.cursors.primary_mut().head.desired_vcol = crate::editor::visual_col::visual_col_at(line_text.chars(), len, self.tab_width());
 			}
 			Command::SelectAll => {
 				let last_line = self.buffer().line_count().saturating_sub(1);
