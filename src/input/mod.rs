@@ -38,9 +38,11 @@ pub fn map_event(event: &Event, mode: Mode) -> Command {
 
 /// Key mapping while in the quit-confirmation prompt.
 fn map_confirm_quit_key(key: &KeyEvent) -> Command {
+	let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
 	match key.code {
 		KeyCode::Char('s') | KeyCode::Char('S') => Command::SaveAndQuit,
 		KeyCode::Char('f') | KeyCode::Char('F') => Command::ForceQuit,
+		KeyCode::Char('q') | KeyCode::Char('Q') if ctrl => Command::CancelQuit,
 		_ => Command::CancelQuit,
 	}
 }

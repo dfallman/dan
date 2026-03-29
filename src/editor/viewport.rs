@@ -18,13 +18,13 @@ impl Editor {
 
 /// Build visual row breaks for a line of text.
 /// Returns a Vec of (start_char_idx, end_char_idx) for each visual row.
-pub(crate) fn visual_rows_for(line_text: &str, tab_w: usize, text_area_width: usize) -> Vec<(usize, usize)> {
+pub(crate) fn visual_rows_for<I: IntoIterator<Item = char>>(chars: I, tab_w: usize, text_area_width: usize) -> Vec<(usize, usize)> {
 	let mut rows: Vec<(usize, usize)> = Vec::new();
 	let mut row_start: usize = 0;
 	let mut screen_col: usize = 0;
 	let mut char_idx: usize = 0;
 
-	for ch in line_text.chars() {
+	for ch in chars.into_iter() {
 		if ch == '\n' || ch == '\r' {
 			char_idx += 1;
 			continue;

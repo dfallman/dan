@@ -103,10 +103,9 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 		let tab_w = editor.tab_width();
 		if taw_tmp > 0 {
 			// Find which visual row the cursor is on within its buffer line.
-			let cur_text: String = editor.buffer().text.line_slice(cursor_line).chars().collect();
-			let cur_vrows = visual_rows_for(&cur_text, tab_w, taw_tmp);
+			let cur_vrows = visual_rows_for(editor.buffer().text.line_slice(cursor_line).chars(), tab_w, taw_tmp);
 			let cursor_col = editor.cursors.cursor().col;
-			let mut cur_vrow_idx = cur_vrows.len() - 1;
+			let mut cur_vrow_idx = cur_vrows.len().saturating_sub(1);
 			for (i, &(start, end)) in cur_vrows.iter().enumerate() {
 				if cursor_col >= start && (cursor_col < end || i == cur_vrows.len() - 1) {
 					cur_vrow_idx = i;
@@ -129,13 +128,11 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 				if editor.scroll_y == cursor_line {
 					rows_above = cur_vrow_idx.saturating_sub(editor.scroll_vrow);
 				} else {
-					let lt: String = editor.buffer().text.line_slice(editor.scroll_y).chars().collect();
-					let vrows_in_top = visual_rows_for(&lt, tab_w, taw_tmp).len();
+					let vrows_in_top = visual_rows_for(editor.buffer().text.line_slice(editor.scroll_y).chars(), tab_w, taw_tmp).len();
 					rows_above += vrows_in_top.saturating_sub(editor.scroll_vrow);
 					
 					for bl in (editor.scroll_y + 1)..cursor_line {
-						let lt: String = editor.buffer().text.line_slice(bl).chars().collect();
-						rows_above += visual_rows_for(&lt, tab_w, taw_tmp).len();
+						rows_above += visual_rows_for(editor.buffer().text.line_slice(bl).chars(), tab_w, taw_tmp).len();
 					}
 					rows_above += cur_vrow_idx;
 				}
@@ -148,8 +145,7 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 					editor.scroll_vrow -= 1;
 				} else {
 					editor.scroll_y -= 1;
-					let lt: String = editor.buffer().text.line_slice(editor.scroll_y).chars().collect();
-					let count = visual_rows_for(&lt, tab_w, taw_tmp).len();
+					let count = visual_rows_for(editor.buffer().text.line_slice(editor.scroll_y).chars(), tab_w, taw_tmp).len();
 					editor.scroll_vrow = count.saturating_sub(1);
 				}
 			}
@@ -162,13 +158,11 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 				if editor.scroll_y == cursor_line {
 					vrow_from_top = cur_vrow_idx.saturating_sub(editor.scroll_vrow);
 				} else {
-					let lt: String = editor.buffer().text.line_slice(editor.scroll_y).chars().collect();
-					let vrows_in_top = visual_rows_for(&lt, tab_w, taw_tmp).len();
+					let vrows_in_top = visual_rows_for(editor.buffer().text.line_slice(editor.scroll_y).chars(), tab_w, taw_tmp).len();
 					vrow_from_top += vrows_in_top.saturating_sub(editor.scroll_vrow);
 					
 					for bl in (editor.scroll_y + 1)..cursor_line {
-						let lt: String = editor.buffer().text.line_slice(bl).chars().collect();
-						vrow_from_top += visual_rows_for(&lt, tab_w, taw_tmp).len();
+						vrow_from_top += visual_rows_for(editor.buffer().text.line_slice(bl).chars(), tab_w, taw_tmp).len();
 					}
 					vrow_from_top += cur_vrow_idx;
 				}
@@ -178,8 +172,7 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 				}
 				
 				// Scroll DOWN one visual row
-				let lt: String = editor.buffer().text.line_slice(editor.scroll_y).chars().collect();
-				let count = visual_rows_for(&lt, tab_w, taw_tmp).len();
+				let count = visual_rows_for(editor.buffer().text.line_slice(editor.scroll_y).chars(), tab_w, taw_tmp).len();
 				if editor.scroll_vrow + 1 < count {
 					editor.scroll_vrow += 1;
 				} else {
@@ -294,7 +287,8 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 				} else {
 					saved_col
 				};
-				let outline_x = (gutter_width + 1 + saved_visual_col.saturating_sub(editor.scroll_x)) as u16;
+				let max_w = (vp.width.saturating_sub(1)) as usize;
+				let outline_x = (gutter_width + 1 + saved_visual_col.saturating_sub(editor.scroll_x)).min(max_w) as u16;
 				// Draw the character (or space) at that position with an underline-style outline.
 				w.queue(cursor::MoveTo(outline_x, saved_screen_y))?;
 				w.queue(SetBackgroundColor(Color::DarkGrey))?;
@@ -345,14 +339,12 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 			// relative to the start of the cursor's visual row.
 			let mut sy: usize = 0;
 			for bl in editor.scroll_y..cursor_pos.line.min(line_count) {
-				let lt: String = editor.buffer().text.line_slice(bl).chars().collect();
-				sy += visual_rows_for(&lt, tab_w, text_area_width).len();
+				sy += visual_rows_for(editor.buffer().text.line_slice(bl).chars(), tab_w, text_area_width).len();
 			}
 			// Find cursor's visual row within its buffer line.
 			let (vrow_idx, vrow_start) = if cursor_pos.line < line_count {
-				let lt: String = editor.buffer().text.line_slice(cursor_pos.line).chars().collect();
-				let vrows = visual_rows_for(&lt, tab_w, text_area_width);
-				let mut idx = vrows.len() - 1;
+				let vrows = visual_rows_for(editor.buffer().text.line_slice(cursor_pos.line).chars(), tab_w, text_area_width);
+				let mut idx = vrows.len().saturating_sub(1);
 				for (i, &(start, end)) in vrows.iter().enumerate() {
 					if cursor_pos.col >= start && (cursor_pos.col < end || i == vrows.len() - 1) {
 						idx = i;
@@ -398,8 +390,10 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 			};
 			(sy, vc)
 		};
-		let screen_x = (gutter_width + 1 + visual_col.saturating_sub(editor.scroll_x)) as u16;
-		w.queue(cursor::MoveTo(screen_x, screen_y as u16))?;
+		let max_w = (vp.width.saturating_sub(1)) as usize;
+		let screen_x = (gutter_width + 1 + visual_col.saturating_sub(editor.scroll_x)).min(max_w) as u16;
+		let screen_y = screen_y.min(u16::MAX as usize) as u16;
+		w.queue(cursor::MoveTo(screen_x, screen_y))?;
 		w.queue(cursor::Show)?;
 
 		// Pico-style: always use a steady block cursor (like a normal text editor)
