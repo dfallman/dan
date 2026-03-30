@@ -8,7 +8,7 @@ tab_width = 4
 # Expand tabs to spaces on insert (default: false)
 # true  = pressing Tab inserts spaces
 # false = pressing Tab inserts a literal tab character
-expand_tab = true
+expand_tab = false
 
 # Show line numbers in the gutter (default: true)
 line_numbers = true
