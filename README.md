@@ -1,4 +1,4 @@
-# dan (Enterprise-Grade Terminal Editor)
+# dan
 
 **Dan** is a friendly, lightning-fast, modeless, and zero-latency terminal text editor written natively in Rust.
 
