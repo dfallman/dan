@@ -150,11 +150,10 @@ fn run_loop(editor: &mut Editor, writer: &mut BufWriter<io::Stdout>) -> io::Resu
 		let cmd = input::map_event(&evt, editor.mode);
 		editor.execute(cmd);
 
-		// Drain any additional buffered events without re-rendering.
+		// Drain any additional buffered events with a small micro-timeout.
 		// This collapses rapid bursts of key events (e.g. fast typing
-		// or unbatched paste in terminals that don't support bracketed
-		// paste) into a single render pass.
-		while event::poll(Duration::ZERO)? {
+		// or continuous scrolling) into a single render pass securely.
+		while event::poll(Duration::from_millis(5))? {
 			let evt = event::read()?;
 			if matches!(evt, Event::Key(_) | Event::Paste(_))
 				&& editor.mode != crate::editor::mode::Mode::Searching
