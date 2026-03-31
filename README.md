@@ -8,9 +8,9 @@ No strange modes to learn, no archaic shortcuts, and no massive configuration fi
 
 ---
 
-## 🚀 Key Features
+## 🚀 Key features
 
-### High-Performance Architecture
+### High-performance architecture
 - **Smart rendering engine**: Dan uses a differential rendering system. By computing exactly what has changed on your screen, it only sends the necessary updates to your terminal. This makes scrolling 100MB files over SSH feel as smooth as local editing.
 
 - **Fluid 60FPS experience**: With built-in event debouncing, Dan collapses rapid keystrokes and large pastes into an efficient render loop. This preserves **battery life** and ensures a stutter-free experience.
@@ -30,7 +30,7 @@ No strange modes to learn, no archaic shortcuts, and no massive configuration fi
 
 ---
 
-## ⌨️ Keyboard Shortcuts
+## ⌨️ Keyboard shortcuts
 
 Dan uses familiar shortcuts so you don't need a cheat sheet.
 
