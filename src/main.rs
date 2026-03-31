@@ -49,6 +49,7 @@ fn main() -> io::Result<()> {
 		} else {
 			// Create a new buffer with the target path for saving
 			editor.buffer_mut().file_path = Some(path.to_path_buf());
+			editor.config.apply_editorconfig(path); // Apply layout rules perfectly even for new files!
 			editor.set_status(format!("[New File] {}", args[1]));
 		}
 	} else {
