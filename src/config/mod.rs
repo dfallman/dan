@@ -72,6 +72,8 @@ impl Config {
 		if let Some(path) = config_path() {
 			if path.exists() {
 				if let Ok(content) = std::fs::read_to_string(&path) {
+					#[cfg(debug_assertions)]
+					eprintln!("[DEBUG] Config::load() read global config from: {}", path.display());
 					if let Ok(c) = toml::from_str(&content) {
 						config = c;
 					}
@@ -93,6 +95,8 @@ impl Config {
 	/// Dynamically overrides the Active formatting parameters natively tracking `.editorconfig` components.
 	pub fn apply_editorconfig(&mut self, path: &std::path::Path) {
 		if let Ok(conf) = editorconfig::get_config(path) {
+			#[cfg(debug_assertions)]
+			eprintln!("[DEBUG] apply_editorconfig() parsed .editorconfig applying overrides for: {}", path.display());
 			if let Some(style) = conf.get("indent_style") {
 				self.expand_tab = style == "space";
 			}
