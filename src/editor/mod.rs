@@ -201,7 +201,16 @@ impl Editor {
 
 	/// Open a file into a new buffer and switch to it.
 	pub fn open_file(&mut self, path: &std::path::Path) -> std::io::Result<()> {
-		let mut buffer = Buffer::from_file(path)?;
+		let (mut buffer, sniffed_expand_tab, sniffed_tab_width) = Buffer::from_file(path)?;
+
+		self.config.apply_editorconfig(path);
+		if let Some(et) = sniffed_expand_tab {
+			self.config.expand_tab = et;
+		}
+		if let Some(tw) = sniffed_tab_width {
+			self.config.tab_width = tw;
+		}
+
 		let swp_path = crate::recovery::get_swap_path(path);
 
 		if crate::recovery::check_recovery(&swp_path).is_some() {
@@ -227,14 +236,14 @@ impl Editor {
 		&mut self.buffers[self.active_buffer]
 	}
 
-	/// Returns the effective tab width for the active buffer.
+	/// Returns the effective tab width natively structurally mapped logically globally.
 	pub fn tab_width(&self) -> usize {
-		self.buffer().tab_width.unwrap_or(self.config.tab_width)
+		self.config.tab_width
 	}
 
-	/// Returns the effective expand_tab setting for the active buffer.
+	/// Returns the effective expand_tab setting natively tracking global bounds cleanly.
 	pub fn expand_tab(&self) -> bool {
-		self.buffer().expand_tab.unwrap_or(self.config.expand_tab)
+		self.config.expand_tab
 	}
 
 	/// Set a status message.
@@ -1210,7 +1219,8 @@ impl Editor {
 						self.save_as_cursor = 0;
 						self.mode = Mode::Editing;
 						self.buffer_mut().commit_edits();
-						match self.buffer_mut().save_to(path) {
+						let cfg = self.config.clone();
+						match self.buffer_mut().save_to(path, &cfg) {
 							Ok(()) => self.set_status(format!("Saved as {}", path.display())),
 							Err(e) => self.set_status(format!("Save failed: {}", e)),
 						}
@@ -1232,7 +1242,8 @@ impl Editor {
 					self.save_as_cursor = 0;
 					self.mode = Mode::Editing;
 					self.buffer_mut().commit_edits();
-					match self.buffer_mut().save_to(path) {
+					let cfg = self.config.clone();
+					match self.buffer_mut().save_to(path, &cfg) {
 						Ok(()) => self.set_status(format!("Saved as {}", path_str)),
 						Err(e) => self.set_status(format!("Save failed: {}", e)),
 					}
@@ -1250,7 +1261,8 @@ impl Editor {
 					self.execute(Command::SaveAsOpen);
 				} else {
 					self.buffer_mut().commit_edits();
-					match self.buffer_mut().save() {
+					let cfg = self.config.clone();
+					match self.buffer_mut().save(&cfg) {
 						Ok(()) => self.set_status("Saved"),
 						Err(e) => self.set_status(format!("Save failed: {}", e)),
 					}
@@ -1271,7 +1283,8 @@ impl Editor {
 					self.execute(Command::SaveAsOpen);
 				} else {
 					self.buffer_mut().commit_edits();
-					match self.buffer_mut().save() {
+					let cfg = self.config.clone();
+					match self.buffer_mut().save(&cfg) {
 						Ok(()) => self.should_quit = true,
 						Err(e) => {
 							self.mode = Mode::Editing;

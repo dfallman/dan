@@ -34,6 +34,12 @@ pub struct Config {
 	pub fast_scroll_steps: usize,
 	/// Automatically insert closing brackets and quotes
 	pub auto_close: bool,
+	/// Formats all excess spaces terminating lines globally during save commits.
+	#[serde(skip)]
+	pub trim_trailing_whitespace: Option<bool>,
+	/// Line termination style requested statically (LF / CRLF).
+	#[serde(skip)]
+	pub end_of_line: Option<String>,
 }
 
 impl Default for Config {
@@ -53,6 +59,8 @@ impl Default for Config {
 			show_lang: true,
 			fast_scroll_steps: 10,
 			auto_close: true,
+			trim_trailing_whitespace: None,
+			end_of_line: None,
 		}
 	}
 }
@@ -71,16 +79,6 @@ impl Config {
 			}
 		}
 
-		// Try local config (allows local developer overrides)
-		let local_path = PathBuf::from("config.toml");
-		if local_path.exists() {
-			if let Ok(content) = std::fs::read_to_string(&local_path) {
-				if let Ok(c) = toml::from_str(&content) {
-					config = c;
-				}
-			}
-		}
-
 		// Disable colors if NO_COLOR is present and not empty
 		if let Ok(val) = std::env::var("NO_COLOR") {
 			if !val.is_empty() {
@@ -90,6 +88,26 @@ impl Config {
 		}
 
 		config
+	}
+
+	/// Dynamically overrides the Active formatting parameters natively tracking `.editorconfig` components.
+	pub fn apply_editorconfig(&mut self, path: &std::path::Path) {
+		if let Ok(conf) = editorconfig::get_config(path) {
+			if let Some(style) = conf.get("indent_style") {
+				self.expand_tab = style == "space";
+			}
+			if let Some(size) = conf.get("indent_size") {
+				if let Ok(w) = size.parse::<usize>() {
+					self.tab_width = w;
+				}
+			}
+			if let Some(trim) = conf.get("trim_trailing_whitespace") {
+				self.trim_trailing_whitespace = Some(trim == "true");
+			}
+			if let Some(eol) = conf.get("end_of_line") {
+				self.end_of_line = Some(eol.to_string());
+			}
+		}
 	}
 }
 

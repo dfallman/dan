@@ -1,4 +1,3 @@
-pub mod config_loader;
 pub mod history;
 pub mod rope;
 
@@ -20,14 +19,6 @@ pub struct Buffer {
 	pub dirty: bool,
 	/// The detected byte stream character encoding of the document.
 	pub encoding: &'static encoding_rs::Encoding,
-	/// File-local override for using spaces instead of tabs.
-	pub expand_tab: Option<bool>,
-	/// File-local override for tab spacing width.
-	pub tab_width: Option<usize>,
-	/// Formats all excess spaces terminating lines globally during save commits.
-	pub trim_on_save: Option<bool>,
-	/// Line termination style requested statically (LF / CRLF).
-	pub newline_style: Option<String>,
 	/// Dynamic `.swp` crash-recovery tracking pipeline securely checking OS permissions.
 	pub swp_path: Option<PathBuf>,
 }
@@ -41,16 +32,12 @@ impl Buffer {
 			file_path: None,
 			dirty: false,
 			encoding: encoding_rs::UTF_8,
-			expand_tab: None,
-			tab_width: None,
-			trim_on_save: None,
-			newline_style: None,
 			swp_path: None,
 		}
 	}
 
-	/// Create a buffer from a file.
-	pub fn from_file(path: &Path) -> io::Result<Self> {
+	/// Create a buffer from a file, returning the Buffer and its sniffed indentation metrics.
+	pub fn from_file(path: &Path) -> io::Result<(Self, Option<bool>, Option<usize>)> {
 		if path.is_dir() {
 			return Err(io::Error::new(
 				io::ErrorKind::IsADirectory,
@@ -117,29 +104,23 @@ impl Buffer {
 			}
 		}
 
-		let mut buffer = Self {
+		let buffer = Self {
 			text: TextRope::from_str(&content),
 			history: History::new(),
 			file_path: Some(path.to_path_buf()),
 			dirty: false,
 			encoding,
-			expand_tab,
-			tab_width,
-			trim_on_save: None,
-			newline_style: None,
 			swp_path: None,
 		};
 
-		config_loader::load_project_settings(path, &mut buffer);
-
-		Ok(buffer)
+		Ok((buffer, expand_tab, tab_width))
 	}
 
-	/// Prepares the output buffer recursively enforcing `.editorconfig` bindings.
-	pub fn prepare_save_text(&self) -> String {
+	/// Prepares the output buffer recursively enforcing active configuration boundaries natively.
+	pub fn prepare_save_text(&self, config: &crate::config::Config) -> String {
 		let mut text = self.text.to_string_full();
 
-		if self.trim_on_save.unwrap_or(false) {
+		if config.trim_trailing_whitespace.unwrap_or(false) {
 			let mut processed = String::with_capacity(text.len());
 			for mut line in text.split_inclusive('\n') {
 				let has_nl = line.ends_with('\n');
@@ -161,7 +142,7 @@ impl Buffer {
 			text = processed;
 		}
 
-		if let Some(ref eol) = self.newline_style {
+		if let Some(ref eol) = config.end_of_line {
 			let is_crlf = eol.to_lowercase() == "crlf";
 			text = text.replace("\r\n", "\n");
 			if is_crlf {
@@ -172,10 +153,10 @@ impl Buffer {
 		text
 	}
 
-	/// Save the buffer to its file.
-	pub fn save(&mut self) -> io::Result<()> {
+	/// Save the buffer natively enforcing active configurations structurally.
+	pub fn save(&mut self, config: &crate::config::Config) -> io::Result<()> {
 		if let Some(ref path) = self.file_path {
-			let text = self.prepare_save_text();
+			let text = self.prepare_save_text(config);
 			let (encoded_bytes, _, _) = self.encoding.encode(&text);
 			std::fs::write(path, encoded_bytes.as_ref())?;
 
@@ -193,9 +174,9 @@ impl Buffer {
 		}
 	}
 
-	/// Save the buffer to a new path and adopt it as the buffer's file.
-	pub fn save_to(&mut self, path: &Path) -> io::Result<()> {
-		let text = self.prepare_save_text();
+	/// Save the buffer natively targeting specific path constraints implicitly rendering dependencies dynamically.
+	pub fn save_to(&mut self, path: &Path, config: &crate::config::Config) -> io::Result<()> {
+		let text = self.prepare_save_text(config);
 		let (encoded_bytes, _, _) = self.encoding.encode(&text);
 		std::fs::write(path, encoded_bytes.as_ref())?;
 		self.file_path = Some(path.to_path_buf());
