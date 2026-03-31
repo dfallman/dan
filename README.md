@@ -1,200 +1,139 @@
 # dan
 
-**Dan** is a friendly, lightning-fast, modeless, and zero-latency terminal text editor written natively in Rust.
+**Dan** is a friendly, lightning-fast, and modern terminal text editor. Written natively in **Rust**, it is designed to be completely modeless and zero-latency. It ships with sensible defaults that just work.
 
-Creating Dan, the goal was to forge a truly fast, no-fuss text editor for the terminal environment that works exactly the way you expect a modern GUI editor to work—yet packed inside an architecture capable of running over fluctuating SSH connections without dropping a single frame.
+The goal of Dan is simple: to provide a no-fuss editing experience that works exactly like the modern GUI editors you already know, but optimized for the terminal. Whether you are working locally or over a fluctuating SSH connection, Dan stays responsive without dropping a single frame.
 
-No strange modes to learn, no archaic keyboard shortcuts, and no unnecessarily long configuration dot files. Out of the box, Dan ships with an intelligent Differential Rendering Matrix, pure O(1) immutable tree histories, continuous background I/O fault-tolerance, and full Unicode/CJK character support. It comes with a sensible set of defaults that should work for most people.
-
----
-
-## 🚀 Core Features
-
-### Performance & Architecture
-- **Zero-Copy Rendering Matrix** — Dan operates entirely on an isolated `ScreenBuffer` double-buffering framework. Keystrokes are computed mathematically on a structural grid, and the `.diff()` engine ensures that **only modified cells** are broadcasted via ANSI escape codes. Scrolling a 100MB file over SSH consumes virtually 0 bytes of network payload compared to typical layout refresh blasting.
-
-- **Micro-Timeout Event Debouncing** — Natively draining the `crossterm` execution queue inside a 5ms window ensures that rapid 30Hz keystroke barrages or unbracketed macro pastes are smoothly collapsed into a single, highly efficient 60FPS render loop tick preserving battery life organically.
-
-- **O(1) Immutable Tree History** — The Undo/Redo tracking framework operates transparently using `ropey::Rope` snapshots, mapping shared structural pointer leaves. Dan utilizes zero `String` memory relocations or duplications during massive formatting cascades, maintaining an absolutely perfect constant memory footprint indefinitely.
-
-- **Crash Recovery & Autosave System** — Dan seamlessly captures heavily modified files automatically via a silent 5-second asynchronous heartbeat. The structural `TextRope` payload is shifted directly into a background thread safely writing over `.swp` caches, guaranteeing the main UI execution loop **never freezes** regardless of disk I/O bottlenecks. 
-
-### Built for Developers
-- **Smart Line Commenting (`Ctrl+E`)** — Automatically detects the active syntax logic natively and toggles language-specific line comments (`//`, `#`, `--`, `<!--`) across multi-line selections instantly preserving internal indentation structures.
-
-- **Asynchronous Code Clean Up (`Ctrl+L`)** — Press `Ctrl+L` to pipe code seamlessly through native system formatters (`rustfmt`, `prettier`, and `ruff`) using entirely non-blocking background threads. The results are mapped to a hyper-fast $O(N)$ text matrix diffing structure that automatically prevents active cursors from scrambling dynamically!
-
-- **Auto-Closing Pairs** — Automatically injects paired brackets `({['"` seamlessly while typing. Execute wrapping loops natively by highlighting code boundaries and tapping a target wrapper!
-
-- **Language Aware Syntax Highlighting** — Powered by `syntect` tracking runtime configurations tracking file extensions natively. Toggle dynamically at runtime safely using `Ctrl+T`.
-
-### Advanced Editing
-- **No Modes** — Start typing immediately, exactly like your GUI editor.
-
-- **Rope-Backed Buffers** — B-Tree based geometry ensures $O(log n)$ insert/delete latency bounds mapping structural scaling cleanly.
-
-- **Interactive Global Replace (`Ctrl+R`)** — Deploy sequential batch substitution strings structurally stepping interactively (`y`, `n`, `a`, `q`) within atomic Undo/Redo boundaries natively!
-
-- **Multi-Line Indent/Dedent** — Highlight any structure and strike `Tab` or `Shift+Tab` to seamlessly shift spatial logic blocks cleanly!
-
-### Internationalization & Environment
-- **Dynamic Encoding Detection** — Automatically sniffs and cleanly buffers legacy byte formats (Shift-JIS, Windows-1252) into perfect UTF-8 formats using intelligent `chardetng` heuristic limits natively dynamically.
-
-- **CJK & Unicode Bounds** — Perfect runtime tracking mapped to Japanese/Chinese/Korean character matrices cleanly maintaining dual-column and multi-offset visual-row geometry constraints locally natively!
-
-- **Semantic Version Hooks** — Hardcoded to run `commit-msg` git hooks universally tracking and resolving `MINOR_VERSION_UPGRADE` bindings seamlessly updating `Cargo.toml` arrays locally securely automatically!
+No strange modes to learn, no archaic shortcuts, and no massive configuration files. 
 
 ---
 
-## 📥 Installation
+## 🚀 Key Features
 
-You need [Rust 1.70+](https://rustup.rs/) installed to compile Dan.
+### High-Performance Architecture
+- **Smart rendering engine**: Dan uses a differential rendering system. By computing exactly what has changed on your screen, it only sends the necessary updates to your terminal. This makes scrolling 100MB files over SSH feel as smooth as local editing.
+
+- **Fluid 60FPS experience**: With built-in event debouncing, Dan collapses rapid keystrokes and large pastes into an efficient render loop. This preserves **battery life** and ensures a stutter-free experience.
+
+- **Rock-solid stability**: Using a "Rope" data structure, Dan handles massive files with a constant memory footprint. It also features a **5-second background autosave**—if your terminal crashes or you lose power, your work is safely tucked away in a `.swp` file for easy recovery.
+### Built for Modern Developers
+
+- **Effortless formatting (`Ctrl+L`)**: Clean up your code instantly. Dan pipes your text through industry-standard tools like **Prettier**, **Ruff**, or **Rustfmt** in the background. It’s non-blocking, so you can keep typing while it works.
+- **Smart selection & commenting**: Use `Ctrl+/` to toggle language-specific comments across multi-line selections. Dan naturally understands the syntax logic of your file.
+
+- **Automatic pair insertion**: Save keystrokes with auto-closing brackets and quotes. If you highlight a block of code and type a bracket, Dan will wrap the selection for you.
+### International & Adaptive
+
+- **Full Unicode & CJK support**: Dan handles Chinese, Japanese, and Korean characters perfectly, maintaining correct visual alignment even with double-width characters and emojis.
+
+- **Automatic encoding detection**: Opening an old file? Dan intelligently "sniffs" legacy formats (like Shift-JIS or Windows-1252) and converts them to clean UTF-8 for editing.
+
+---
+
+## ⌨️ Keyboard Shortcuts
+
+Dan uses familiar shortcuts so you don't need a cheat sheet.
+
+### Navigation & App
+
+| **Key**              | **Action**                                               |
+| -------------------- | -------------------------------------------------------- |
+| **Ctrl + H**         | **Show Help**: Open the built-in reference.              |
+| **Ctrl + S**         | **Save**: Write changes to disk.                         |
+| **Ctrl + Q**         | **Quit**: Safe exit (prompts to save).                   |
+| **Ctrl + Shift + Q** | **Force Quit**: Exit immediately and save recovery file. |
+| **Ctrl + ↑ / ↓**     | **Scroll**: Move the view without moving the cursor.     |
+
+### Editing
+
+| **Key**              | **Action**                                                       |
+| -------------------- | ---------------------------------------------------------------- |
+| **Ctrl + C / X / V** | **Clipboard**: Standard Copy, Cut, and Paste.                    |
+| **Ctrl + Z / Y**     | **Undo / Redo**: Infinite, persistent history.                   |
+| **Shift + Arrows**   | **Select**: Highlight text naturally.                            |
+| **Ctrl + W**         | **Word Wrap**: Toggle between wrapping and horizontal scrolling. |
+| **Alt + ↑ / ↓**      | **Move Line**: Slide the current line or selection up/down.      |
+
+### Search & Productivity
+
+| **Key**      | **Action**                                      |
+| ------------ | ----------------------------------------------- |
+| **Ctrl + F** | **Find**: Search within the current file.       |
+| **Ctrl + R** | **Replace**: Interactive search and replace.    |
+| **Ctrl + G** | **Go-To Line**: Jump to a specific line number. |
+| **Ctrl + L** | **Format**: Run your configured code formatter. |
+
+---
+
+## 🔧 Installation
+
+You will need [Rust 1.70+](https://rustup.rs/) to compile Dan from source.
 
 ### macOS & Linux
-```bash
+
+Bash
+
+```
 git clone https://github.com/dfallman/dan.git
 cd dan
 cargo build --release
 
-# Move the binary into your local user path
+# Move to your local path
 cp target/release/dan ~/.local/bin/
 
-# Alternatively, configure system-wide access:
-sudo cp target/release/dan /usr/local/bin/
 ```
 
 ### Windows (PowerShell)
-```powershell
+
+PowerShell
+
+```
 git clone https://github.com/dfallman/dan.git
 cd dan
 cargo build --release
 
-# Move the binary into a predefined directory mapped inside your Environment Variables (PATH).
-# For standard standard local execution, moving it dynamically into Cargo's bin works flawlessly:
+# Move to your Cargo bin for easy access
 Copy-Item target\release\dan.exe ~/.cargo/bin/
-```
 
-### Quick Execution (All Platforms)
-If you just want to launch Dan to test without structurally installing it into your `$PATH`:
-```bash
-cargo run --release -- myfile.rs
 ```
 
 ---
 
-## ⌨️ Keybindings
+## ⚙️ Configuration
 
-Dan utilizes familiar GUI-style shortcuts strictly minimizing terminal mode confusion. Dan has been knowingly designed to be easy to use and learn. We've tried to rely on commonly used keyboard shortcuts whenever possible, while taking the limitations of the terminal environment into account. Hence, you can use 
+Dan follows a "Layered Configuration" model. It looks for settings in this order:
 
-On macOS, we recommend running Dan inside [iTerm2](https://iterm2.com/) or [Kitty](https://sw.kovidgoyal.net/kitty/) for the best experience, as they support the necessary escape codes for proper rendering. For some Mac users, especially if you're new to terminal apps or don't use them that often, using `Ctrl-S` instead of `Cmd-S` may take some time getting used to. It's worthwhile to consider remapping your left `Cmd` key (in iTerm2 and other terminal apps) to `Ctrl` so that you can use your standard shortcuts for things like saving, copying, pasting, etc.
+1. **Internal Defaults** (The baseline).
+2. **Global Config** (`~/.config/dan/config.toml`).
+3. **Local Project Style** (`.editorconfig`).
+### Global Settings (`config.toml`)
 
-On Windows, we recommend running Dan inside [Windows Terminal](https://www.microsoft.com/en-us/p/windows-terminal/9n0dx20hk701?activetab=pivot:overviewtab) for the best experience, as it supports the necessary escape codes for proper rendering. You can of course also use [Alacritty](https://alacritty.org/) or [WezTerm](https://wezterm.org/), or run Dan in WSL.
+You can customize your experience by editing the TOML file:
 
+```
+wrap_lines = true       # Wrap long lines or scroll?
+tab_width = 4           # Spaces per tab
+expand_tab = false      # Expand tabs to spaces
+line_numbers = true     # Show gutter numbers
+highlight_active = true # Highlight the current line
+scroll_off = 5          # Lines to keep visible above/below cursor
+fast_scroll_steps = 10  # Number of lines to scroll when using fast scroll
+auto_close = true       # Auto-pair (), [], {}, etc.
+show_help = true        # Always show help in the toolbar
+show_encoding = true    # Show detected character encoding in the toolbar
+show_lang = true        # Show detected programming language in the toolbar
+theme = "default"       # Color scheme
 
-## Default Keyboard Shortcuts
-
-**Dan** uses familiar, GUI-style keybindings so you can start editing immediately without memorizing a complex manual.
-
-### Application & Navigation
-| Key | Action |
-| :--- | :--- |
-| **Ctrl + H** | **Show Help**: Open the built-in command and shortcut reference. |
-| **Ctrl + S** | **Save**: Write the current buffer to disk. |
-| **Ctrl + Q** | **Quit**: Exit the editor (prompts to save if there are pending changes). |
-| **Ctrl + Shift + Q** | **Force Quit**: Exit immediately and save a recovery snapshot. |
-| **Ctrl + ↑ / ↓** | **Scroll**: Move the viewport up or down without moving the cursor. |
-| **Ctrl + Shift + ↑ / ↓** | **Quick Scroll**: Fast viewport navigation. |
-
-### Editing & Clipboard
-| Key | Action |
-| :--- | :--- |
-| **Ctrl + C / X / V** | **Copy / Cut / Paste**: Standard system clipboard integration. |
-| **Ctrl + Z / Y** | **Undo / Redo**: Step backward or forward through your edit history. |
-| **Shift + Arrows** | **Select**: Highlight text for copying, cutting, or formatting. |
-| **Ctrl + W** | **Word Wrap**: Toggle between soft-wrapped text and horizontal scrolling. |
-| **Ctrl + K / D** | **Delete / Duplicate**: Quickly manage the current line. |
-| **Alt + ↑ / ↓** | **Move Line**: Shift the current line or selection up or down. |
-
-### Search & Productivity
-| Key | Action |
-| :--- | :--- |
-| **Ctrl + F** | **Find**: Search for text within the current buffer. |
-| **Ctrl + R** | **Replace**: Open the interactive search-and-replace module. |
-| **Ctrl + G** | **Go-To Line**: Jump directly to a specific line number. |
-
-### Development Tools
-| Key | Action |
-| :--- | :--- |
-| **Ctrl + T** | **Syntax Highlighting**: Toggle language-specific colors on or off. |
-| **Ctrl + L** | **Format/Lint**: Clean up the file using your configured external formatter. |
-| **Ctrl + / (or Ctrl + E)**| **Comment**: Toggle comments for the current line or selection. |
-| **Tab / Shift + Tab** | **Indent**: Increase or decrease indentation for the selection. |
-
----
-
-## 🔧 Formatter configuration
-
-Dan automatically matches your project’s style by reading `.editorconfig` files or falling back to your global settings. To enable professional code formatting with Ctrl+L, ensure your preferred language tools are installed:
-
-- **Rust (`.rs`):** [`rustfmt`](https://github.com/rust-lang/rustfmt)
-- **Python (`.py`):** [`ruff`](https://docs.astral.sh/ruff/) (`pip install ruff`)
-- **Web (`.ts`, `.json`, `.css`):** [`prettier`](https://prettier.io/) (`npm i -g prettier`)
-
-Dan is designed to fail safely. If a background subsystem or formatting target (such as the above) is unavailable, the editor intercepts the error to prevent a system panic, notifying you via a clean UI alert while maintaining the integrity of your session.
-
----
-
-## ⚙️ Layered Configuration
-
-Dan utilizes a comprehensive structured override environment to resolve visual settings organically:
-
-1. **Hardcoded Internal Defaults** 
-2. **Global Native TOML File** (`~/.config/dan/config.toml`)
-3. **Local Project Schema** (`.editorconfig`)
-
-Dan will automatically override internal configurations (like space vs tabs, indent arrays, line trailing overloads, etc.) by parsing your local `.editorconfig` files natively, bridging generic terminal parameters into strict local IDE matrices accurately.
-
-### Global Config Parameters (`config.toml`)
-```toml
-# Wrap long lines (true) or scroll horizontally (false).
-# Toggle at runtime with Ctrl+W.
-wrap_lines = true
-
-# Tab width in spaces (default: 4)
-tab_width = 4
-
-# Expand tabs to spaces on insert (default: false)
-# true  = pressing Tab inserts spaces
-# false = pressing Tab inserts a literal tab character
-expand_tab = false
-
-# Show line numbers in the gutter (default: true)
-line_numbers = true
-
-# Highlight the active (cursor) line (default: true)
-highlight_active = true
-
-# Scroll padding — lines to keep visible above/below cursor (default: 5)
-scroll_off = 5
-
-# Color theme (default: "default")
-theme = "default"
-
-# Fast scroll lines when jumping via Ctrl+Shift+Up/Down (default: 10)
-fast_scroll_steps = 10
-
-# Auto-close matched pairing structures (default: true)
-auto_close = true
-
-# Always show label "^H Help" in the toolbar
-show_help = true
-
-# Show active document character encoding in the toolbar (e.g. "utf-8")
-show_encoding = true
-
-# Show detected programming language in the toolbar (e.g. "Rust")
-show_lang = true
 ```
 
+### Formatter Setup
+
+To get the most out of liting using **Ctrl+L**, ensure your system has the following tools installed:
+
+- For **Rust**: [rustfmt](https://github.com/rust-lang/rustfmt)
+- For **Python**: [ruff](https://docs.astral.sh/ruff/) (`pip install ruff`)
+- For **Web/JS/JSON**: [prettier](https://prettier.io/) (`npm i -g prettier`)
+
 ---
-**License**: MIT 
+
+**License**: MIT
