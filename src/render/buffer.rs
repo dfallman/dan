@@ -84,8 +84,6 @@ impl ScreenBuffer {
 		self.underline = false;
 	}
 
-
-
 	pub fn mov_to(&mut self, x: u16, y: u16) {
 		self.cursor_x = x;
 		self.cursor_y = y;
