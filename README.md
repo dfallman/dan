@@ -1,14 +1,13 @@
 # dan
 
-**Dan** is a friendly, lightning-fast, and modern terminal text editor. Written natively in **Rust**, it is designed to be completely modeless and zero-latency. It ships with sensible defaults that just work.
+**Dan** is a friendly, lightning-fast, and modern terminal text editor. Written natively in **Rust**, it is designed to be completely modeless and zero-latency. Dan ships with sensible defaults.
 
 The goal of Dan is simple: to provide a no-fuss editing experience that works exactly like the modern GUI editors you already know, but optimized for the terminal. Whether you are working locally or over a fluctuating SSH connection, Dan stays responsive without dropping a single frame.
 
 No strange modes to learn, no archaic shortcuts, and no massive configuration files. 
 
----
 
-## Key features
+## Features
 
 ### High-performance architecture
 
@@ -31,7 +30,6 @@ No strange modes to learn, no archaic shortcuts, and no massive configuration fi
 
 - **Automatic encoding detection**: Opening an old file? Dan intelligently "sniffs" legacy formats (like Shift-JIS or Windows-1252) and converts them to clean UTF-8 for editing.
 
----
 
 ## Keyboard shortcuts
 
@@ -101,20 +99,16 @@ Copy-Item target\release\dan.exe ~/.cargo/bin/
 
 ```
 
----
-
-## ⚙️ Configuration
+## Configuration
 
 Dan follows a "Layered Configuration" model. It looks for settings in this order:
 
-1. **Internal Defaults** (The baseline).
+1. **Internal Defaults** (sensible defaults).
 2. **Global Config** (`~/.config/dan/config.toml`).
 3. **Local Project Style** (`.editorconfig`).
 
 ### Unified Configuration Architecture (V2)
 Dan is built around a singular "ConfigBuilder" schema mapping perfectly across the entire codebase. When a file is opened, Dan explicitly sniffs its format structure, parses your `.editorconfig` matrices (handling spacing limits, whitespace trimming, line endings natively) and merges them flawlessly into your global layout limits!
-
-*Note: For strict security and reliability, Dan explicitly ignores generic `./config.toml` files found in terminal directories natively. This guarantees another tool's TOML format never accidentally overrides your editor's runtime structure.*
 
 ### Global Settings (`config.toml`)
 
@@ -138,7 +132,7 @@ theme = "default"       # Color scheme
 
 ### Formatter Setup
 
-To get the most out of liting using **Ctrl+L**, ensure your system has the following tools installed:
+To get the most out of linting (formatting you file) using `Ctrl+L`, ensure your system has the following tools installed:
 
 - For **Rust**: [rustfmt](https://github.com/rust-lang/rustfmt)
 - For **Python**: [ruff](https://docs.astral.sh/ruff/) (`pip install ruff`)
