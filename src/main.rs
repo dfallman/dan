@@ -53,7 +53,7 @@ fn main() -> io::Result<()> {
 			editor.set_status(format!("[New File] {}", args[1]));
 		}
 	} else {
-		editor.set_status("dan — a text editor | Ctrl+Q to quit");
+		editor.set_status("dan's text editor | ^Q to quit");
 	}
 
 	// Set up terminal
