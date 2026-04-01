@@ -35,15 +35,10 @@ impl Highlighter {
 	/// Detect the appropriate syntax for a file path (by extension).
 	/// Falls back to plain-text if the extension is unknown or path is None.
 	pub fn detect_syntax(&self, path: Option<&Path>) -> &SyntaxReference {
-		if let Some(p) = path {
-			self.syntax_set
-				.find_syntax_for_file(p)
-				.ok()
-				.flatten()
-				.unwrap_or_else(|| self.syntax_set.find_syntax_plain_text())
-		} else {
-			self.syntax_set.find_syntax_plain_text()
-		}
+		path.and_then(|p| p.extension())
+			.and_then(|ext| ext.to_str())
+			.and_then(|ext_str| self.syntax_set.find_syntax_by_extension(ext_str))
+			.unwrap_or_else(|| self.syntax_set.find_syntax_plain_text())
 	}
 }
 
