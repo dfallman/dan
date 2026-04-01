@@ -94,7 +94,18 @@ impl Editor {
 	pub fn new() -> Self {
 		let (tw, th) = terminal::size().unwrap_or((80, 24));
 		let config = Config::load();
-		let highlighter = Highlighter::new(&config.theme);
+		
+		// The macOS main thread strictly limits execution stack depth natively to 8MB.
+		// In `--release` builds, traversing the `syntect` static binary payload via LLVM optimization 
+		// instantly unwinds natively generating a `SIGKILL (Killed 9)` crash. 
+		// Initializing it within a localized 32MB stack-bound securely bypasses Apple Silicon's hard limit!
+		let theme = config.theme.clone();
+		let highlighter = std::thread::Builder::new()
+			.stack_size(32 * 1024 * 1024)
+			.spawn(move || Highlighter::new(&theme))
+			.expect("Failed to spawn syntect tokenizer thread")
+			.join()
+			.expect("Highlighter instantiation crashed");
 		Self {
 			config,
 			buffers: vec![Buffer::new()],
