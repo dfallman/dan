@@ -200,7 +200,7 @@ impl Buffer {
 			.as_ref()
 			.and_then(|p| p.file_name())
 			.map(|n| n.to_string_lossy().to_string())
-			.unwrap_or_else(|| "[scratch]".to_string())
+			.unwrap_or_else(|| "[Scratch]".to_string())
 	}
 
 	// -- Edit operations with history tracking --

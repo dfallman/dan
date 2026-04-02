@@ -291,9 +291,9 @@ pub fn render_nowrap(
 				let line_num = format!("{:>width$} ", line_idx + 1, width = gutter_width);
 				cols_written += line_num.len();
 				screen.set_fg(if line_idx == cursor_line {
-					Color::Blue
-				} else {
 					Color::White
+				} else {
+					Color::DarkGrey
 				});
 				screen.put_str(&line_num);
 			}
