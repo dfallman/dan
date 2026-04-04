@@ -88,6 +88,8 @@ pub struct Editor {
 	pub last_autosave: std::time::Instant,
 	/// Active rendering double-buffer tracking stateful matrices natively isolating ANSI boundaries.
 	pub last_screen: Option<crate::render::buffer::ScreenBuffer>,
+	/// Whether the terminal background uses a light color natively detected via OSC 11 queries.
+	pub is_light_bg: bool,
 }
 
 impl Editor {
@@ -106,6 +108,10 @@ impl Editor {
 			.expect("Failed to spawn syntect tokenizer thread")
 			.join()
 			.expect("Highlighter instantiation crashed");
+
+		let mode = terminal_colorsaurus::theme_mode(terminal_colorsaurus::QueryOptions::default()).unwrap_or(terminal_colorsaurus::ThemeMode::Dark);
+		let is_light_bg = mode == terminal_colorsaurus::ThemeMode::Light;
+
 		Self {
 			config,
 			buffers: vec![Buffer::new()],
@@ -139,6 +145,7 @@ impl Editor {
 			is_formatting: false,
 			last_autosave: std::time::Instant::now(),
 			last_screen: None,
+			is_light_bg,
 		}
 	}
 

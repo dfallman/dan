@@ -2,3 +2,4 @@
 test-files/
 test.txt
 test-file.rs
+.DS_Store

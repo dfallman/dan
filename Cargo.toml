@@ -1,6 +1,6 @@
 [package]
 name = "dan"
-version = "0.2.17"
+version = "0.2.18"
 edition = "2021"
 description = "A friendly, fast, modeless, and (somewhat) opinionated terminal text editor written in Rust"
 
@@ -17,3 +17,5 @@ arboard = "3.4"
 chardetng = "0.1"
 encoding_rs = "0.8"
 editorconfig = "1.0.0"
+terminal-light = "1.8.0"
+terminal-colorsaurus = "1.0.3"
