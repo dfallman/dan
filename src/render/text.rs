@@ -89,7 +89,11 @@ pub fn render_wrap(
 	while screen_row < text_height && buf_line < line_count {
 		let is_active = highlight_active && buf_line == cursor_line;
 		let base_bg = if is_active {
-			Color::AnsiValue(236)
+			if editor.is_light_bg {
+				Color::AnsiValue(254)
+			} else {
+				Color::AnsiValue(236)
+			}
 		} else {
 			Color::Reset
 		};
@@ -278,7 +282,11 @@ pub fn render_nowrap(
 		let line_idx = editor.scroll_y + row;
 		let is_active = highlight_active && line_idx == cursor_line;
 		let base_bg = if is_active {
-			Color::AnsiValue(236)
+			if editor.is_light_bg {
+				Color::AnsiValue(254)
+			} else {
+				Color::AnsiValue(236)
+			}
 		} else {
 			Color::Reset
 		};

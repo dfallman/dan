@@ -69,7 +69,7 @@ Dan uses familiar shortcuts so you don't need a cheat sheet.
 
 ## Installation
 
-You will need [Rust 1.70+](https://rustup.rs/) to compile Dan from source.
+You will need the latest [Rust](https://rustup.rs/) to compile Dan from source. (1.94 is recommended). On most system, installing using the package manager will not give you the latest version. Use [https://rustup.rs/](https://rustup.rs/) instead.
 
 ### macOS & Linux
 
@@ -81,7 +81,11 @@ cd dan
 cargo build --release
 
 # Move to your local path
+cp target/release/dan /usr/local/bin/
+
+# ...or (macOS specifically)
 cp target/release/dan ~/.local/bin/
+
 
 ```
 
@@ -132,11 +136,27 @@ theme = "default"       # Color scheme
 
 ### Formatter Setup
 
-To get the most out of linting (formatting you file) using `Ctrl+L`, ensure your system has the following tools installed:
+To get the most out of linting (quicky formatting you file) using `Ctrl+L`, ensure your system has the following tools installed:
 
-- For **Rust**: [rustfmt](https://github.com/rust-lang/rustfmt)
+- For **Rust**: [rustfmt](https://github.com/rust-lang/rustfmt) (`rustup component add rustfmt`)
 - For **Python**: [ruff](https://docs.astral.sh/ruff/) (`pip install ruff`)
 - For **Web/JS/JSON**: [prettier](https://prettier.io/) (`npm i -g prettier`)
+
+# Roadmap
+
+Dan is a work in progress. The focus has been on speed, stability, efficiency and security over features and tweakability. While we don't see Dan ever becoming the world's most feature-rich text editor (which isn't our mission) we have the following ideas on our roadmap going forward:
+
+- **Mouse support** — click-to-position, scroll wheel, click-drag select
+- **Regex search** — toggle regex mode in search bar
+- **Extended markdown support** — render some markdown script better, such as bold, italic, perhaps table
+- **Buffer switching** — Dan has multi-buffer plumbing but currently only supports a single buffer at a time. While useful, tools like tmux, Zellij, and others make this less cruical and adds complexity, not least to the interface
+- **Vertical split** — view two files or two parts of the same file
+- **Suspend & resume** — SIGTSTP as a simple and effective way to switch between the editor and the terminal.
+- **Configurable keybindings** — allow users to select their preferred keybindings
+- **Multi-cursor** — allow multiple cursors to edit many lines/occurances simultaneously 
+- **Built-in terminal** or shell pipe
+- **Plugin interface** — in a v1, 'run external command, pipe selection'
+
 
 ---
 
