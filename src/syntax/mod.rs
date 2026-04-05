@@ -37,12 +37,14 @@ impl Highlighter {
 		Self { syntax_set, theme }
 	}
 
-	/// Detect the appropriate syntax for a file path (by extension).
-	/// Falls back to plain-text if the extension is unknown or path is None.
+	/// Detect the appropriate syntax for a file path (by filename or extension).
+	/// Falls back to plain-text if the syntax is unknown or path is None.
 	pub fn detect_syntax(&self, path: Option<&Path>) -> &SyntaxReference {
-		path.and_then(|p| p.extension())
-			.and_then(|ext| ext.to_str())
-			.and_then(|ext_str| self.syntax_set.find_syntax_by_extension(ext_str))
+		let name_str = path.and_then(|p| p.file_name()).and_then(|name| name.to_str());
+		let ext_str = path.and_then(|p| p.extension()).and_then(|ext| ext.to_str());
+
+		name_str.and_then(|n| self.syntax_set.find_syntax_by_extension(n))
+			.or_else(|| ext_str.and_then(|e| self.syntax_set.find_syntax_by_extension(e)))
 			.unwrap_or_else(|| self.syntax_set.find_syntax_plain_text())
 	}
 }
