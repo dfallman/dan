@@ -4,6 +4,15 @@ use super::Viewport;
 use crate::editor::mode::Mode;
 use crate::editor::Editor;
 
+/// Unified toolbar background color based on terminal theme.
+pub fn toolbar_bg_color(editor: &Editor) -> Color {
+	if editor.is_light_bg {
+		Color::AnsiValue(254)
+	} else {
+		Color::White
+	}
+}
+
 /// Render the status bar.
 pub fn render_status_bar(editor: &Editor, screen: &mut super::buffer::ScreenBuffer, vp: &Viewport) {
 	let status_y = vp.height.saturating_sub(vp.chrome_rows);
@@ -24,7 +33,7 @@ pub fn render_status_bar(editor: &Editor, screen: &mut super::buffer::ScreenBuff
 	screen.put_str(&mode_label);
 	used += mode_label.len();
 
-	screen.set_bg(Color::White);
+	screen.set_bg(toolbar_bg_color(editor));
 	screen.set_fg(Color::Black);
 
 	// File name
@@ -40,7 +49,7 @@ pub fn render_status_bar(editor: &Editor, screen: &mut super::buffer::ScreenBuff
 		screen.set_bg(Color::Blue);
 		screen.set_fg(Color::Black);
 		screen.put_str(&msg_part);
-		screen.set_bg(Color::White);
+		screen.set_bg(toolbar_bg_color(editor));
 		screen.set_fg(Color::Black);
 		used += msg_part.len();
 	}
@@ -92,13 +101,13 @@ fn help_shortcuts() -> Vec<(&'static str, &'static str)> {
 		("^V", "Paste"),
 		("^F", "Find"),
 		("^R", "Replace"),
-		("^G", "Go to"),
+		("^G", "Goto"),
 		("^D", "Duplicate"),
 		("^K", "Delete"),
-		("^W", "Wrap text"),
+		("^W", "Wrap"),
 		("^L", "Lint"),
 		("^E", "Comment"),
-		("^T", "Syntax highl"),
+		("^T", "Syntax hlght"),
 		("^H", "Help"),
 	]
 }
@@ -140,7 +149,7 @@ pub fn help_row_count(term_width: u16) -> u16 {
 /// Render the pico-style help bar at the bottom of the screen.
 /// Builds upward from the row above the status bar when it needs
 /// multiple lines.
-pub fn render_help_bar(_editor: &Editor, screen: &mut super::buffer::ScreenBuffer, vp: &Viewport) {
+pub fn render_help_bar(editor: &Editor, screen: &mut super::buffer::ScreenBuffer, vp: &Viewport) {
 	let shortcuts = help_shortcuts();
 	let width = vp.width as usize;
 	let num_rows = help_row_count(vp.width) as usize;
@@ -186,7 +195,7 @@ pub fn render_help_bar(_editor: &Editor, screen: &mut super::buffer::ScreenBuffe
 			screen.set_bg(Color::Blue);
 			screen.set_fg(Color::Black);
 			screen.put_str(key);
-			screen.set_bg(Color::White);
+			screen.set_bg(toolbar_bg_color(editor));
 			screen.set_fg(Color::Black);
 			let lbl = format!(" {} ", label);
 			screen.put_str(&lbl);
@@ -200,17 +209,17 @@ pub fn render_help_bar(_editor: &Editor, screen: &mut super::buffer::ScreenBuffe
 			if available >= version_str.len() {
 				let remaining = available - version_str.len();
 				if remaining > 0 {
-					screen.set_bg(Color::White);
+					screen.set_bg(toolbar_bg_color(editor));
 					for _ in 0..remaining {
 						screen.put_char(' ');
 					}
 				}
-				screen.set_bg(Color::White);
+				screen.set_bg(toolbar_bg_color(editor));
 				screen.set_fg(Color::Black);
 				screen.put_str(&version_str);
 			} else {
 				if available > 0 {
-					screen.set_bg(Color::White);
+					screen.set_bg(toolbar_bg_color(editor));
 					for _ in 0..available {
 						screen.put_char(' ');
 					}
@@ -220,7 +229,7 @@ pub fn render_help_bar(_editor: &Editor, screen: &mut super::buffer::ScreenBuffe
 			// Pad remaining width with white background
 			let remaining = width.saturating_sub(used);
 			if remaining > 0 {
-				screen.set_bg(Color::White);
+				screen.set_bg(toolbar_bg_color(editor));
 				for _ in 0..remaining {
 					screen.put_char(' ');
 				}

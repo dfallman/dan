@@ -126,13 +126,13 @@ auto_close = true       # Auto-pair (), [], {}, etc.
 show_help = true        # Always show help in the toolbar
 show_encoding = true    # Show detected character encoding in the toolbar
 show_lang = true        # Show detected programming language in the toolbar
-theme = "default"       # Color scheme
+theme = "default"       # Set color theme for syntax highlighting
 
 # Default theme: "default"
 # On startup, Dan sends a specific ANSI escape sequence query to your terminal emulator 
 # to understand if the terminal is dark or light and pick a default theme.
-#   For dark terminals, we use theme: "OneHalfDark"
-#   For light terminals, we use theme: "OneHalfLight"
+# - for dark terminals, we use theme: "OneHalfDark"
+# - for light terminals, we use theme: "OneHalfLight"
 #
 # Other available themes (Note: if you set one of these, Dan will use it regardless of terminal color):
 # "1337" A retro, high-contrast dark theme inspired by old-school hacker culture.

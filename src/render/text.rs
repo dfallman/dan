@@ -121,7 +121,7 @@ pub fn render_wrap(
 				screen.set_fg(if buf_line == cursor_line {
 					if editor.is_light_bg { Color::Blue } else { Color::White }
 				} else {
-					Color::DarkGrey
+					if editor.is_light_bg { Color::Grey } else { Color::DarkGrey }
 				});
 				screen.put_str(&line_num);
 			}
@@ -164,7 +164,7 @@ pub fn render_wrap(
 						screen.set_fg(if buf_line == cursor_line {
 							if editor.is_light_bg { Color::Blue } else { Color::White }
 						} else {
-							Color::DarkGrey
+							if editor.is_light_bg { Color::Grey } else { Color::DarkGrey }
 						});
 						screen.put_str(&wrap_gutter);
 					}
@@ -238,7 +238,7 @@ pub fn render_wrap(
 		let mut cols_written: usize = 0;
 		if show_line_numbers {
 			let tilde_gutter = format!("{:>width$} ", ".", width = gutter_width);
-			screen.set_fg(Color::DarkGrey);
+			screen.set_fg(if editor.is_light_bg { Color::Grey } else { Color::DarkGrey });
 			screen.put_str(&tilde_gutter);
 			cols_written = gutter_width + 1;
 		}
@@ -301,7 +301,7 @@ pub fn render_nowrap(
 				screen.set_fg(if line_idx == cursor_line {
 					if editor.is_light_bg { Color::Blue } else { Color::White }
 				} else {
-					Color::DarkGrey
+					if editor.is_light_bg { Color::Grey } else { Color::DarkGrey }
 				});
 				screen.put_str(&line_num);
 			}
@@ -391,7 +391,7 @@ pub fn render_nowrap(
 			if show_line_numbers {
 				let line_num = format!("{:>width$} ", line_idx + 1, width = gutter_width);
 				cols_written += line_num.len();
-				screen.set_fg(Color::DarkGrey);
+				screen.set_fg(if editor.is_light_bg { Color::Grey } else { Color::DarkGrey });
 				screen.put_str(&line_num);
 				screen.set_fg(Color::Reset);
 			}
