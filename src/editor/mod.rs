@@ -101,16 +101,24 @@ impl Editor {
 		// In `--release` builds, traversing the `syntect` static binary payload via LLVM optimization 
 		// instantly unwinds natively generating a `SIGKILL (Killed 9)` crash. 
 		// Initializing it within a localized 32MB stack-bound securely bypasses Apple Silicon's hard limit!
-		let theme = config.theme.clone();
+		let mode = terminal_colorsaurus::theme_mode(terminal_colorsaurus::QueryOptions::default()).unwrap_or(terminal_colorsaurus::ThemeMode::Dark);
+		let is_light_bg = mode == terminal_colorsaurus::ThemeMode::Light;
+
+		let mut theme = config.theme.clone();
+		if theme == "default" {
+			theme = if is_light_bg {
+				"OneHalfLight".to_string()
+			} else {
+				"OneHalfDark".to_string()
+			};
+		}
+
 		let highlighter = std::thread::Builder::new()
 			.stack_size(32 * 1024 * 1024)
 			.spawn(move || Highlighter::new(&theme))
 			.expect("Failed to spawn syntect tokenizer thread")
 			.join()
 			.expect("Highlighter instantiation crashed");
-
-		let mode = terminal_colorsaurus::theme_mode(terminal_colorsaurus::QueryOptions::default()).unwrap_or(terminal_colorsaurus::ThemeMode::Dark);
-		let is_light_bg = mode == terminal_colorsaurus::ThemeMode::Light;
 
 		Self {
 			config,

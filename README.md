@@ -2,12 +2,12 @@
 
 **Dan** is a friendly, lightning-fast, and modern terminal text editor. Written natively in **Rust**, it is designed to be completely modeless and zero-latency. Dan ships with sensible defaults.
 
-The goal of Dan is simple: to provide a no-fuss editing experience that works exactly like the modern GUI editors you already know, but optimized for the terminal. Whether you are working locally or over a fluctuating SSH connection, Dan stays responsive without dropping a single frame.
-
 No strange modes to learn, no archaic shortcuts, and no massive configuration files. 
 
+The goal of Dan is simple: to provide a no-fuss editing experience that works exactly like the modern GUI editors you already know, but optimized for the terminal. Whether you are working locally or over a fluctuating SSH connection, Dan stays responsive without dropping a single frame.
 
-## Features
+
+# Features
 
 ### High-performance architecture
 
@@ -31,11 +31,11 @@ No strange modes to learn, no archaic shortcuts, and no massive configuration fi
 - **Automatic encoding detection**: Opening an old file? Dan intelligently "sniffs" legacy formats (like Shift-JIS or Windows-1252) and converts them to clean UTF-8 for editing.
 
 
-## Keyboard shortcuts
+# Keyboard shortcuts
 
 Dan uses familiar shortcuts so you don't need a cheat sheet.
 
-### Navigation
+## Navigation
 
 | **Key**              | **Action**                                               |
 | -------------------- | -------------------------------------------------------- |
@@ -46,7 +46,7 @@ Dan uses familiar shortcuts so you don't need a cheat sheet.
 | `Ctrl` + `↑` / `↓`     | **Scroll**: Move the view without moving the cursor.     |
 | `Ctrl` + `Shift` + `↑` / `↓`     | **Quick scroll**: Scroll faster up and down.     |
 
-### Editing
+## Editing
 
 | **Key**              | **Action**                                                       |
 | -------------------- | ---------------------------------------------------------------- |
@@ -56,7 +56,7 @@ Dan uses familiar shortcuts so you don't need a cheat sheet.
 | `Ctrl` + `W`        | **Word Wrap**: Toggle between wrapping and horizontal scrolling. |
 | `Alt` + `↑` / `↓`      | **Move Line**: Slide the current line or selection up/down.      |
 
-### Search & Productivity
+## Search & Productivity
 
 | **Key**      | **Action**                                      |
 | ------------ | ----------------------------------------------- |
@@ -65,13 +65,12 @@ Dan uses familiar shortcuts so you don't need a cheat sheet.
 | `Ctrl` + `G` | **Go-To Line**: Jump to a specific line number. |
 | `Ctrl` + `L` | **Format**: Run your configured code formatter. |
 
----
 
-## Installation
+# Installation
 
 You will need the latest [Rust](https://rustup.rs/) to compile Dan from source. (1.94 is recommended). On most system, installing using the package manager will not give you the latest version. Use [https://rustup.rs/](https://rustup.rs/) instead.
 
-### macOS & Linux
+## macOS & Linux
 
 Bash
 
@@ -85,11 +84,9 @@ cp target/release/dan /usr/local/bin/
 
 # ...or (macOS specifically)
 cp target/release/dan ~/.local/bin/
-
-
 ```
 
-### Windows (PowerShell)
+## Windows (PowerShell)
 
 PowerShell
 
@@ -100,10 +97,9 @@ cargo build --release
 
 # Move to your Cargo bin for easy access
 Copy-Item target\release\dan.exe ~/.cargo/bin/
-
 ```
 
-## Configuration
+# Configuration
 
 Dan follows a "Layered Configuration" model. It looks for settings in this order:
 
@@ -111,10 +107,10 @@ Dan follows a "Layered Configuration" model. It looks for settings in this order
 2. **Global Config** (`~/.config/dan/config.toml`).
 3. **Local Project Style** (`.editorconfig`).
 
-### Unified Configuration Architecture (V2)
+## Unified Configuration Architecture (V2)
 Dan is built around a singular "ConfigBuilder" schema mapping perfectly across the entire codebase. When a file is opened, Dan explicitly sniffs its format structure, parses your `.editorconfig` matrices (handling spacing limits, whitespace trimming, line endings natively) and merges them flawlessly into your global layout limits!
 
-### Global Settings (`config.toml`)
+## Global Settings (`config.toml`)
 
 You can customize your experience by editing the TOML file:
 
@@ -132,9 +128,40 @@ show_encoding = true    # Show detected character encoding in the toolbar
 show_lang = true        # Show detected programming language in the toolbar
 theme = "default"       # Color scheme
 
+# Default theme: "default"
+# On startup, Dan sends a specific ANSI escape sequence query to your terminal emulator 
+# to understand if the terminal is dark or light and pick a default theme.
+#   For dark terminals, we use theme: "OneHalfDark"
+#   For light terminals, we use theme: "OneHalfLight"
+#
+# Other available themes (Note: if you set one of these, Dan will use it regardless of terminal color):
+# "1337" A retro, high-contrast dark theme inspired by old-school hacker culture.
+# "Coldark-Cold" A clean, blue-tinted light theme.
+# "Coldark-Dark" A deep, cool-blue dark theme.
+# "DarkNeon" A vibrant dark theme bursting with bright neon accents.
+# "Dracula" A popular, high-contrast dark theme with distinct purple and pink accents.
+# "GitHub" A light theme accurately mimicking the classic GitHub code view.
+# "Monokai Extended" An updated version of the classic, vivid Monokai theme.
+# "Monokai Extended Bright" A brighter, higher-contrast variant of the Monokai palette.
+# "Monokai Extended Light" A light-background adaptation of the Monokai colors.
+# "Monokai Extended Origin" The authentic, unaltered original Monokai color palette.
+# "Nord" A clean, arctic-inspired dark theme with frosty blue tones.
+# "OneHalfDark" A clean, modern dark theme based heavily on the Atom "One" series (default for dark terminals).
+# "OneHalfLight" A clean, modern light theme based on the Atom "One" series (default for light terminals).
+# "Solarized (dark)" A very popular, scientifically formulated low-contrast dark theme.
+# "Solarized (light)" The light-background version of the Solarized palette.
+# "Sublime Snazzy" A vibrant dark theme with bright, elegant (snazzy) colors.
+# "TwoDark" A dark theme inspired by Atom's One Dark but tuned for slightly better contrast.
+# "Visual Studio Dark+" Accurately emulates the prominent default dark theme of VS Code.
+# "ansi" A minimal, dynamic theme that falls back to your terminal's built-in 16 ANSI colors.
+# "base16" A balanced, standard boilerplate dark theme from the base16 project.
+# "base16-256" A variant of base16 specifically optimized for limited 256-color palette terminals.
+# "gruvbox-dark" A retro "groove" color scheme with earthy, warm dark tones.
+# "gruvbox-light" A retro "groove" color scheme with earthy, warm light tones.
+# "zenburn" A low-contrast "alien" dark color scheme designed to be extremely easy on the eyes.
 ```
 
-### Formatter Setup
+## Formatter Setup
 
 To get the most out of linting (quicky formatting you file) using `Ctrl+L`, ensure your system has the following tools installed:
 

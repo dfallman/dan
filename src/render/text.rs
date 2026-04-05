@@ -119,7 +119,7 @@ pub fn render_wrap(
 				let line_num = format!("{:>width$} ", buf_line + 1, width = gutter_width);
 				screen.set_bg(base_bg);
 				screen.set_fg(if buf_line == cursor_line {
-					Color::White
+					if editor.is_light_bg { Color::Blue } else { Color::White }
 				} else {
 					Color::DarkGrey
 				});
@@ -162,7 +162,7 @@ pub fn render_wrap(
 						let wrap_gutter = format!("{:>width$} ", "↳", width = gutter_width);
 						screen.set_bg(base_bg);
 						screen.set_fg(if buf_line == cursor_line {
-							Color::Blue
+							if editor.is_light_bg { Color::Blue } else { Color::White }
 						} else {
 							Color::DarkGrey
 						});
@@ -299,7 +299,7 @@ pub fn render_nowrap(
 				let line_num = format!("{:>width$} ", line_idx + 1, width = gutter_width);
 				cols_written += line_num.len();
 				screen.set_fg(if line_idx == cursor_line {
-					Color::White
+					if editor.is_light_bg { Color::Blue } else { Color::White }
 				} else {
 					Color::DarkGrey
 				});

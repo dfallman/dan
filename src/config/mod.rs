@@ -50,7 +50,7 @@ impl Default for Config {
 			line_numbers: true,
 			highlight_active: true,
 			scroll_off: 5,
-			theme: "base16-eighties.dark".to_string(),
+			theme: "OneHalfDark".to_string(),
 			wrap_lines: true,
 			syntax_highlight: true,
 			auto_indent: true,

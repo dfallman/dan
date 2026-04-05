@@ -2,8 +2,9 @@
 
 use std::path::Path;
 
-use syntect::highlighting::{Theme, ThemeSet};
+use syntect::highlighting::Theme;
 use syntect::parsing::{SyntaxReference, SyntaxSet};
+use syntect_assets::assets::HighlightingAssets;
 
 /// Holds loaded syntax definitions and themes for highlighting.
 pub struct Highlighter {
@@ -14,21 +15,25 @@ pub struct Highlighter {
 impl Highlighter {
 	/// Create a highlighter with bundled defaults.
 	pub fn new(theme_name: &str) -> Self {
-		let syntax_set = SyntaxSet::load_defaults_newlines();
-		let theme_set = ThemeSet::load_defaults();
-		let theme = theme_set
-			.themes
-			.get(theme_name)
-			.or_else(|| theme_set.themes.get("base16-eighties.dark"))
-			.cloned()
-			.unwrap_or_else(|| {
-				theme_set
-					.themes
-					.values()
-					.next()
-					.expect("syntect ships at least one theme")
-					.clone()
-			});
+		let assets = HighlightingAssets::from_binary();
+
+		let syntax_set = match assets.get_syntax_set() {
+			Ok(s) => s.clone(),
+			Err(_) => SyntaxSet::load_defaults_newlines(),
+		};
+
+		// Check if the theme exists safely (ignores case), otherwise fallback
+		let active_theme_name = if let Some(matched) = assets.themes().find(|name| name.eq_ignore_ascii_case(theme_name)) {
+			matched
+		} else {
+			if cfg!(debug_assertions) {
+				eprintln!("[DEBUG] Theme '{}' not found, falling back to OneHalfDark", theme_name);
+			}
+			"OneHalfDark" // A safe, great looking fallback bundled in syntect-assets
+		};
+
+		let theme = assets.get_theme(active_theme_name).clone();
+
 		Self { syntax_set, theme }
 	}
 
@@ -44,6 +49,6 @@ impl Highlighter {
 
 impl Default for Highlighter {
 	fn default() -> Self {
-		Self::new("base16-eighties.dark")
+		Self::new("OneHalfDark")
 	}
 }
