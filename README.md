@@ -82,8 +82,8 @@ cargo build --release
 # Move to your local path
 cp target/release/dan /usr/local/bin/
 
-# ...or (macOS specifically)
-cp target/release/dan ~/.local/bin/
+# ...alternatively
+cargo install --path .
 ```
 
 ## Windows (PowerShell)
