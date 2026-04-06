@@ -14,7 +14,7 @@ Dan has no strange modes to learn, no archaic shortcuts, and no massive dot file
 
 - **Smart rendering engine**: Dan uses a differential rendering system. By computing exactly what has changed on your screen, it only sends the necessary updates to your terminal. This makes scrolling 100MB files over SSH feel as smooth as local editing.
 
-- **Reliability and performance**: Using a so-called Rope data structure, Dan can handles _massive_ files with a constant memory footprint. It's built entirely in Rust, so it's _fast_, memory efficient, and reliable. We've built Dan with speed and reliability in mind, over bells and whistles. Did we say it's fast?
+- **Reliability and performance**: Using a so-called Rope data structure, Dan can handles _massive_ files with a constant memory footprint. It's built entirely in Rust, so it's fast, memory efficient, and reliable. We've built Dan to favor speed and reliability over bells and whistles. Did we say it's _fast_?
 
 - **Full Unicode & CJK support**: Dan handles Chinese, Japanese, and Korean characters perfectly (or, at least, that's the plan), maintaining correct visual alignment even with double-width characters and emojis.
 
@@ -174,7 +174,9 @@ Out of the box, Dan follows a layered configuration model, but is project-aware.
 
 Your global config file should be saved at `~/.config/dan/config.toml`
 
-Note that this file is _not_ created by default as Dan ships with sensible defaults (somewhat opinionated) and doesn't _require_ any configuration. However, if you wish to tweak Dan, simply create this file: 
+If you're new to unix-based systems, `~/` denotes your homw folder. In macOS, this folder is `/Users/<username>` and in Linux it's `/home/<username>`.
+
+**Note**: this file is _not_ created by default as Dan ships with sensible defaults (somewhat opinionated) and doesn't _require_ any configuration. However, if you wish to tweak Dan, simply create this file: 
 ```dan ~/.config/dan/config.toml```
 
 Then, copy and paste the below default into it. Change what you want to change and hit save: `Ctrl-S` then `Ctrl-Q` to quit. Next time you restart Dan your settings should be active.
