@@ -1,127 +1,137 @@
 # Dan
 
-Dan is a modeless, terminal-native text editor engineered in Rust for users who prefer GUI-style workflows (like `Ctrl+S`, `Ctrl+C/V`). It provides a consistent, low-latency editing experience with no strange modes to learn, no archaic shortcuts, and no massive dotfiles required to get started.
+Dan is an incredibly fast, highly reliable, and radically efficient terminal text editor. Built in Rust from the ground up to prioritize zero-latency text manipulation and deterministic stability, Dan throws away archaic modal paradigms in favor of raw performance and intuitive, standard keystrokes.
 
-Whether you are working locally or maintaining source code over an unstable SSH connection, Dan is explicitly designed to remain highly responsive.
+It is explicitly engineered to handle multi-gigabyte payloads, execute instant background formatting, and flawlessly sustain 60FPS fluid navigation over heavily constrained and fluctuating SSH connections—all while preventing data loss through robust background persistence.
 
-## Performance & Reliability
+## Core Architecture & Reliability
 
-- **Smart Differential Rendering**: Dan computes delta changes and only pushes updated bytes to the terminal emulator. This strict differential approach minimizes I/O overhead, keeping navigation smooth even when editing large files over constrained SSH connections.
-- **Rope Data Structure**: Standard Strings degrade when handling massive files. Dan uses a Rope data structure to maintain a constant memory footprint and consistent line-modification speeds, regardless of file scale.
-- **Fault-Tolerant Autosave**: Changes are actively flushed to a background `.swp` file every 5 seconds. In the event of a terminal crash or sudden power failure, your unsaved progress is reliably preserved for easy recovery upon reopening.
+- **Differential Screen Rendering**: The rendering pipeline utilizes an aggressive delta-computation system. Dan only flushes the exact structural text differences directly to standard output frame-by-frame, drastically minimizing I/O and entirely eliminating scroll tearing over network connections.
+- **Rope Data Structure Backing**: The text buffer is internally powered by a Rope graph designed to withstand punishing mutation intervals. This guarantees O(log N) insertion and deletion complexities, maintaining constant memory footprints and instantaneous mutations regardless of file scale.
+- **Fault-Tolerant Native .swp Recovery**: All unsaved changes are asynchronously serialized to a `.swp` recovery file every 5 seconds. If your SSH connection drops, your terminal crashes, or you experience a power cycle, Dan will immediately prompt to recover your atomic state identically upon reopening.
 
-## The Modern Workflow
+## Feature Overview
 
-- **Non-Blocking Formatting (`Ctrl+L`)**: Dan securely pipes your buffer through external, industry-standard code formatters (like Prettier, Ruff, or Rustfmt) asynchronously. Execution happens in the background, ensuring you can continue editing without stutter.
-- **Syntax-Aware Commenting (`Ctrl+/`)**: Dan natively parses the syntax metadata of your active file to seamlessly toggle language-specific block or line comments.
-- **Automatic Pair Insertion**: Writing structural code is accelerated by automatic bracket and quote closures, including the ability to wrap existing selections intelligently.
-- **Unicode First**: Dan reliably processes complex UTF-8 and CJK encodings, correctly rendering double-width characters and emojis without mangling the terminal's visual alignment grid.
+- **Layered Deterministic Configuration**: Reads from Internal Defaults $\rightarrow$ `~/.config/dan/config.toml` $\rightarrow$ local `.editorconfig` matrices dynamically. It fully respects project-level stylistic constraints (tab widths, CRLF vs LF line endings, trailing whitespace trims) instantly.
+- **Asynchronous Auto-Formatter (`Ctrl+L`)**: Never block the main thread while formatting. Dan securely pipes the active buffer to external industry-standard binaries (like Prettier, Rustfmt, or Ruff) in a background thread, effortlessly hot-swapping the buffer when execution confirms success without interrupting your cursor sequence.
+- **True Syntax and Encoding Awareness**: Beyond just stripping simple file extensions, Dan intelligently parses complex hidden targets (like `Cargo.lock`, `Makefile`, and `.bashrc`). It reliably digests raw Unicode, Shift-JIS, and legacy formats locally, converting correctly to pristine UTF-8.
+- **Automatic Environment Introspection**: Dan fires native OSC 11 ANSI sequences sequentially on boot to ascertain your shell’s true background luminance dynamically—auto-selecting optimal high-contrast (`OneHalfDark`/`OneHalfLight`) rendering without manual intervention, while still bundling 20+ specialized syntax themes.
+- **Automatic Pair Insertion**: Writing structural code is accelerated by automatic bracket and quote closures (`()`, `[]`, `{}`), including the ability to wrap existing active select regions simultaneously.
 
-## Keybindings
+## Comprehensive Keybindings
 
-Dan utilizes familiar native keystrokes, categorized for optimal efficiency.
+Dan relies on explicit, intuitive chord patterns—eliminating the need to memorize arbitrary single-character modality switches. 
 
-### General
-| **Key**               | **Action**                                               |
-| --------------------- | -------------------------------------------------------- |
-| `Ctrl` + `S`          | **Save**: Write changes to disk.                         |
-| `Ctrl` + `Q`          | **Quit**: Safe exit (prompts to save).                   |
-| `Ctrl` + `Shift` + `Q`| **Force Quit**: Exit immediately and flush recovery file.|
-| `Ctrl` + `H`          | **Show Help**: Open the built-in reference bar.          |
+### File Actions & General
+| **Key**                         | **Action**                                               |
+| ------------------------------- | -------------------------------------------------------- |
+| `Ctrl` + `S`                    | **Save**: Atomic write to disk.                          |
+| `Ctrl` + `A`                    | **Save As**: Interactive prompt to write to a new path.  |
+| `Ctrl` + `Q`                    | **Quit**: Safe exit (halts if there are unsaved changes).|
+| `Ctrl` + `Shift` + `C`          | **Force Quit**: Exit instantly and flush recovery file.  |
+| `Ctrl` + `H`                    | **Help Bar**: Toggle the built-in reference footer.      |
 
-### Editing
-| **Key**               | **Action**                                                       |
-| --------------------- | ---------------------------------------------------------------- |
-| `Ctrl` + `C` / `X` / `V`| **Clipboard**: Standard Copy, Cut, and Paste.                  |
-| `Ctrl` + `Z` / `Y`      | **Undo / Redo**: Infinite, persistent undo history.            |
-| `Shift` + `Arrows`      | **Select**: Highlight text blocks precisely.                   |
-| `Ctrl` + `W`          | **Word Wrap**: Toggle between soft-wrapping and horizontal scroll. |
-| `Alt` + `↑` / `↓`     | **Move Line**: Slide the current line or active block up and down. |
+### Standard Text Editing
+| **Key**                         | **Action**                                                       |
+| ------------------------------- | ---------------------------------------------------------------- |
+| `Ctrl` + `C` / `X` / `V`        | **Clipboard**: Access standard copy, cut, and paste pipelines.   |
+| `Ctrl` + `Z` / `Y`              | **Undo / Redo**: Navigate the persistent infinite mutation tree. |
+| `Ctrl` + `D`                    | **Duplicate**: Clone the current line or selection context.      |
+| `Ctrl` + `K`                    | **Delete Line**: Erase the active line or selection block.       |
+| `Ctrl` + `E` (or `Ctrl` + `/`)  | **Toggle Comment**: Invert comment state using syntax-aware characters. |
+| `Ctrl` + `W`                    | **Word Wrap**: Hot-toggle between soft-wrapping and horizontal scroll.|
+| `Ctrl` + `L`                    | **Lint/Format**: Execute standard background code formatters.    |
+| `Alt` + `↑` / `↓`               | **Swap Line**: Swap current contiguous block upward or downward. |
+| `Tab` / `Shift` + `Tab`         | **Indent / Dedent**: Shift selection boundaries via configured tabs. |
 
-### Navigation & Search
-| **Key**               | **Action**                                               |
-| --------------------- | -------------------------------------------------------- |
-| `Ctrl` + `↑` / `↓`    | **Scroll**: Move the viewport without moving the cursor. |
-| `Ctrl` + `Shift` + `↑` / `↓`| **Quick Scroll**: Accelerated viewport navigation. |
-| `Ctrl` + `F`          | **Find**: Inline search within the current buffer.       |
-| `Ctrl` + `R`          | **Replace**: Interactive search and replace.             |
-| `Ctrl` + `G`          | **Go-To Line**: Fast jump to an exact line marker.       |
-| `Ctrl` + `L`          | **Format**: Run the external code formatter pipeline.    |
+### Advanced Selection Context
+| **Key**                         | **Action**                                                       |
+| ------------------------------- | ---------------------------------------------------------------- |
+| `Ctrl` + `@`                    | **Select All**: Immediately highlight the entire buffer.         |
+| `Shift` + `Arrows`              | **Standard Select**: Highlight raw continuous characters.        |
+| `Shift` + `Home` / `End`        | **Line Span Select**: Highlight until horizontal boundary limits.|
+| `Ctrl` + `Shift` + `←` / `→`    | **Word Block Select**: Highlight contiguous syntactic chunks.    |
+| `Alt` + `Shift` + `←` / `→`     | **Alternate Word Select**: Highlight contiguous syntactic chunks.|
 
-## Configuration
+### High-Speed Navigation
+| **Key**                         | **Action**                                               |
+| ------------------------------- | -------------------------------------------------------- |
+| `Ctrl` + `↑` / `↓`              | **In-place Scroll**: Shift viewport natively without moving cursor. |
+| `Ctrl` + `Shift` + `↑` / `↓`    | **Fast Scroll**: Granularly accelerate viewport Y-axis shifts.      |
+| `Ctrl` + `←` / `→`              | **Word Jump**: Leap over tokens and symbols.                        |
+| `Alt` + `←` / `→`               | **Alternate Word Jump**: Leap over tokens and symbols.              |
+| `Ctrl` + `Home` / `End`         | **Buffer Ends**: Seek instantly to start/EOF of the file array.     |
+| `Ctrl` + `G`                    | **Go-To Line**: Prompt and jump precisely to numeric markers.       |
 
-Dan utilizes a deterministic **Layered Configuration** system that prioritizes contextual settings:
+### Search & Interactive Replace
+| **Key**                         | **Action**                                               |
+| ------------------------------- | -------------------------------------------------------- |
+| `Ctrl` + `F` (or `F7`)          | **Search Mode**: Initiate dynamic string pattern query.  |
+| `Enter` (or `Ctrl` + `G`)       | **Search Focus Next**: Leap forward to next target hit.  |
+| `Shift` + `Enter`               | **Search Focus Previous**: Reverse leap to prior target. |
+| `Ctrl` + `R`                    | **Replace Context**: Enter the sequential replacer pipeline. |
 
-1. **Internal Defaults**: Hardcoded, reliable baseline parameters.
-2. **Global Config** (`~/.config/dan/config.toml`): User-level overrides.
-3. **Local Project Style** (`.editorconfig`): Native directory-level configuration ensuring consistent repository styling.
+*(Note: The Replace Context walks through Target Query $\rightarrow$ Replacement String $\rightarrow$ Action Stepper [Yes/No/All/Quit]).*
 
-### Example `~/.config/dan/config.toml`
+## Advanced Configuration
+
+Edit user-level targets freely at `~/.config/dan/config.toml`. 
 
 ```toml
-# Display Settings
-wrap_lines = true       # Toggle word wrapping
-tab_width = 4           # Indentation depth
-expand_tab = false      # Expand tabs to raw spaces
-line_numbers = true     # Render gutter numbers
-highlight_active = true # Highlight the active line background
+# Display Optimization
+wrap_lines = true       # Enforce word boundary wrapping algorithms
+tab_width = 4           # Space calculation for single level depth
+expand_tab = false      # Mutate raw tabs to whitespace equivalent
+line_numbers = true     # Render active line indexing matrix
+highlight_active = true # Isolate editing line luminance
+scroll_off = 5          # Number of structural lines enforcing padding
+fast_scroll_steps = 10  # Delta coefficient for fast vertical scanning
 
-# Editor Features
-auto_close = true       # Auto-pair (), [], {}
-scroll_off = 5          # Number of lines to pad above/below the cursor
+# Active Editing
+auto_indent = true      # Clone prior whitespace arrays linearly
+auto_close = true       # Inject closure algorithms naturally
+syntax_highlight = true # Toggle native highlighting
 
-# Theme Configuration
-# If "default", Dan queries the terminal and auto-assigns an optimal theme.
-theme = "default"       
+# Terminal Interface
+show_help = true        # Persist dynamic shortcut reference bar
+show_encoding = true    # Track active file interpretation payload
+show_lang = true        # Track current syntax execution pipeline
+
+# Aesthetic Logic
+theme = "default"       # Use OS heuristics natively if "default"
 ```
 
-### Themes and Syntax Highlighting
+## Compilation & Installation
 
-Dan ships with a highly optimized embedded syntax parser and supports 20+ industry-standard themes out of the box (including Dracula, Nord, Solarized, and Sublime Snazzy). If you leave the theme set to `"default"`, Dan communicates with your terminal emulator to automatically detect your environment and adapt to your precise light or dark mode setup.
+Dan guarantees high mechanical execution speeds through Rust. A minimum supported Rust Version of **`1.94`** is explicitly required for accurate resolution. We recommend acquiring the latest toolchains directly via [rustup.rs](https://rustup.rs/).
 
-*Note: For the formatting pipeline (`Ctrl+L`), you should install your desired execution binaries like [rustfmt](https://github.com/rust-lang/rustfmt), [ruff](https://docs.astral.sh/ruff/), or [prettier](https://prettier.io/) globally on your machine.*
-
-## Installation
-
-Dan is built with Rust. To compile it from source, ensure you have the official toolchain installed via [rustup.rs](https://rustup.rs/) (Minimum Supported Rust Version: **1.94**).
-
-### macOS & Linux
+### Linux & macOS Formats
 
 ```bash
-git clone https://github.com/dfallman/dan.git
-cd dan
-cargo build --release
-
-# Move to your local path
-cp target/release/dan /usr/local/bin/
-
-# ...alternatively, install via Cargo
+git clone https://github.com/dfallman/dan.git && cd dan
 cargo install --path .
 ```
+*(Optionally explicitly copy `/target/release/dan` to `/usr/local/bin` after building)*
 
-### Windows (PowerShell)
+### Windows Pipeline (PowerShell)
 
 ```powershell
-git clone https://github.com/dfallman/dan.git
-cd dan
+git clone https://github.com/dfallman/dan.git; cd dan
 cargo build --release
-
-# Move to your Cargo bin for easy access
 Copy-Item target\release\dan.exe ~/.cargo/bin/
 ```
 
-## Planned Improvements
+## Tracked Architecture Roadmap
 
-While Dan prioritized speed, stability, and security for its foundational architecture, we are actively tracking the following capability expansions:
+Dan focuses specifically on eliminating friction with maximum determinism, explicitly ruling out heavy bloated framework-level functionalities. However, ongoing critical engine upgrades include:
 
-- **Mouse Support**: Click-to-position, scroll wheel rendering, and click-drag selections.
-- **Regex Search**: Enable regular expression evaluation in the find/replace pipeline.
-- **Extended Markdown Support**: Enhanced semantic rendering for bold, italic, and tabular structures.
-- **Buffer Switching**: Multi-buffer plumbing, though tools like Zellij and tmux handle multiplexing well today.
-- **Vertical Split**: Dual-pane rendering for viewing two files or regions simultaneously.
-- **Suspend & Resume**: POSIX SIGTSTP handling for cleanly toggling between the editor sequence and the shell.
-- **Configurable Keybindings**: Decoupling the input matrix for custom shortcut mappings.
-- **Multi-Cursor**: Synchronous multi-line text mutation.
+- **Configurable Binding Topography**: Decoupling the input interpretation matrix to allow unrestricted structural reassignment.
+- **Vertical Code Splitting**: Isolating read/write pipelines across dual-pane configurations natively.
+- **Multi-Cursor Manipulation**: Orchestrating sequence edits across parallel vertical line contexts identically.
+- **Regex Query Resolution**: Pushing standard regular expressions natively through the find/replace pipeline.
+- **Mouse Orchestration Matrix**: Supporting scroll-wheel and click-and-drag terminal coordinate interactions safely.
+- **Extended Markdown Lexing**: Expanding abstract tree evaluation visually formatting bold and italic syntactic constructs.
+- **POSIX SIGTSTP Injection**: Hooking native interrupt routines to cleanly suspend/resume directly to the parent shell.
 
 ---
 **License**: MIT
