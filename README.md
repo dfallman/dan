@@ -29,9 +29,9 @@ Dan has no strange modes to learn, no archaic shortcuts, and no massive dot file
 
 - **Syntax highlighting**: Dan features accurate and fast syntax highlighting for a wide range of languages. It auto-detects your terminal's color scheme and picks a sensible default, but also supports a range of custom color themes.
 
-- **Effortless formatting (`Ctrl+L`)**: Clean up your code instantly. Dan pipes your text through industry-standard tools like **Prettier**, **Ruff**, or **Rustfmt** in the background. It’s non-blocking, so you can keep typing while it works.
+- **Quick formatting**: Clean up your code instantly with `Ctrl-L`. Dan pipes your text through industry-standard tools like **Prettier**, **Ruff**, or **Rustfmt** in the background. It's non-blocking, so you can keep typing while it's working.
 
-- **Smart selection & commenting**: Use `Ctrl+E` to toggle language-specific comments across multi-line selections. Dan naturally understands the syntax logic of your file and will comment out a single line or your selected section.
+- **Smart comment toggling**: Use `Ctrl+E` to toggle language-specific comments across multi-line selections. Dan understands the syntax logic of your file and will comment out a single line or your selected section.
 
 - **Automatic pair insertion**: Save keystrokes with auto-closing brackets. If you highlight a block of code and type a bracket, Dan will wrap the selection for you.
 
@@ -50,7 +50,7 @@ Dan has no strange modes to learn, no archaic shortcuts, and no massive dot file
 
 - **True syntax and encoding awareness**: Beyond just stripping simple file extensions, Dan intelligently parses complex hidden targets (like `Cargo.lock`, `Makefile`, and `.bashrc`). It reliably digests raw Unicode, Shift-JIS, and legacy formats locally, converting correctly to pristine UTF-8.
 
-- **Automatic environment introspection**: Dan fires native OSC 11 ANSI sequences sequentially on boot to ascertain your shell’s true background luminance dynamically—auto-selecting optimal high-contrast (`OneHalfDark`/`OneHalfLight`) rendering without manual intervention, while still bundling 20+ specialized syntax themes.
+- **Automatic environment introspection**: Dan fires native OSC 11 ANSI sequences sequentially on boot to ascertain your shell's true background luminance dynamically—auto-selecting optimal high-contrast (`OneHalfDark`/`OneHalfLight`) rendering without manual intervention, while still bundling 20+ specialized syntax themes.
 
 - **Automatic pair insertion**: Writing structural code is accelerated by automatic bracket and quote closures (`()`, `[]`, `{}`), including the ability to wrap existing active select regions simultaneously
 
