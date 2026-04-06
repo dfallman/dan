@@ -23,9 +23,9 @@ Dan has no strange modes to learn, no archaic shortcuts, and no massive dot file
 
 ## Tools for developers, useful for everyone
 
-- **Automatic encoding detection**: Opening an old file? Dan intelligently "sniffs" legacy formats (like Shift-JIS or Windows-1252) and converts them to clean UTF-8 for editing.
+- **Automatic encoding detection**: Opening an old file? Dan intelligently sniffs legacy formats (like Shift-JIS or Windows-1252) and converts them to clean UTF-8 for editing.
 
-- **Syntax highlighting**: Dan features accurate and fast syntax highlighting for a wide range of languages. It auto-detects your terminal's color scheme, but also supports a range of color themes.
+- **Syntax highlighting**: Dan features accurate and fast syntax highlighting for a wide range of languages. It auto-detects your terminal's color scheme and picks a sensible default, but also supports a range of custom color themes.
 
 - **Effortless formatting (`Ctrl+L`)**: Clean up your code instantly. Dan pipes your text through industry-standard tools like **Prettier**, **Ruff**, or **Rustfmt** in the background. It’s non-blocking, so you can keep typing while it works.
 
