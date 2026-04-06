@@ -135,7 +135,7 @@ To install on Windows, [follow these instructions](https://rustup.rs/#).
 
 Once you have rust installed, go ahead and build Dan:
 
-## macOS & Linux
+### Installing Dan on macOS & Linux
 
 ```
 git clone https://github.com/dfallman/dan.git
@@ -149,17 +149,18 @@ cp target/release/dan /usr/local/bin/
 cargo install --path .
 ```
 
-## Windows 
-For PowerShell users, see below. If you're running Dan inside of a WSL linux virtual machine, you can follow the instructions for Linux instead.
+### Installing Dan on Windows PowerShell
+For PowerShell users, see instructions below. **Note**: if you're running Dan inside of a WSL environment, you should follow the instructions for Linux instead (see above).
 
 ```
 git clone https://github.com/dfallman/dan.git
 cd dan
 cargo build --release
 
-# Move to your Cargo bin for easy access
+# Move to your Cargo bin
 Copy-Item target\release\dan.exe ~/.cargo/bin/
 ```
+
 
 # Configuration
 Out of the box, Dan follows a layered configuration model, but is project-aware. This means it looks for settings in this order:
