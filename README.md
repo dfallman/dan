@@ -170,7 +170,7 @@ Out of the box, Dan follows a layered configuration model, but is project-aware.
 ...however, Dan understands that different projects have different rules. Whenever you open a file, Dan automatically scans for local `.editorconfig` guidelines. It also automatically parses your project's specific styling rules—like tab sizes, space preferences, trailing whitespace rules, and line endings—and automatically prioritizes them over your global defaults. The idea is that you should never have to manually adjust your editor just to contribute to a new project. Also, you'll not drive your collaborators nuts by consistently using your preferred indentation or line endings (although, as we all know, Tab and 4 spaces are the only acceptable indentation options. That's why they're the defaults).
 
 
-# Global config
+## Global config
 
 Your global config file should be saved at `~/.config/dan/config.toml`
 
