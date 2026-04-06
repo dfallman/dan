@@ -1,6 +1,6 @@
 # dan
 
-**Dan** is a fast, friendly, and zero fuss terminal text editor. Written natively in [Rust](https://rust-lang.org/), it is designed to be modeless, resource-efficient, and zero-latency, even over fluctuating SSH connections. It has been architectured to handle very large files and complex editing tasks, while remaining simple to use and configure. Dan works in most terminal emulator environments, whether you're using macOS, Linux, or Windows.
+**Dan** is a fast, friendly, and zero fuss terminal text editor. Written natively in [Rust](https://rust-lang.org/), it is designed to be modeless, resource-efficient, and with the lowest possible latency, even over fluctuating SSH connections. It's architectured to handle very large files and complex editing tasks, while remaining easy to use and configure to your liking. Dan works in most terminal emulator environments, whether you're using macOS, Linux, or Windows.
 
 Dan has no strange modes to learn, no archaic shortcuts, and no massive dot files. Dan ships with sensible defaults, so most users can start using Dan without any configuration.
 
