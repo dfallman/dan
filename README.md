@@ -68,7 +68,7 @@ Dan uses familiar shortcuts so you don't need a cheat sheet.
 
 # Installation
 
-You will need the latest [Rust](https://rustup.rs/) to compile Dan from source. (1.94 is recommended). On most system, installing using the package manager will not give you the latest version. Use [https://rustup.rs/](https://rustup.rs/) instead.
+You will need the latest [Rust](https://rustup.rs/) to compile Dan from source. (1.94 is recommended). Note that on most systems, installing rustc using your package manager will not give you the latest version. We highly recommend you use the official rust installation manager available at [https://rustup.rs/](https://rustup.rs/) instead.
 
 ## macOS & Linux
 
