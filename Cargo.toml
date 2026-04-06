@@ -2,7 +2,18 @@
 name = "dan"
 version = "0.2.50"
 edition = "2021"
+authors = ["Daniel Fallman <dfallman@gmail.com>"]
 description = "Dan is a fast, friendly, and zero-fuss terminal text editor written in Rust"
+rust-version = "1.94"
+documentation = "https://github.com/dfallman/dan"
+repository = "https://github.com/dfallman/dan"
+readme = "README.md"
+license = "GPL-3.0-only"
+keywords = ["editor", "terminal", "tui", "rust", "modeless"]
+categories = ["command-line-utilities", "development-tools::editors"]
+
+[badges]
+maintenance = { status = "actively-developed" }
 
 [dependencies]
 crossterm = "0.29"
