@@ -68,7 +68,7 @@ Dan tries to use familiar and intuitive shortcuts, so you shouldn't need to prin
 
 What this means in practice is that terminal editors can't typically use exactly the same keyboard shortcuts as a GUI editor. macOS users in particular might find the use of `Ctrl` instead of `Cmd` (`⌘`) unusual and difficult to get used to. Others, coming from linux and Windows environments, will feel right at home. 
 
-For macOS users who simply can't get used to using `Ctrl` over `⌘`, note that many terminal emulators have ways of remapping keys. For example, in iTerm2, you can remap `Ctrl` to the `⌘` in `Preferences` > `Keys` > `Key Bindings`. This means that you can then, as an example, use the left `⌘` key as `Ctrl` in your terminal (and Dan), while the right `⌘` is still available to control iTerm2 and the OS while iTerm2 is active. Finally, for macOS users, we strongly recommend using an alternative terminal emulator [iTerm2](https://iterm2.com/) (see list above) over the built-in Terminal app.
+For macOS users who simply can't get used to using `Ctrl` over `⌘`, note that many terminal emulators have ways of remapping keys. For example, in iTerm2, you can remap `Ctrl` to the `⌘` in `Preferences` > `Keys` > `Key Bindings`. This means that you can then, as an example, use the left `⌘` key as `Ctrl` in your terminal (and Dan), while the right `⌘` is still available to control iTerm2 and the OS while iTerm2 is active. Finally, for macOS users, we strongly recommend using an alternative terminal emulator such as [iTerm2](https://iterm2.com/) (see list above) over the built-in Terminal app.
 
 ### Basic operation
 | **Key**                         | **Action**                                               |
@@ -174,7 +174,7 @@ Out of the box, Dan follows a layered configuration model, but is project-aware.
 
 Your global config file should be saved at `~/.config/dan/config.toml`
 
-If you're new to unix-based systems, `~/` denotes your homw folder. In macOS, this folder is `/Users/<username>` and in Linux it's `/home/<username>`.
+If you're new to unix-based systems, `~/` denotes your home folder. In macOS, this folder is `/Users/<username>` and in Linux it's `/home/<username>`.
 
 **Note**: this file is _not_ created by default as Dan ships with sensible defaults (somewhat opinionated) and doesn't _require_ any configuration. However, if you wish to tweak Dan, simply create this file: 
 ```dan ~/.config/dan/config.toml```
