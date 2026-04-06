@@ -59,16 +59,13 @@ Dan has no strange modes to learn, no archaic shortcuts, and no massive dot file
 
 # Keyboard shortcuts (keybindings)
 
-Dan tries to use familiar and intuitive shortcuts, so you shouldn't need to print off a cheat sheet. If you're even in doubt, hit `Ctrl-H` to see the help bar.
+Dan tries to use familiar and intuitive shortcuts, so you shouldn't need to print off a cheat sheet. If you're ever in doubt, hit `Ctrl-H` to toggle the help bar.
 
-Note that terminal emulators struggle with certain keybindings because they rely on an archaic system of so-called 'escape sequences,' where many modern key combinations (such as `Ctrl` + `Shift` + `↓`) either send the exact same code as the base key (without the `Shift`) or simply aren't defined in the standard protocols used by legacy shells. 
+**Note**: terminal emulators (i.e. your terminal app such as [iTerm2](https://iterm2.com/), [Kitty](https://sw.kovidgoyal.net/kitty/), [Alacritty](https://alacrittywm.org/), [Ghostty](https://ghostty.dev/), [WezTerm](https://wez.dev/), and others) struggle with certain keybindings because they rely on an archaic system of so-called 'escape sequences,' where many modern key combinations (such as `Ctrl` + `Shift` + `↓`) either send the exact same code as the base key (without the `Shift`) or simply aren't defined in the standard protocols used by legacy shells. 
 
 What this means in practice is that terminal editors can't typically use exactly the same keyboard shortcuts as a GUI editor. macOS users in particular might find the use of `Ctrl` instead of `Cmd` (`⌘`) unusual and difficult to get used to. Others, coming from linux and Windows environments, will feel right at home. 
 
-For macOS users who simply can't get used to using `Ctrl` over `⌘`, note that many terminal emulators have ways of remapping keys. For example, in iTerm2, you can remap `Ctrl` to the `⌘` in `Preferences` > `Keys` > `Key Bindings`. This means that you can then, as an example, use the left `⌘` key as `Ctrl` in your terminal (and Dan), while the right `⌘` is still available to control iTerm2 and the OS while iTerm2 is active.
-
-
-## Navigation
+For macOS users who simply can't get used to using `Ctrl` over `⌘`, note that many terminal emulators have ways of remapping keys. For example, in iTerm2, you can remap `Ctrl` to the `⌘` in `Preferences` > `Keys` > `Key Bindings`. This means that you can then, as an example, use the left `⌘` key as `Ctrl` in your terminal (and Dan), while the right `⌘` is still available to control iTerm2 and the OS while iTerm2 is active. Finally, for macOS users, we strongly recommend using an alternative terminal emulator [iTerm2](https://iterm2.com/) (see list above) over the built-in Terminal app.
 
 ### Basic operation
 | **Key**                         | **Action**                                               |
@@ -94,7 +91,7 @@ For macOS users who simply can't get used to using `Ctrl` over `⌘`, note that 
 | `Alt` + `↑` / `↓`               | **Swap line**: Swap current contiguous block upward or downward. |
 | `Tab` / `Shift` + `Tab`         | **Indent / Dedent**: Shift selection boundaries via configured tabs. |
 
-### Advanced Selection Context
+### Advanced selection
 | **Key**                         | **Action**                                                       |
 | ------------------------------- | ---------------------------------------------------------------- |
 | `Ctrl` + `\`                    | **Select all**: Immediately select the entire buffer.         |
@@ -103,7 +100,7 @@ For macOS users who simply can't get used to using `Ctrl` over `⌘`, note that 
 | `Ctrl` + `Shift` + `←` / `→`    | **Word block select**: Select contiguous syntactic chunks.    |
 | `Alt` + `Shift` + `←` / `→`     | **Alternate word block select**: Select contiguous syntactic chunks.|
 
-### High-Speed Navigation
+### High-speed navigation
 | **Key**                         | **Action**                                               |
 | ------------------------------- | -------------------------------------------------------- |
 | `Ctrl` + `↑` / `↓`              | **In-place scroll**: Shift viewport natively without moving cursor. |
@@ -113,7 +110,7 @@ For macOS users who simply can't get used to using `Ctrl` over `⌘`, note that 
 | `Ctrl` + `Home` / `End`         | **Buffer ends**: Seek instantly to start/EOF of the file array.     |
 | `Ctrl` + `G`                    | **Go-to line**: Prompt and jump precisely to numeric markers.       |
 
-### Search & Interactive Replace
+### Search & replace
 | **Key**                         | **Action**                                               |
 | ------------------------------- | -------------------------------------------------------- |
 | `Ctrl` + `F` (or `F7`)          | **Search mode**: Initiate dynamic string pattern query.  |
