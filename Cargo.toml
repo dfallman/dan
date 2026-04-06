@@ -1,8 +1,8 @@
 [package]
 name = "dan"
-version = "0.2.43"
+version = "0.2.44"
 edition = "2021"
-description = "A friendly, fast, modeless, and (somewhat) opinionated terminal text editor written in Rust"
+description = "Dan is a fast, friendly, and zero-fuss terminal text editor written in Rust"
 
 [dependencies]
 crossterm = "0.29"
