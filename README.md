@@ -257,7 +257,7 @@ Dan shows the output from the linter in the interface so you can see if somethin
 
 
 # Roadmap
-Dan is a work in progress. As mentioned before, our main focus has been on speed, stability, reliability, efficiency, and security over features and exorbitant tweakability. While our goal for Dan isn't to become the world's most feature-rich text editor, we have the following ideas on our roadmap. Do let us know if any of these features stand out and/or if you have any other suggestions!
+Dan remains a work in progress, prioritizing speed, stability, and security over feature density or complex customization. While the goal is a streamlined editing experience rather than the most feature-rich environment, the following roadmap outlines our planned trajectory; we welcome your feedback and suggestions on these upcoming priorities.
 
 - **Mouse support**: click-to-position, scroll wheel, click-drag select
 - **Regex search**: use regex expressions in search and replace
