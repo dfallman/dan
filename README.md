@@ -133,6 +133,8 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
 To install on Windows, [follow these instructions](https://rustup.rs/#).
 
+Once you have rust installed, go ahead and build Dan:
+
 ## macOS & Linux
 
 ```
