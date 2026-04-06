@@ -149,8 +149,8 @@ cp target/release/dan /usr/local/bin/
 cargo install --path .
 ```
 
-### Installing Dan on Windows PowerShell
-For PowerShell users, see instructions below. **Note**: if you're running Dan inside of a WSL environment, you should follow the instructions for Linux instead (see above).
+### Installing Dan on Windows
+For Windows PowerShell users, see instructions below. **Note**: if you're running Dan inside of a WSL environment, you should follow the instructions for Linux instead (see above).
 
 ```
 git clone https://github.com/dfallman/dan.git
