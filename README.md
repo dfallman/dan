@@ -6,7 +6,7 @@ Dan has no strange modes to learn, no archaic shortcuts, and no massive dot file
 
 # Features
 
-## At a glance
+### At a glance
 
 - **Zero configuration**: Dan works out of the box with sensible defaults. No need to configure anything. However, Dan is highly configurable if you want it to be, see below.
 
@@ -23,7 +23,7 @@ Dan has no strange modes to learn, no archaic shortcuts, and no massive dot file
 - **Auto-save and recovery**: Dan features a 5-second background autosave to a temporary buffer. This means that if your terminal crashes or you lose power, your work is safely tucked away in a `.swp` file for easy recovery. Just fire up Dan again to recover your work.
 
 
-## Tools for developers, useful for everyone
+### Tools for developers, useful for everyone
 
 - **Automatic encoding detection**: Opening an old file? Dan intelligently sniffs legacy formats (like Shift-JIS or Windows-1252) and converts them to clean UTF-8 for editing.
 
@@ -36,7 +36,7 @@ Dan has no strange modes to learn, no archaic shortcuts, and no massive dot file
 - **Automatic pair insertion**: Save keystrokes with auto-closing brackets. If you highlight a block of code and type a bracket, Dan will wrap the selection for you.
 
 
-## Under the hood
+### Under the hood
 
 - **Differential screen rendering**: The rendering pipeline utilizes an aggressive delta-computation system. Dan only flushes the exact structural text differences directly to standard output frame-by-frame, drastically minimizing I/O and entirely eliminating scroll tearing over network connections.
 
@@ -65,7 +65,7 @@ Note that terminal emulators struggle with certain keybindings because they rely
 
 What this means in practice is that terminal editors can't typically use exactly the same keyboard shortcuts as a GUI editor. macOS users in particular might find the use of `Ctrl` instead of `Cmd` (`⌘`) unusual and difficult to get used to. Others, coming from linux and Windows environments, will feel right at home. 
 
-For macOS users who simply can't get used to using `Ctrl` over `⌘`, note that many terminal emulators have ways of remapping keys. For example, in iTerm2, you can remap `Ctrl` to for instance the left `⌘` in the `Preferences` > `Keys` > `Key Bindings` section. This means that you can then use the left `⌘` key as `Ctrl` in Dan, while the right `⌘` is still available to control iTerm2.
+For macOS users who simply can't get used to using `Ctrl` over `⌘`, note that many terminal emulators have ways of remapping keys. For example, in iTerm2, you can remap `Ctrl` to the `⌘` in `Preferences` > `Keys` > `Key Bindings`. This means that you can then, as an example, use the left `⌘` key as `Ctrl` in your terminal (and Dan), while the right `⌘` is still available to control iTerm2 and the OS while iTerm2 is active.
 
 
 ## Navigation
@@ -123,12 +123,17 @@ For macOS users who simply can't get used to using `Ctrl` over `⌘`, note that 
 
 
 # Installation
+You need the latest [Rust](https://rustup.rs/) to compile Dan from source (currently, v1.94 is recommended). Note that on most systems, installing rustc using your package manager (such as apt and brew) will _not_ give you the latest version, and older versions might fail to compile Dan. Therefore, we highly recommend you use the official rust installation manager available at [https://rustup.rs/](https://rustup.rs/) instead.
 
-You will need the latest [Rust](https://rustup.rs/) to compile Dan from source. (1.94 is recommended). Note that on most systems, installing rustc using your package manager will not give you the latest version. We highly recommend you use the official rust installation manager available at [https://rustup.rs/](https://rustup.rs/) instead.
+For all unix based systems, you can use:
+
+```
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+
+To install on Windows, [follow these instructions](https://rustup.rs/#).
 
 ## macOS & Linux
-
-Bash
 
 ```
 git clone https://github.com/dfallman/dan.git
@@ -142,9 +147,8 @@ cp target/release/dan /usr/local/bin/
 cargo install --path .
 ```
 
-## Windows (PowerShell)
-
-PowerShell
+## Windows 
+For PowerShell users, see below. If you're running Dan inside of a WSL linux virtual machine, you can follow the instructions for Linux instead.
 
 ```
 git clone https://github.com/dfallman/dan.git
@@ -156,7 +160,6 @@ Copy-Item target\release\dan.exe ~/.cargo/bin/
 ```
 
 # Configuration
-
 Out of the box, Dan follows a layered configuration model, but is project-aware. This means it looks for settings in this order:
 
 1. **Internal Defaults**: Dan's sensible defaults
