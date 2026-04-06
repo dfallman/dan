@@ -125,7 +125,7 @@ fn map_key(key: &KeyEvent) -> Command {
 	if ctrl && shift {
 		return match key.code {
 			KeyCode::Char('c') | KeyCode::Char('C') => Command::ForceQuit,
-			KeyCode::Char('@') | KeyCode::Char('2') => Command::SelectAll,
+			KeyCode::Char('\\') | KeyCode::Char('|') => Command::SelectAll,
 			KeyCode::Left => Command::SelectWordBackward,
 			KeyCode::Right => Command::SelectWordForward,
 			KeyCode::Up => Command::MoveFastUp,
@@ -155,7 +155,7 @@ fn map_key(key: &KeyEvent) -> Command {
 		return match key.code {
 			KeyCode::Char('c') => Command::Copy,
 			KeyCode::Char('s') => Command::Save,
-			KeyCode::Char('@') => Command::SelectAll,
+			KeyCode::Char('\\') => Command::SelectAll,
 			KeyCode::Char('q') => Command::Quit,
 			KeyCode::Char('z') => Command::Undo,
 			KeyCode::Char('y') => Command::Redo,

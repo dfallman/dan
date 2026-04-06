@@ -18,6 +18,8 @@ Dan has no strange modes to learn, no archaic shortcuts, and no massive dot file
 
 - **Full Unicode & CJK support**: Dan handles Chinese, Japanese, and Korean characters perfectly (or, at least, that's the plan), maintaining correct visual alignment even with double-width characters and emojis.
 
+- **OS clipboard integration**: Dan integrates with the OS clipboard, so you can copy and paste between Dan and other applications. This works on Linux, macOS, and Windows.
+
 - **Auto-save and recovery**: Dan features a 5-second background autosave to a temporary buffer. This means that if your terminal crashes or you lose power, your work is safely tucked away in a `.swp` file for easy recovery. Just fire up Dan again to recover your work.
 
 
@@ -36,21 +38,24 @@ Dan has no strange modes to learn, no archaic shortcuts, and no massive dot file
 
 ## Under the hood
 
-- **Differential Screen Rendering**: The rendering pipeline utilizes an aggressive delta-computation system. Dan only flushes the exact structural text differences directly to standard output frame-by-frame, drastically minimizing I/O and entirely eliminating scroll tearing over network connections.
+- **Differential screen rendering**: The rendering pipeline utilizes an aggressive delta-computation system. Dan only flushes the exact structural text differences directly to standard output frame-by-frame, drastically minimizing I/O and entirely eliminating scroll tearing over network connections.
 
-- **Rope Data Structure Backing**: The text buffer is internally powered by a Rope graph designed to withstand punishing mutation intervals. This guarantees O(log N) insertion and deletion complexities, maintaining constant memory footprints and instantaneous mutations regardless of file scale.
+- **Rope data structure architecture**: The text buffer is internally powered by a Rope graph designed to withstand punishing mutation intervals. This guarantees O(log N) insertion and deletion complexities, maintaining constant memory footprints and instantaneous mutations regardless of file scale.
 
-- **Fault-Tolerant Native .swp Recovery**: All unsaved changes are asynchronously serialized to a `.swp` recovery file every 5 seconds. If your SSH connection drops, your terminal crashes, or you experience a power cycle, Dan will immediately prompt to recover your atomic state identically upon reopening.
+- **Fault-tolerant native .swp recovery**: All unsaved changes are asynchronously serialized to a `.swp` recovery file every 5 seconds. If your SSH connection drops, your terminal crashes, or you experience a power cycle, Dan will immediately prompt to recover your atomic state identically upon reopening.
 
-- **Layered Deterministic Configuration**: Reads from Internal Defaults $\rightarrow$ `~/.config/dan/config.toml` $\rightarrow$ local `.editorconfig` matrices dynamically. It fully respects project-level stylistic constraints (tab widths, CRLF vs LF line endings, trailing whitespace trims) instantly.
+- **Layered deterministic configuration**: Reads from Internal Defaults $\rightarrow$ `~/.config/dan/config.toml` $\rightarrow$ local `.editorconfig` matrices dynamically. It fully respects project-level stylistic constraints (tab widths, CRLF vs LF line endings, trailing whitespace trims) instantly.
 
-- **Asynchronous Auto-Formatter (`Ctrl+L`)**: Never block the main thread while formatting. Dan securely pipes the active buffer to external industry-standard binaries (like Prettier, Rustfmt, or Ruff) in a background thread, effortlessly hot-swapping the buffer when execution confirms success without interrupting your cursor sequence.
+- **Asynchronous auto-formatter (`Ctrl+L`)**: Never block the main thread while formatting. Dan securely pipes the active buffer to external industry-standard binaries (like Prettier, Rustfmt, or Ruff) in a background thread, effortlessly hot-swapping the buffer when execution confirms success without interrupting your cursor sequence.
 
-- **True Syntax and Encoding Awareness**: Beyond just stripping simple file extensions, Dan intelligently parses complex hidden targets (like `Cargo.lock`, `Makefile`, and `.bashrc`). It reliably digests raw Unicode, Shift-JIS, and legacy formats locally, converting correctly to pristine UTF-8.
+- **True syntax and encoding awareness**: Beyond just stripping simple file extensions, Dan intelligently parses complex hidden targets (like `Cargo.lock`, `Makefile`, and `.bashrc`). It reliably digests raw Unicode, Shift-JIS, and legacy formats locally, converting correctly to pristine UTF-8.
 
-- **Automatic Environment Introspection**: Dan fires native OSC 11 ANSI sequences sequentially on boot to ascertain your shell’s true background luminance dynamically—auto-selecting optimal high-contrast (`OneHalfDark`/`OneHalfLight`) rendering without manual intervention, while still bundling 20+ specialized syntax themes.
+- **Automatic environment introspection**: Dan fires native OSC 11 ANSI sequences sequentially on boot to ascertain your shell’s true background luminance dynamically—auto-selecting optimal high-contrast (`OneHalfDark`/`OneHalfLight`) rendering without manual intervention, while still bundling 20+ specialized syntax themes.
 
-- **Automatic Pair Insertion**: Writing structural code is accelerated by automatic bracket and quote closures (`()`, `[]`, `{}`), including the ability to wrap existing active select regions simultaneously
+- **Automatic pair insertion**: Writing structural code is accelerated by automatic bracket and quote closures (`()`, `[]`, `{}`), including the ability to wrap existing active select regions simultaneously
+
+- **OS clipboard integration**: Dan leverages the [arboard crate](https://docs.rs/arboard/latest/arboard/) for cross-platform OS clipboard integration, gracefully falling back to an in-memory clipboard if system access is unavailable. This hybrid architecture ensures that copy-paste operations remain functional within the editor even in restricted environments or over remote connections where a display server is missing.
+
 
 # Keyboard shortcuts (keybindings)
 
@@ -92,7 +97,7 @@ For macOS users who simply can't get used to using `Ctrl` over `⌘`, note that 
 ### Advanced Selection Context
 | **Key**                         | **Action**                                                       |
 | ------------------------------- | ---------------------------------------------------------------- |
-| `Ctrl` + `@`                    | **Select all**: Immediately highlight the entire buffer.         |
+| `Ctrl` + `\`                    | **Select all**: Immediately select the entire buffer.         |
 | `Shift` + `Arrows`              | **Standard select**: Select continuous characters/lines.        |
 | `Shift` + `Home` / `End`        | **Line span select**: Select until horizontal boundary limits.|
 | `Ctrl` + `Shift` + `←` / `→`    | **Word block select**: Select contiguous syntactic chunks.    |
