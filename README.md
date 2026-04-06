@@ -172,8 +172,14 @@ Out of the box, Dan follows a layered configuration model, but is project-aware.
 
 # Global config
 
-Your global config file should be saved `~/.config/dan/config.toml` 
-**Note**: on Windows systems (outside of WSL), this file can also be saved to `C:\Users\<username>\AppData\Roaming\dan\config.toml` if you prefer not to use the `.config` directory.
+Your global config file should be saved at `~/.config/dan/config.toml`
+
+Note that this file is _not_ created by default as Dan ships with sensible defaults (somewhat opinionated) and doesn't _require_ any configuration. However, if you wish to tweak Dan, simply create this file: 
+```dan ~/.config/dan/config.toml```
+
+Then, copy and paste the below default into it. Change what you want to change and hit save: `Ctrl-S` then `Ctrl-Q` to quit. Next time you restart Dan your settings should be active.
+
+**Note**: on Windows systems (outside of WSL), the global config file can also be saved to `C:\Users\<username>\AppData\Roaming\dan\config.toml` if you prefer not to use the `.config` directory.
 
 ```toml
 # Display
