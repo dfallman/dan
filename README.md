@@ -4,6 +4,9 @@
 
 Dan has no strange modes to learn, no archaic shortcuts, and no massive dot files. Dan ships with sensible defaults, so most users can start using Dan without any configuration.
 
+<img width="3584" height="2036" alt="CleanShot 2026-04-06 at 15 01 18@2x" src="https://github.com/user-attachments/assets/bb923556-50f5-439d-b745-6ca87344b607" />
+
+
 # Features
 
 ### At a glance
@@ -65,7 +68,7 @@ Dan tries to use familiar and intuitive shortcuts, so you shouldn't need to prin
 
 What this means in practice is that terminal editors can't typically use exactly the same keyboard shortcuts as a GUI editor. macOS users in particular might find the use of `Ctrl` instead of `Cmd` (`⌘`) unusual and difficult to get used to. Others, coming from linux and Windows environments, will feel right at home. 
 
-For macOS users who simply can't get used to using `Ctrl` over `⌘`, note that many terminal emulators have ways of remapping keys. For example, in iTerm2, you can remap `Ctrl` to the `⌘` in `Preferences` > `Keys` > `Key Bindings`. This means that you can then, as an example, use the left `⌘` key as `Ctrl` in your terminal (and Dan), while the right `⌘` is still available to control iTerm2 and the OS while iTerm2 is active. Finally, for macOS users, we strongly recommend using an alternative terminal emulator [iTerm2](https://iterm2.com/) (see list above) over the built-in Terminal app.
+For macOS users who simply can't get used to using `Ctrl` over `⌘`, note that many terminal emulators have ways of remapping keys. For example, in iTerm2, you can remap `Ctrl` to the `⌘` in `Preferences` > `Keys` > `Key Bindings`. This means that you can then, as an example, use the left `⌘` key as `Ctrl` in your terminal (and Dan), while the right `⌘` is still available to control iTerm2 and the OS while iTerm2 is active. Finally, for macOS users, we strongly recommend using an alternative terminal emulator such as [iTerm2](https://iterm2.com/) (see list above) over the built-in Terminal app.
 
 ### Basic operation
 | **Key**                         | **Action**                                               |
@@ -167,11 +170,11 @@ Out of the box, Dan follows a layered configuration model, but is project-aware.
 ...however, Dan understands that different projects have different rules. Whenever you open a file, Dan automatically scans for local `.editorconfig` guidelines. It also automatically parses your project's specific styling rules—like tab sizes, space preferences, trailing whitespace rules, and line endings—and automatically prioritizes them over your global defaults. The idea is that you should never have to manually adjust your editor just to contribute to a new project. Also, you'll not drive your collaborators nuts by consistently using your preferred indentation or line endings (although, as we all know, Tab and 4 spaces are the only acceptable indentation options. That's why they're the defaults).
 
 
-# Global config
+## Global config
 
 Your global config file should be saved at `~/.config/dan/config.toml`
 
-If you're new to unix-based systems, `~/` denotes your homw folder. In macOS, this folder is `/Users/<username>` and in Linux it's `/home/<username>`.
+If you're new to unix-based systems, `~/` denotes your home folder. In macOS, this folder is `/Users/<username>` and in Linux it's `/home/<username>`.
 
 **Note**: this file is _not_ created by default as Dan ships with sensible defaults (somewhat opinionated) and doesn't _require_ any configuration. However, if you wish to tweak Dan, simply create this file: 
 ```dan ~/.config/dan/config.toml```
@@ -272,4 +275,4 @@ Dan remains a work in progress, prioritizing speed, stability, and security over
 
 ---
 
-**License**: MIT
+**License**: GNU General Public License v3.0 (GPLv3)
