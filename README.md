@@ -197,8 +197,8 @@ syntax_highlight = true # Toggle native highlighting
 
 # Interface
 show_help = true        # Persist dynamic shortcut reference bar
-show_encoding = true    # Track active file interpretation payload
-show_lang = true        # Track current syntax execution pipeline
+show_encoding = true    # Show active file encoding
+show_lang = true        # Show current syntax highlighting language
 
 # Theme for syntax highlighting
 theme = "default"       # Default color theme for light/dark
@@ -217,30 +217,30 @@ theme = "DarkNeon"
 ```
 
 ### Available color themes:
-- **"1337"**: A retro, high-contrast dark theme inspired by old-school hacker culture.
-- **"Coldark-Cold"**: A clean, blue-tinted light theme.
-- **"Coldark-Dark"**:  A deep, cool-blue dark theme.
-- **"DarkNeon"**:  A vibrant dark theme bursting with bright neon accents.
-- **"Dracula"**:  A popular, high-contrast dark theme with distinct purple and pink accents.
-- **"GitHub"**:  A light theme accurately mimicking the classic GitHub code view.
-- **"Monokai Extended"**:  An updated version of the classic, vivid Monokai theme.
-- **"Monokai Extended Bright"**:  A brighter, higher-contrast variant of the Monokai palette.
-- **"Monokai Extended Light"**:  A light-background adaptation of the Monokai colors.
-- **"Monokai Extended Origin"**:  The authentic, unaltered original Monokai color palette.
-- **"Nord"**:  A clean, arctic-inspired dark theme with frosty blue tones.
-- **"OneHalfDark"**:  A clean, modern dark theme based heavily on the Atom "One" series (default for dark terminals).
-- **"OneHalfLight"**:  A clean, modern light theme based on the Atom "One" series (default for light terminals).
-- **"Solarized (dark)"**:  A very popular, scientifically formulated low-contrast dark theme.
-- **"Solarized (light)"**:  The light-background version of the Solarized palette.
-- **"Sublime Snazzy"**:  A vibrant dark theme with bright, elegant (snazzy) colors.
-- **"TwoDark"**:  A dark theme inspired by Atom's One Dark but tuned for slightly better contrast.
-- **"Visual Studio Dark+"**:  Accurately emulates the prominent default dark theme of VS Code.
-- **"ansi"**:  A minimal, dynamic theme that falls back to your terminal's built-in 16 ANSI colors.
-- **"base16"**:  A balanced, standard boilerplate dark theme from the base16 project.
-- **"base16-256"**:  A variant of base16 specifically optimized for limited 256-color palette terminals.
-- **"gruvbox-dark"**:  A retro "groove" color scheme with earthy, warm dark tones.
-- **"gruvbox-light"**:  A retro "groove" color scheme with earthy, warm light tones.
-- **"zenburn"**:  A low-contrast "alien" dark color scheme designed to be extremely easy on the eyes.
+- `1337`: A retro, high-contrast dark theme inspired by old-school hacker culture.
+- `Coldark-Cold`: A clean, blue-tinted light theme.
+- `Coldark-Dark`: A deep, cool-blue dark theme.
+- `DarkNeon`: A vibrant dark theme bursting with bright neon accents.
+- `Dracula`: A popular, high-contrast dark theme with distinct purple and pink accents.
+- `GitHub`: A light theme accurately mimicking the classic GitHub code view.
+- `Monokai Extended`: An updated version of the classic, vivid Monokai theme.
+- `Monokai Extended Bright`: A brighter, higher-contrast variant of the Monokai palette.
+- `Monokai Extended Light`: A light-background adaptation of the Monokai colors.
+- `Monokai Extended Origin`: The authentic, unaltered original Monokai color palette.
+- `Nord`: A clean, arctic-inspired dark theme with frosty blue tones.
+- `OneHalfDark`: A clean, modern dark theme based heavily on the Atom "One" series (default for dark terminals).
+- `OneHalfLight`: A clean, modern light theme based on the Atom "One" series (default for light terminals).
+- `Solarized (dark)`: A very popular, scientifically formulated low-contrast dark theme.
+- `Solarized (light)`: The light-background version of the Solarized palette.
+- `Sublime Snazzy`: A vibrant dark theme with bright, elegant (snazzy) colors.
+- `TwoDark`: A dark theme inspired by Atom's One Dark but tuned for slightly better contrast.
+- `Visual Studio Dark+`: Accurately emulates the prominent default dark theme of VS Code.
+- `ansi`: A minimal, dynamic theme that falls back to your terminal's built-in 16 ANSI colors.
+- `base16`: A balanced, standard boilerplate dark theme from the base16 project.
+- `base16-256`: A variant of base16 specifically optimized for limited 256-color palette terminals.
+- `gruvbox-dark`: A retro "groove" color scheme with earthy, warm dark tones.
+- `gruvbox-light`: A retro "groove" color scheme with earthy, warm light tones.
+- `zenburn`: A low-contrast "alien" dark color scheme designed to be extremely easy on the eyes.
 
 
 # Formatter
