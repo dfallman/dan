@@ -275,4 +275,4 @@ Dan remains a work in progress, prioritizing speed, stability, and security over
 
 ---
 
-**License**: MIT
+**License**: GNU General Public License v3.0 (GPLv3)
