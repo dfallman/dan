@@ -6,7 +6,7 @@ Dan has no strange modes to learn, no archaic shortcuts, and no massive dot file
 
 <img width="3584" height="2036" alt="CleanShot 2026-04-06 at 15 01 18@2x" src="https://github.com/user-attachments/assets/bb923556-50f5-439d-b745-6ca87344b607" />
 
-### Quick install
+# Quick install
 ```
 git clone https://github.com/dfallman/dan.git
 cd dan
