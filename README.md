@@ -18,7 +18,7 @@ cd dan
 cargo build --release
 cargo install --path .
 ```
-For more options, see Install below.
+For more installation options, see Install below.
 
 
 # Features
