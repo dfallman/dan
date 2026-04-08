@@ -88,48 +88,46 @@ For macOS users who simply can't get used to using `Ctrl` over `⌘`, note that 
 | **Key**                         | **Action**                                               |
 | ------------------------------- | -------------------------------------------------------- |
 | `↑` `↓` `←` `→`                 | **Move cursor**: Move the cursor around in your file.   |
-| `Ctrl` + `S`                    | **Save**: Write buffer to disk.                          |
+| `Ctrl` + `S`                    | **Save**: Write buffer to disk (i.e. save).                          |
 | `Ctrl` + `A`                    | **Save As**: Write buffer to a new path (file).          |
 | `Ctrl` + `Q`                    | **Quit**: Safe exit (prompts if there are unsaved changes).|
-| `Ctrl` + `H`                    | **Help**: Toggle the built-in reference footer.      |
+| `Ctrl` + `H`                    | **Help**: Toggle the built-in reference cheat sheet.      |
 
 
 ### Text editing
 | **Key**                         | **Action**                                                       |
 | ------------------------------- | ---------------------------------------------------------------- |
-| `Ctrl` + `C` / `X` / `V`        | **Clipboard**: Access standard copy, cut, and paste pipelines.   |
-| `Ctrl` + `Z` / `Y`              | **Undo / Redo**: Navigate the persistent infinite mutation tree. |
-| `Ctrl` + `D`                    | **Duplicate**: Clone the current line or selection context.      |
+| `Ctrl` + `C` / `X` / `V`        | **Clipboard**: Copy, cut, and paste to clipboard.   |
+| `Ctrl` + `Z` / `Y`              | **Undo / Redo**: Access Dan's persistent infinite mutation tree. |
+| `Ctrl` + `D`                    | **Duplicate**: Clone the current line or selection.      |
 | `Ctrl` + `K`                    | **Delete line**: Erase the active line or selection block.       |
-| `Ctrl` + `E` (or `Ctrl` + `/`)  | **Toggle comment**: Invert comment state using syntax-aware characters. |
-| `Ctrl` + `T`                    | **Toggle syntax highlight**: Turn on and off syntax highlighting |
+| `Ctrl` + `E` (or `Ctrl` + `/`)  | **Toggle comment**: Activate/remove comment (syntax-aware). |
+| `Ctrl` + `T`                    | **Toggle syntax highlight**: Turn on and off syntax highlighting. |
 | `Ctrl` + `W`                    | **Word wrap**: Hot-toggle between soft-wrapping and horizontal scroll.|
-| `Ctrl` + `L`                    | **Lint/Format**: Execute standard background code formatters.    |
-| `Alt` + `↑` / `↓`               | **Swap line**: Swap current contiguous block upward or downward. |
-| `Tab` / `Shift` + `Tab`         | **Indent / Dedent**: Shift selection boundaries via configured tabs. |
+| `Ctrl` + `L`                    | **Lint/Format**: Auto-format the document using an external linter.    |
+| `Alt` + `↑` / `↓`               | **Swap line**: Swap current line/block upward or downward. |
+| `Tab` / `Shift` + `Tab`         | **Indent / Dedent**: Indent or dedent current line/selection. |
 
 ### Advanced selection
 | **Key**                         | **Action**                                                       |
 | ------------------------------- | ---------------------------------------------------------------- |
-| `Ctrl` + `\`                    | **Select all**: Immediately select the entire buffer.         |
+| `Ctrl` + `\`                    | **Select all**: Select the entire buffer.         |
 | `Shift` + `Arrows`              | **Standard select**: Select continuous characters/lines.        |
-| `Shift` + `Home` / `End`        | **Line span select**: Select until horizontal boundary limits.|
-| `Ctrl` + `Shift` + `←` / `→`    | **Word block select**: Select contiguous syntactic chunks.    |
-| `Alt` + `Shift` + `←` / `→`     | **Alternate word block select**: Select contiguous syntactic chunks.|
+| `Ctrl`/`Alt` + `Shift` + `←` / `→`    | **Word block select**: Fast select by words/chunks.    |
 
 ### High-speed navigation
 | **Key**                         | **Action**                                               |
 | ------------------------------- | -------------------------------------------------------- |
 | `Ctrl` + `↑` / `↓`              | **In-place scroll**: Scroll the viewport without moving the cursor. |
-| `Ctrl` + `Shift` + `↑` / `↓`    | **Fast scroll**: Scroll multiple lines per keypress (configurable).      |
+| `Ctrl` + `Shift` + `↑` / `↓`    | **Fast scroll**: Scroll multiple lines per keypress.      |
 | `Ctrl` or `Alt` + `←` / `→`     | **Word jump**: Go to next word, leap over tokens and symbols.                        |
 | `Ctrl` + `Home` / `End`         | **Buffer ends**: Jump instantly to start/EOF of the file.     |
-| `Ctrl` + `G`                    | **Go-to line**: Prompt and jump to specific line number.       |
+| `Ctrl` + `G`                    | **Go-to line**: Jump to specific line number.       |
 
 ### Search & replace
 | **Key**                         | **Action**                                               |
 | ------------------------------- | -------------------------------------------------------- |
-| `Ctrl` + `F` (or `F7`)          | **Search**: Search for phrase.  |
+| `Ctrl` + `F`                    | **Search**: Search for phrase.  |
 | `Ctrl` + `R`                    | **Replace**: Search and replace phrase.  |
 
 
