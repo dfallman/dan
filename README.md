@@ -7,7 +7,7 @@ Dan has no strange modes to learn, no archaic shortcuts, and no massive dot file
 <img width="3584" height="2036" alt="CleanShot 2026-04-06 at 15 01 18@2x" src="https://github.com/user-attachments/assets/bb923556-50f5-439d-b745-6ca87344b607" />
 
 # Quick install
-Install latest version of rust
+Install latest version of [Rust](https://rustup.rs/)
 ```
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
@@ -120,20 +120,17 @@ For macOS users who simply can't get used to using `Ctrl` over `⌘`, note that 
 ### High-speed navigation
 | **Key**                         | **Action**                                               |
 | ------------------------------- | -------------------------------------------------------- |
-| `Ctrl` + `↑` / `↓`              | **In-place scroll**: Shift viewport natively without moving cursor. |
-| `Ctrl` + `Shift` + `↑` / `↓`    | **Fast scroll**: Granularly accelerate viewport Y-axis shifts.      |
-| `Ctrl` + `←` / `→`              | **Word jump**: Leap over tokens and symbols.                        |
-| `Alt` + `←` / `→`               | **Alternate word jump**: Leap over tokens and symbols.              |
-| `Ctrl` + `Home` / `End`         | **Buffer ends**: Seek instantly to start/EOF of the file array.     |
-| `Ctrl` + `G`                    | **Go-to line**: Prompt and jump precisely to numeric markers.       |
+| `Ctrl` + `↑` / `↓`              | **In-place scroll**: Scroll the viewport without moving the cursor. |
+| `Ctrl` + `Shift` + `↑` / `↓`    | **Fast scroll**: Scroll multiple lines per keypress (configurable).      |
+| `Ctrl` or `Alt` + `←` / `→`     | **Word jump**: Go to next word, leap over tokens and symbols.                        |
+| `Ctrl` + `Home` / `End`         | **Buffer ends**: Jump instantly to start/EOF of the file.     |
+| `Ctrl` + `G`                    | **Go-to line**: Prompt and jump to specific line number.       |
 
 ### Search & replace
 | **Key**                         | **Action**                                               |
 | ------------------------------- | -------------------------------------------------------- |
-| `Ctrl` + `F` (or `F7`)          | **Search mode**: Initiate dynamic string pattern query.  |
-| `Enter` (or `Ctrl` + `G`)       | **Search focus next**: Leap forward to next target hit.  |
-| `Shift` + `Enter`               | **Search focus previous**: Reverse leap to prior target. |
-| `Ctrl` + `R`                    | **Replace context**: Enter the sequential replacer pipeline. |
+| `Ctrl` + `F` (or `F7`)          | **Search**: Search for phrase.  |
+| `Ctrl` + `R`                    | **Replace**: Search and replace phrase.  |
 
 
 # Installation
@@ -189,14 +186,14 @@ Out of the box, Dan follows a layered configuration model, but is project-aware.
 
 ## Global config
 
-Your global config file should be saved at `~/.config/dan/config.toml`
+Your global config file should be saved in `~/.config/dan/config.toml`
 
-If you're new to unix-based systems, `~/` denotes your home folder. In macOS, this folder is `/Users/<username>` and in Linux it's `/home/<username>`.
+If you're new to unix-based systems, `~/` denotes your home folder. In macOS, this folder is `/Users/<username>` and in Linux it's (usually) at `/home/<username>`.
 
-**Note**: this file is _not_ created by default as Dan ships with sensible defaults (somewhat opinionated) and doesn't _require_ any configuration. However, if you wish to tweak Dan, simply create this file: 
+**Note**: this file is _not_ created by default as Dan ships with sensible (and somewhat opinionated) defaults, it doesn't _require_ any configuration at all. If you do wish to tweak Dan however, simply create the config file: 
 ```dan ~/.config/dan/config.toml```
 
-Then, copy and paste the below default into it. Change what you want to change and hit save: `Ctrl-S` then `Ctrl-Q` to quit. Next time you restart Dan your settings should be active.
+Then, copy and paste the below defaults into it using `Ctrl-V`. Change what you want to have changed and hit save: `Ctrl-S` then `Ctrl-Q` to quit. Next time you restart Dan your settings should be active.
 
 **Note**: on Windows systems (outside of WSL), the global config file can also be saved to `C:\Users\<username>\AppData\Roaming\dan\config.toml` if you prefer not to use the `.config` directory.
 
