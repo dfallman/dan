@@ -190,7 +190,7 @@ Your global config file should be saved in `~/.config/dan/config.toml`
 
 If you're new to unix-based systems, `~/` denotes your home folder. In macOS, this folder is `/Users/<username>` and in Linux it's (usually) at `/home/<username>`.
 
-**Note**: this file is _not_ created by default as Dan ships with sensible (and somewhat opinionated) defaults, it doesn't _require_ any configuration at all. If you do wish to tweak Dan however, simply create the config file: 
+**Note**: this file is _not_ created by default as Dan ships with sensible (and somewhat opinionated) defaults and doesn't _require_ any configuration to be used. If you do wish to tweak Dan however, simply create the config file: 
 ```dan ~/.config/dan/config.toml```
 
 Then, copy and paste the below defaults into it using `Ctrl-V`. Change what you want to have changed and hit save: `Ctrl-S` then `Ctrl-Q` to quit. Next time you restart Dan your settings should be active.
