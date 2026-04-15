@@ -1,10 +1,26 @@
 # dan
 
-**Dan** is a fast, friendly, and zero fuss terminal text editor. Written natively in [Rust](https://rust-lang.org/), it is designed to be modeless, resource-efficient, and with the lowest possible latency, even over fluctuating SSH connections. It's architectured to handle very large files and complex editing tasks, while remaining easy to use and configure to your liking. Dan works in most terminal emulator environments, whether you're using macOS, Linux, or Windows.
+**Dan** is a fast, friendly, and zero fuss terminal text editor. Written natively in [Rust](https://rust-lang.org/), it is designed to be modeless, resource-efficient, and with the lowest possible latency, even over fluctuating SSH connections. 
+
+We've built Dan to handle very large files and complex editing tasks while remaining easy to use and configure to your liking. Dan works in most terminal emulator environments, whether you're using macOS, Linux, or Windows.
 
 Dan has no strange modes to learn, no archaic shortcuts, and no massive dot files. Dan ships with sensible defaults, so most users can start using Dan without any configuration.
 
 <img width="3584" height="2036" alt="CleanShot 2026-04-06 at 15 01 18@2x" src="https://github.com/user-attachments/assets/bb923556-50f5-439d-b745-6ca87344b607" />
+
+# Quick install
+Install/update to latest version of [Rust](https://rustup.rs/)
+```
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+Clone, build, and install Dan
+```
+git clone https://github.com/dfallman/dan.git
+cd dan
+cargo build --release
+cargo install --path .
+```
+For more installation options, see Install below.
 
 
 # Features
@@ -74,52 +90,47 @@ For macOS users who simply can't get used to using `Ctrl` over `⌘`, note that 
 | **Key**                         | **Action**                                               |
 | ------------------------------- | -------------------------------------------------------- |
 | `↑` `↓` `←` `→`                 | **Move cursor**: Move the cursor around in your file.   |
-| `Ctrl` + `S`                    | **Save**: Write buffer to disk.                          |
+| `Ctrl` + `S`                    | **Save**: Write buffer to disk (i.e. save).                          |
 | `Ctrl` + `A`                    | **Save As**: Write buffer to a new path (file).          |
 | `Ctrl` + `Q`                    | **Quit**: Safe exit (prompts if there are unsaved changes).|
-| `Ctrl` + `H`                    | **Help**: Toggle the built-in reference footer.      |
+| `Ctrl` + `H`                    | **Help**: Toggle the built-in reference cheat sheet.      |
 
 
 ### Text editing
 | **Key**                         | **Action**                                                       |
 | ------------------------------- | ---------------------------------------------------------------- |
-| `Ctrl` + `C` / `X` / `V`        | **Clipboard**: Access standard copy, cut, and paste pipelines.   |
-| `Ctrl` + `Z` / `Y`              | **Undo / Redo**: Navigate the persistent infinite mutation tree. |
-| `Ctrl` + `D`                    | **Duplicate**: Clone the current line or selection context.      |
+| `Ctrl` + `C` / `X` / `V`        | **Clipboard**: Copy, cut, and paste to clipboard.   |
+| `Ctrl` + `Z` / `Y`              | **Undo / Redo**: Access Dan's persistent infinite mutation tree. |
+| `Ctrl` + `D`                    | **Duplicate**: Clone the current line or selection.      |
 | `Ctrl` + `K`                    | **Delete line**: Erase the active line or selection block.       |
-| `Ctrl` + `E` (or `Ctrl` + `/`)  | **Toggle comment**: Invert comment state using syntax-aware characters. |
-| `Ctrl` + `T`                    | **Toggle syntax highlight**: Turn on and off syntax highlighting |
+| `Ctrl` + `E` (or `Ctrl` + `/`)  | **Toggle comment**: Activate/remove comment (syntax-aware). |
+| `Ctrl` + `T`                    | **Toggle syntax highlight**: Turn on and off syntax highlighting. |
 | `Ctrl` + `W`                    | **Word wrap**: Hot-toggle between soft-wrapping and horizontal scroll.|
-| `Ctrl` + `L`                    | **Lint/Format**: Execute standard background code formatters.    |
-| `Alt` + `↑` / `↓`               | **Swap line**: Swap current contiguous block upward or downward. |
-| `Tab` / `Shift` + `Tab`         | **Indent / Dedent**: Shift selection boundaries via configured tabs. |
+| `Ctrl` + `L`                    | **Lint/Format**: Auto-format the document using an external linter.    |
+| `Alt` + `↑` / `↓`               | **Swap line**: Swap current line/block upward or downward. |
+| `Tab` / `Shift` + `Tab`         | **Indent / Dedent**: Indent or dedent current line/selection. |
 
 ### Advanced selection
 | **Key**                         | **Action**                                                       |
 | ------------------------------- | ---------------------------------------------------------------- |
-| `Ctrl` + `\`                    | **Select all**: Immediately select the entire buffer.         |
+| `Ctrl` + `\`                    | **Select all**: Select the entire buffer.         |
 | `Shift` + `Arrows`              | **Standard select**: Select continuous characters/lines.        |
-| `Shift` + `Home` / `End`        | **Line span select**: Select until horizontal boundary limits.|
-| `Ctrl` + `Shift` + `←` / `→`    | **Word block select**: Select contiguous syntactic chunks.    |
-| `Alt` + `Shift` + `←` / `→`     | **Alternate word block select**: Select contiguous syntactic chunks.|
+| `Ctrl`/`Alt` + `Shift` + `←` / `→`    | **Word block select**: Fast select by words/chunks.    |
 
 ### High-speed navigation
 | **Key**                         | **Action**                                               |
 | ------------------------------- | -------------------------------------------------------- |
-| `Ctrl` + `↑` / `↓`              | **In-place scroll**: Shift viewport natively without moving cursor. |
-| `Ctrl` + `Shift` + `↑` / `↓`    | **Fast scroll**: Granularly accelerate viewport Y-axis shifts.      |
-| `Ctrl` + `←` / `→`              | **Word jump**: Leap over tokens and symbols.                        |
-| `Alt` + `←` / `→`               | **Alternate word jump**: Leap over tokens and symbols.              |
-| `Ctrl` + `Home` / `End`         | **Buffer ends**: Seek instantly to start/EOF of the file array.     |
-| `Ctrl` + `G`                    | **Go-to line**: Prompt and jump precisely to numeric markers.       |
+| `Ctrl` + `↑` / `↓`              | **In-place scroll**: Scroll the viewport without moving the cursor. |
+| `Ctrl` + `Shift` + `↑` / `↓`    | **Fast scroll**: Scroll multiple lines per keypress.      |
+| `Ctrl` or `Alt` + `←` / `→`     | **Word jump**: Go to next word, leap over tokens and symbols.                        |
+| `Ctrl` + `Home` / `End`         | **Buffer ends**: Jump instantly to start/EOF of the file.     |
+| `Ctrl` + `G`                    | **Go-to line**: Jump to specific line number.       |
 
 ### Search & replace
 | **Key**                         | **Action**                                               |
 | ------------------------------- | -------------------------------------------------------- |
-| `Ctrl` + `F` (or `F7`)          | **Search mode**: Initiate dynamic string pattern query.  |
-| `Enter` (or `Ctrl` + `G`)       | **Search focus next**: Leap forward to next target hit.  |
-| `Shift` + `Enter`               | **Search focus previous**: Reverse leap to prior target. |
-| `Ctrl` + `R`                    | **Replace context**: Enter the sequential replacer pipeline. |
+| `Ctrl` + `F`                    | **Search**: Search for phrase.  |
+| `Ctrl` + `R`                    | **Replace**: Search and replace phrase.  |
 
 
 # Installation
@@ -175,14 +186,14 @@ Out of the box, Dan follows a layered configuration model, but is project-aware.
 
 ## Global config
 
-Your global config file should be saved at `~/.config/dan/config.toml`
+Your global config file should be saved in `~/.config/dan/config.toml`
 
-If you're new to unix-based systems, `~/` denotes your home folder. In macOS, this folder is `/Users/<username>` and in Linux it's `/home/<username>`.
+If you're new to unix-based systems, `~/` denotes your home folder. In macOS, this folder is `/Users/<username>` and in Linux it's (usually) at `/home/<username>`.
 
-**Note**: this file is _not_ created by default as Dan ships with sensible defaults (somewhat opinionated) and doesn't _require_ any configuration. However, if you wish to tweak Dan, simply create this file: 
+**Note**: this file is _not_ created by default as Dan ships with sensible (and somewhat opinionated) defaults and doesn't _require_ any configuration to be used. If you do wish to tweak Dan however, simply create the config file: 
 ```dan ~/.config/dan/config.toml```
 
-Then, copy and paste the below default into it. Change what you want to change and hit save: `Ctrl-S` then `Ctrl-Q` to quit. Next time you restart Dan your settings should be active.
+Then, copy and paste the below defaults into it using `Ctrl-V`. Change what you want to have changed and hit save: `Ctrl-S` then `Ctrl-Q` to quit. Next time you restart Dan your settings should be active.
 
 **Note**: on Windows systems (outside of WSL), the global config file can also be saved to `C:\Users\<username>\AppData\Roaming\dan\config.toml` if you prefer not to use the `.config` directory.
 
