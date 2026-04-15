@@ -33,7 +33,7 @@ For more installation options, see Install below.
 
 - **Smart rendering engine**: Dan uses a differential rendering system. By computing exactly what has changed on your screen, it only sends the necessary updates to your terminal. This makes scrolling 100MB files over SSH feel as smooth as local editing.
 
-- **Reliability and performance**: Using a so-called Rope data structure, Dan can handles _massive_ files with a constant memory footprint. It's built entirely in Rust, so it's fast, memory efficient, and reliable. We've built Dan to favor speed and reliability over bells and whistles. Did we say it's _fast_?
+- **Reliability and performance**: Using a so-called Rope data structure, Dan handles _massive_ files with a constant memory footprint. It's built entirely in Rust, so it's fast, memory efficient, and reliable. We've built Dan to favor speed and reliability over bells and whistles. Did we say it's _fast_?
 
 - **Full Unicode & CJK support**: Dan handles Chinese, Japanese, and Korean characters perfectly (or, at least, that's the plan), maintaining correct visual alignment even with double-width characters and emojis.
 
