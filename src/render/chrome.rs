@@ -13,65 +13,78 @@ pub fn toolbar_bg_color(editor: &Editor) -> Color {
 	}
 }
 
+use crate::ui::layout::{Gravity, Rect, UiFragment, Window};
+use crate::ui::overlay::{OverlayBlock, OverlayBuilder};
+use crate::ui::i18n::Message;
+
 /// Render the status bar.
-pub fn render_status_bar(editor: &Editor, screen: &mut super::buffer::ScreenBuffer, vp: &Viewport) {
-	let status_y = vp.height.saturating_sub(vp.chrome_rows);
-	screen.mov_to(0, status_y);
+pub fn build_status_bar(editor: &Editor, vp: &Viewport) -> Window {
+	let mut fragments = Vec::new();
 
-	let width = vp.width as usize;
-	let mut used: usize = 0;
+	fragments.push(UiFragment {
+		text: editor.locale.translate(Message::ToolbarPrefix),
+		fg: editor.theme.status_bg,
+		bg: editor.theme.toolbar_bg,
+		is_flex: false,
+	});
 
-	screen.reset_colors();
-	screen.set_fg(Color::Blue);
-	screen.put_str("▌");
-	used += 1;
-
-	// Mode indicator (derive visual mode from selection state)
-	let (mode_color, mode_text) = if editor.has_selection() {
-		(Color::DarkYellow, "Select")
+	let mode_text = if editor.has_selection() {
+		editor.locale.translate(Message::SelectionModeLabel)
 	} else {
-		(editor.mode.color(), editor.mode.label())
+		editor.locale.translate(Message::ModeLabel(editor.mode.label().to_string()))
 	};
-	let mode_label = format!(" {} ", mode_text);
-	screen.set_bg(toolbar_bg_color(editor));
-	screen.set_fg(mode_color);
-	screen.put_str(&mode_label);
-	used += mode_label.chars().count();
+	let mode_color = if editor.has_selection() {
+		editor.theme.warning
+	} else {
+		editor.mode.color()
+	};
 
-	screen.set_bg(toolbar_bg_color(editor));
-	screen.set_fg(Color::Black);
+	fragments.push(UiFragment {
+		text: mode_text,
+		fg: mode_color,
+		bg: editor.theme.toolbar_bg,
+		is_flex: false,
+	});
 
-	// File name
 	let name = editor.buffer().display_name();
-	let name_part = format!(" {} ", name);
-	
-	screen.set_bg(toolbar_bg_color(editor));
-	screen.set_fg(Color::White);
-	screen.put_str(&name_part);
-	used += name_part.chars().count();
+	fragments.push(UiFragment {
+		text: editor.locale.translate(Message::FilenameLabel(name)),
+		fg: editor.theme.toolbar_fg,
+		bg: editor.theme.toolbar_bg,
+		is_flex: false,
+	});
 
 	if editor.buffer().dirty {
-		screen.set_fg(Color::DarkGrey);
-		screen.put_str("+ ");
-		screen.set_fg(Color::White);
-		used += 2;
+		fragments.push(UiFragment {
+			text: editor.locale.translate(Message::DirtyFlag),
+			fg: editor.theme.dirty_flag,
+			bg: editor.theme.toolbar_bg,
+			is_flex: false,
+		});
 	}
 
-	// Status message (if any)
 	if let Some(ref msg) = editor.status_msg {
-		let msg_part = format!(" {} ", msg);
-		screen.set_bg(toolbar_bg_color(editor));
-		screen.set_fg(Color::DarkGrey);
-		screen.put_str(&msg_part);
-		used += msg_part.chars().count();
+		fragments.push(UiFragment {
+			text: editor.locale.translate(Message::StatusMessage(msg.clone())),
+			fg: editor.theme.dirty_flag,
+			bg: editor.theme.toolbar_bg,
+			is_flex: false,
+		});
 	}
 
-	// Right side: Language + Help toggle + cursor position
+	// Dynamic Flex padding pushing remaining elements cleanly to the right
+	fragments.push(UiFragment {
+		text: String::new(),
+		fg: editor.theme.toolbar_bg,
+		bg: editor.theme.toolbar_bg,
+		is_flex: true,
+	});
+
 	let c = editor.cursors.cursor();
 	let mut right_parts = Vec::new();
 
 	if editor.config.show_help {
-		right_parts.push("^H Help".to_string());
+		right_parts.push(editor.locale.translate(Message::HelpCommandKey));
 	}
 	if editor.config.show_lang {
 		let syntax = editor
@@ -82,588 +95,386 @@ pub fn render_status_bar(editor: &Editor, screen: &mut super::buffer::ScreenBuff
 	if editor.config.show_encoding {
 		right_parts.push(editor.buffer().encoding.name().to_string());
 	}
-	right_parts.push(format!("Ln {:2}, Col {:2}", c.line + 1, c.col + 1));
+	right_parts.push(editor.locale.translate(Message::LineCol(c.line + 1, c.col + 1)));
 
 	let right = format!(" {} ", right_parts.join("  "));
-	let available = width.saturating_sub(used);
 	
-	if available > 0 {
-		screen.set_fg(Color::DarkGrey);
-		let right_len = right.chars().count();
-		if available >= right_len {
-			let padding = available - right_len;
-			for _ in 0..padding {
-				screen.put_char(' ');
-			}
-			screen.put_str(&right);
-		} else {
-			let truncated: String = right.chars().take(available).collect();
-			screen.put_str(&truncated);
-		}
-		screen.set_fg(Color::White);
-	}
+	fragments.push(UiFragment {
+		text: right,
+		fg: editor.theme.toolbar_fg_dim,
+		bg: editor.theme.toolbar_bg,
+		is_flex: false,
+	});
 
-	screen.reset_colors();
+	let status_y = vp.height.saturating_sub(vp.chrome_rows);
+
+	Window {
+		rect: Rect {
+			x: 0,
+			y: status_y,
+			width: vp.width,
+			height: 1,
+		},
+		gravity: Gravity::BottomLeft,
+		z_index: 0,
+		cursor_bounds: None,
+		fragments,
+	}
 }
 
 /// Shortcut definitions for the help bar.
-fn help_shortcuts() -> Vec<(&'static str, &'static str)> {
+fn help_shortcuts(editor: &Editor) -> Vec<(String, String)> {
 	vec![
-		("^S", "Save"),
-		("^A", "Save as"),
-		("^Q", "Quit"),
-		("^Z", "Undo"),
-		("^Y", "Redo"),
-		("^C", "Copy"),
-		("^X", "Cut"),
-		("^V", "Paste"),
-		("^F", "Find & replace"),
-		("^G", "Goto"),
-		("^D", "Duplicate"),
-		("^K", "Delete"),
-		("^W", "Wrap"),
-		("^L", "Lint"),
-		("^E", "Comment"),
-		("^T", "Syntax highlight"),
-		("^H", "Help"),
+		("^S".to_string(), editor.locale.translate(Message::HelpShortcutSave)),
+		("^A".to_string(), editor.locale.translate(Message::HelpShortcutSaveAs)),
+		("^Q".to_string(), editor.locale.translate(Message::HelpShortcutQuit)),
+		("^Z".to_string(), editor.locale.translate(Message::HelpShortcutUndo)),
+		("^Y".to_string(), editor.locale.translate(Message::HelpShortcutRedo)),
+		("^C".to_string(), editor.locale.translate(Message::HelpShortcutCopy)),
+		("^X".to_string(), editor.locale.translate(Message::HelpShortcutCut)),
+		("^V".to_string(), editor.locale.translate(Message::HelpShortcutPaste)),
+		("^F".to_string(), editor.locale.translate(Message::HelpShortcutFind)),
+		("^G".to_string(), editor.locale.translate(Message::HelpShortcutGoto)),
+		("^D".to_string(), editor.locale.translate(Message::HelpShortcutDuplicate)),
+		("^K".to_string(), editor.locale.translate(Message::HelpShortcutDelete)),
+		("^W".to_string(), editor.locale.translate(Message::HelpShortcutWrap)),
+		("^L".to_string(), editor.locale.translate(Message::HelpShortcutLint)),
+		("^E".to_string(), editor.locale.translate(Message::HelpShortcutComment)),
+		("^T".to_string(), editor.locale.translate(Message::HelpShortcutSyntax)),
+		("^H".to_string(), editor.locale.translate(Message::HelpShortcutHelp)),
 	]
 }
 
-/// Width of a single shortcut entry: key + " label ".
-fn shortcut_width(key: &str, label: &str) -> usize {
-	// key displayed, then " label " (space-label-space)
-	key.chars().count() + 1 + label.chars().count() + 1
-}
 
-/// Calculate how many rows the help bar needs given a terminal width.
-pub fn help_row_count(term_width: u16) -> u16 {
-	let shortcuts = help_shortcuts();
-	let width = term_width as usize;
-	if width == 0 {
-		return 1;
-	}
 
-	let help_label = " Help  ";
+pub fn build_help_bar(editor: &Editor, width: u16, h: u16) -> Vec<Window> {
+	let shortcuts = help_shortcuts(editor);
+	
+	let mut builder = OverlayBuilder::new(editor.theme.toolbar_bg, 0)
+		.with_prefix(UiFragment {
+			text: editor.locale.translate(Message::ToolbarPrefix),
+			fg: editor.theme.status_bg,
+			bg: editor.theme.toolbar_bg,
+			is_flex: false,
+		});
 
-	// First row starts after the "▌" and " Help  " label.
-	let mut rows: u16 = 1;
-	let mut x = 1 + help_label.chars().count();
-	let mut items_on_row = 0;
-
-	for (key, label) in &shortcuts {
-		let sw = shortcut_width(key, label);
-		if x + sw > width && items_on_row > 0 {
-			// Doesn't fit — start a new row.
-			rows += 1;
-			x = 1 + sw;
-			items_on_row = 1;
-		} else {
-			x += sw;
-			items_on_row += 1;
-		}
-	}
-	rows
-}
-
-/// Render the pico-style help bar at the bottom of the screen.
-/// Builds upward from the row above the status bar when it needs
-/// multiple lines.
-pub fn render_help_bar(editor: &Editor, screen: &mut super::buffer::ScreenBuffer, vp: &Viewport) {
-	let shortcuts = help_shortcuts();
-	let width = vp.width as usize;
-	let num_rows = help_row_count(vp.width) as usize;
-
-	// Layout shortcuts into rows.
-	// Each row is a Vec of (key, label) pairs.
-	let help_label = " Help  ";
-	let mut rows: Vec<Vec<(&str, &str)>> = vec![Vec::new()];
-	let mut x = 1 + help_label.chars().count(); // first row starts after "▌" and " Help  "
+	builder.add_block(OverlayBlock {
+		fragments: vec![UiFragment {
+			text: editor.locale.translate(Message::HelpTitle),
+			fg: editor.theme.help_label,
+			bg: editor.theme.toolbar_bg,
+			is_flex: false,
+		}],
+	});
 
 	for (key, label) in &shortcuts {
-		let sw = shortcut_width(key, label);
-		if x + sw > width && !rows.last().unwrap().is_empty() {
-			rows.push(Vec::new());
-			x = 1 + sw;
-		} else {
-			x += sw;
-		}
-		rows.last_mut().unwrap().push((key, label));
+		builder.add_block(OverlayBlock {
+			fragments: vec![
+				UiFragment {
+					text: key.to_string(),
+					fg: editor.theme.help_key,
+					bg: editor.theme.toolbar_bg,
+					is_flex: false,
+				},
+				UiFragment {
+					text: format!(" {} ", label),
+					fg: editor.theme.toolbar_fg,
+					bg: editor.theme.toolbar_bg,
+					is_flex: false,
+				},
+			],
+		});
 	}
 
-	// The bottom-most help row sits directly above the status bar.
-	// Status bar is at vp.height - 1, so the bottom help row is at
-	// vp.height - 2, and rows build upward from there.
-	let base_y = vp.height.saturating_sub(2);
+	builder.add_block(OverlayBlock {
+		fragments: vec![UiFragment {
+			text: format!("  {}", editor.locale.translate(Message::Version(crate::VERSION.trim().to_string(), crate::GIT_HASH.to_string()))),
+			fg: Color::DarkGrey,
+			bg: editor.theme.toolbar_bg,
+			is_flex: false,
+		}],
+	});
 
-	for (row_idx, row_items) in rows.iter().enumerate() {
-		// Rows render top-to-bottom, row 0 is the topmost.
-		let y = base_y.saturating_sub((num_rows - 1 - row_idx) as u16);
-		screen.mov_to(0, y);
-
-		let mut used: usize = 0;
-
-		screen.reset_colors();
-		screen.set_fg(Color::Blue);
-		screen.put_str("▌");
-		used += 1;
-
-		if row_idx == 0 {
-			// First row: " Help  " label in yellow (like mode labels)
-			screen.set_bg(toolbar_bg_color(editor));
-			screen.set_fg(Color::DarkYellow);
-			screen.put_str(help_label);
-			used += help_label.chars().count();
-		}
-
-		// Render shortcut items
-		for (key, label) in row_items {
-			screen.set_bg(toolbar_bg_color(editor));
-			screen.set_fg(Color::DarkYellow);
-			screen.put_str(key);
-			screen.set_bg(toolbar_bg_color(editor));
-			screen.set_fg(Color::White);
-			let lbl = format!(" {} ", label);
-			screen.put_str(&lbl);
-			used += key.chars().count() + lbl.chars().count();
-		}
-
-		// On the last row, right-align the version string
-		if row_idx == rows.len() - 1 {
-			let version_str = format!("Dan v{} ({}) ", crate::VERSION.trim(), crate::GIT_HASH,);
-			let version_str_len = version_str.chars().count();
-			let available = width.saturating_sub(used);
-			if available >= version_str_len {
-				let remaining = available - version_str_len;
-				if remaining > 0 {
-					screen.set_bg(toolbar_bg_color(editor));
-					for _ in 0..remaining {
-						screen.put_char(' ');
-					}
-				}
-				screen.set_bg(toolbar_bg_color(editor));
-				screen.set_fg(Color::Black);
-				screen.put_str(&version_str);
-			} else {
-				if available > 0 {
-					screen.set_bg(toolbar_bg_color(editor));
-					for _ in 0..available {
-						screen.put_char(' ');
-					}
-				}
-			}
-		} else {
-			// Pad remaining width with white background
-			let remaining = width.saturating_sub(used);
-			if remaining > 0 {
-				screen.set_bg(toolbar_bg_color(editor));
-				for _ in 0..remaining {
-					screen.put_char(' ');
-				}
-			}
-		}
-	}
-
-	screen.reset_colors();
+	builder.build(width, h.saturating_sub(2))
 }
 
-pub struct PromptBlock {
-	pub bg: Color,
-	pub fg: Color,
-	pub text: String,
-}
-
-pub struct PromptLayout {
-	pub rows: u16,
-	pub cursor_offset: u16,
-	pub blocks: Vec<PromptBlock>,
-}
-
-/// Dynamically format and dimension the interactive overlay component natively supporting bounds.
-pub fn build_prompt(editor: &Editor, width: u16) -> Option<PromptLayout> {
+pub fn build_prompt(editor: &Editor, width: u16, h: u16) -> Option<Vec<Window>> {
 	if width == 0 {
 		return None;
 	}
-	let w = width as usize;
+
+	let bg_col = toolbar_bg_color(editor);
+	let mut builder = OverlayBuilder::new(bg_col, 10)
+		.with_prefix(UiFragment {
+			text: editor.locale.translate(Message::ToolbarPrefix),
+			fg: editor.theme.status_bg,
+			bg: bg_col,
+			is_flex: false,
+		});
+
+	// Dynamic inputs require generic sliding viewport mapping 
+	let label;
+	let label_color;
+	let query_text;
+	let mut info_prefix = String::new();
+	let mut info_color = Color::DarkGrey;
+	let mut info_suffix = String::new();
+	let text_cursor;
 
 	match editor.mode {
 		Mode::ReplacingSearch => {
-			let label = " Replace find: ".to_string();
-			let query_display = format!(" {} ", editor.replace_query);
-			let (info_prefix, info_color, info_suffix) = if editor.search_matches.is_empty() {
+			label = editor.locale.translate(Message::PromptReplaceTarget);
+			label_color = Color::DarkMagenta;
+			query_text = editor.replace_query.clone();
+			text_cursor = editor.prompt_cursor;
+
+			if editor.search_matches.is_empty() {
 				if editor.replace_query.is_empty() {
-					(String::new(), Color::DarkGrey, " Esc to close ".to_string())
+					info_suffix = format!(" {} ", editor.locale.translate(Message::EscToClose));
 				} else {
-					(" 0 matches".to_string(), Color::DarkYellow, ", ⏎ to replace, Esc to close ".to_string())
+					info_prefix = editor.locale.translate(Message::ZeroMatches);
+					info_color = Color::DarkYellow;
+					info_suffix = editor.locale.translate(Message::ReplaceShortcuts);
 				}
 			} else {
-				(
-					format!(" {}/{} matches", editor.search_match_idx + 1, editor.search_matches.len()),
-					Color::Yellow,
-					", ⏎ to replace, Esc to close ".to_string()
-				)
-			};
-
-			let total =
-				label.chars().count() + query_display.chars().count() + info_prefix.chars().count() + info_suffix.chars().count();
-			let rows = ((total + w - 1) / w) as u16;
-			let cursor_offset =
-				(label.chars().count() + 1 + editor.replace_query.chars().count()) as u16;
-			let current_len = label.chars().count() + query_display.chars().count();
-
-			let mut blocks = vec![
-				PromptBlock {
-					bg: toolbar_bg_color(editor),
-					fg: Color::DarkMagenta,
-					text: label,
-				},
-				PromptBlock {
-					bg: toolbar_bg_color(editor),
-					fg: Color::White,
-					text: query_display,
-				},
-			];
-			if !info_prefix.is_empty() || !info_suffix.is_empty() {
-				let eff_w = w.saturating_sub(1).max(1);
-				let info_len = info_prefix.chars().count() + info_suffix.chars().count();
-				let pad_len = eff_w.saturating_sub(current_len + info_len);
-				if pad_len > 0 {
-					blocks.push(PromptBlock {
-						bg: toolbar_bg_color(editor),
-						fg: Color::DarkGrey,
-						text: " ".repeat(pad_len),
-					});
-				}
-				if !info_prefix.is_empty() {
-					blocks.push(PromptBlock {
-						bg: toolbar_bg_color(editor),
-						fg: info_color,
-						text: info_prefix,
-					});
-				}
-				if !info_suffix.is_empty() {
-					blocks.push(PromptBlock {
-						bg: toolbar_bg_color(editor),
-						fg: Color::DarkGrey,
-						text: info_suffix,
-					});
-				}
+				info_prefix = editor.locale.translate(Message::MatchFraction(editor.search_match_idx + 1, editor.search_matches.len()));
+				info_color = Color::Yellow;
+				info_suffix = editor.locale.translate(Message::ReplaceShortcuts);
 			}
-			Some(PromptLayout {
-				rows,
-				cursor_offset,
-				blocks,
-			})
 		}
 		Mode::ReplacingWith => {
-			let label = " Replace with: ".to_string();
-			let query_display = format!(" {} ", editor.replace_with);
-
-			let total = label.chars().count() + query_display.chars().count();
-			let rows = ((total + w - 1) / w) as u16;
-			let cursor_offset =
-				(label.chars().count() + 1 + editor.replace_with.chars().count()) as u16;
-
-			let blocks = vec![
-				PromptBlock {
-					bg: toolbar_bg_color(editor),
-					fg: Color::DarkMagenta,
-					text: label,
-				},
-				PromptBlock {
-					bg: toolbar_bg_color(editor),
-					fg: Color::White,
-					text: query_display,
-				},
-			];
-			Some(PromptLayout {
-				rows,
-				cursor_offset,
-				blocks,
-			})
-		}
-		Mode::ReplacingStep => {
-			let label = " Replace? (y)es, (n)o, (a)ll, (q)uit: ".to_string();
-			let rows = ((label.chars().count() + w - 1) / w) as u16;
-
-			let blocks = vec![PromptBlock {
-				bg: toolbar_bg_color(editor),
-					fg: Color::DarkMagenta,
-				text: label,
-			}];
-			Some(PromptLayout {
-				rows,
-				cursor_offset: 0,
-				blocks,
-			})
-		}
-		Mode::Searching => {
-			let label = " → ".to_string();
-			let query_display = format!(" {} ", editor.search_query);
-			let (info_prefix, info_color, info_suffix) = if editor.search_matches.is_empty() {
-				if editor.search_query.is_empty() {
-					// String::new()
-					(String::new(), Color::DarkGrey, " Esc to close ".to_string())
-				} else {
-					(" 0 matches".to_string(), Color::DarkYellow, ", ^G for next, ⏎ to select, Esc to close ".to_string())
-				}
-			} else {
-				(
-					format!(" {}/{} matches", editor.search_match_idx + 1, editor.search_matches.len()),
-					Color::Yellow,
-					", ^G for next, ^R to replace, ⏎ to select, Esc to close ".to_string()
-				)
-			};
-
-			let total =
-				label.chars().count() + query_display.chars().count() + info_prefix.chars().count() + info_suffix.chars().count();
-			let rows = ((total + w - 1) / w) as u16;
-			let cursor_offset =
-				(label.chars().count() + 1 + editor.search_query.chars().count()) as u16;
-			let current_len = label.chars().count() + query_display.chars().count();
-
-			let mut blocks = vec![
-				PromptBlock {
-					bg: toolbar_bg_color(editor),
-					fg: Color::DarkYellow,
-					text: label,
-				},
-				PromptBlock {
-					bg: toolbar_bg_color(editor),
-					fg: Color::White,
-					text: query_display,
-				},
-			];
-			if !info_prefix.is_empty() || !info_suffix.is_empty() {
-				let eff_w = w.saturating_sub(1).max(1);
-				let info_len = info_prefix.chars().count() + info_suffix.chars().count();
-				let pad_len = eff_w.saturating_sub(current_len + info_len);
-				if pad_len > 0 {
-					blocks.push(PromptBlock {
-						bg: toolbar_bg_color(editor),
-						fg: Color::DarkGrey,
-						text: " ".repeat(pad_len),
-					});
-				}
-				if !info_prefix.is_empty() {
-					blocks.push(PromptBlock {
-						bg: toolbar_bg_color(editor),
-						fg: info_color,
-						text: info_prefix,
-					});
-				}
-				if !info_suffix.is_empty() {
-					blocks.push(PromptBlock {
-						bg: toolbar_bg_color(editor),
-						fg: Color::DarkGrey,
-						text: info_suffix,
-					});
-				}
-			}
-			Some(PromptLayout {
-				rows,
-				cursor_offset,
-				blocks,
-			})
+			label = editor.locale.translate(Message::PromptReplaceWith);
+			label_color = Color::DarkMagenta;
+			query_text = editor.replace_with.clone();
+			text_cursor = editor.prompt_cursor;
 		}
 		Mode::GoToLine => {
-			let label = " Go to line: ".to_string();
-			let input_display = format!(" {} ", editor.goto_line_input);
-			let total_lines = editor.buffer().line_count();
-			let hint = format!(" (1-{}) ", total_lines);
-
-			let total =
-				label.chars().count() + input_display.chars().count() + hint.chars().count();
-			let rows = ((total + w - 1) / w) as u16;
-			let cursor_offset =
-				(label.chars().count() + 1 + editor.goto_line_input.chars().count()) as u16;
-
-			let blocks = vec![
-				PromptBlock {
-					bg: toolbar_bg_color(editor),
-					fg: Color::DarkCyan,
-					text: label,
-				},
-				PromptBlock {
-					bg: toolbar_bg_color(editor),
-					fg: Color::White,
-					text: input_display,
-				},
-				PromptBlock {
-					bg: toolbar_bg_color(editor),
-					fg: Color::Grey,
-					text: hint,
-				},
-			];
-			Some(PromptLayout {
-				rows,
-				cursor_offset,
-				blocks,
-			})
-		}
-		Mode::RecoverSwap => {
-			let label = " Recovery ".to_string();
-			let msg = " Swap file detected! Restore unsaved changes? (y)es, (n)o ".to_string();
-			let total = label.chars().count() + msg.chars().count();
-			let rows = ((total + w - 1) / w) as u16;
-			let blocks = vec![
-				PromptBlock {
-					bg: toolbar_bg_color(editor),
-					fg: Color::DarkRed,
-					text: label,
-				},
-				PromptBlock {
-					bg: toolbar_bg_color(editor),
-					fg: Color::DarkYellow,
-					text: msg,
-				},
-			];
-			Some(PromptLayout {
-				rows,
-				cursor_offset: 0,
-				blocks,
-			})
+			let total_lines = editor.buffers[editor.active_buffer].line_count();
+			label = editor.locale.translate(Message::PromptGoToLine);
+			label_color = Color::DarkCyan;
+			query_text = editor.goto_line_input.clone();
+			text_cursor = editor.prompt_cursor;
+			info_suffix = editor.locale.translate(Message::PromptGoToLineHint(total_lines));
 		}
 		Mode::SaveAs | Mode::ConfirmOverwrite => {
-			let label = " Save as: ".to_string();
-			let input_display = format!(" {} ", editor.save_as_input);
-			let info = if editor.mode == Mode::ConfirmOverwrite {
-				" File exists! ^O Overwrite, Esc Cancel ".to_string()
+			label = editor.locale.translate(Message::PromptSaveAs);
+			label_color = Color::DarkGreen;
+			query_text = editor.save_as_input.clone();
+			text_cursor = editor.prompt_cursor;
+			
+			if editor.mode == Mode::ConfirmOverwrite {
+				info_suffix = editor.locale.translate(Message::PromptConfirmOverwrite);
+				info_color = Color::DarkRed;
 			} else {
-				" type path, ⏎ Save, Esc Cancel ".to_string()
-			};
-
-			let current_len = label.chars().count() + input_display.chars().count();
-			let total = current_len + info.chars().count();
-			let rows = ((total + w - 1) / w) as u16;
-			let cursor_offset = (label.chars().count() + 1 + editor.save_as_cursor) as u16;
-
-			let mut blocks = vec![
-				PromptBlock {
-					bg: toolbar_bg_color(editor),
-					fg: Color::DarkGreen,
-					text: label,
-				},
-				PromptBlock {
-					bg: toolbar_bg_color(editor),
-					fg: Color::White,
-					text: input_display,
-				},
-			];
-
-			if !info.is_empty() {
-				let eff_w = w.saturating_sub(1).max(1);
-				let info_len = info.chars().count();
-				let pad_len = eff_w.saturating_sub(current_len + info_len);
-				if pad_len > 0 {
-					blocks.push(PromptBlock {
-						bg: toolbar_bg_color(editor),
-						fg: Color::DarkGrey,
-						text: " ".repeat(pad_len),
-					});
-				}
-				blocks.push(PromptBlock {
-					bg: toolbar_bg_color(editor),
-					fg: if editor.mode == Mode::ConfirmOverwrite { Color::DarkRed } else { Color::DarkGrey },
-					text: info,
-				});
+				info_suffix = editor.locale.translate(Message::PromptSaveAsShortcuts);
+				info_color = Color::DarkGrey;
 			}
-			Some(PromptLayout {
-				rows,
-				cursor_offset,
-				blocks,
-			})
+		}
+		Mode::Searching => {
+			label = editor.locale.translate(Message::PromptSearch);
+			label_color = Color::DarkYellow;
+			query_text = editor.search_query.clone();
+			text_cursor = editor.prompt_cursor;
+			
+			if editor.search_matches.is_empty() {
+				if editor.search_query.is_empty() {
+					info_suffix = format!(" {} ", editor.locale.translate(Message::EscToClose));
+				} else {
+					info_prefix = editor.locale.translate(Message::ZeroMatches);
+					info_color = Color::DarkYellow;
+					info_suffix = editor.locale.translate(Message::SearchShortcuts);
+				}
+			} else {
+				info_prefix = editor.locale.translate(Message::MatchFraction(editor.search_match_idx + 1, editor.search_matches.len()));
+				info_color = Color::Yellow;
+				info_suffix = editor.locale.translate(Message::SearchReplaceShortcuts);
+			}
+		}
+		Mode::ReplacingStep => {
+			let label = editor.locale.translate(Message::PromptReplaceStep);
+			builder.add_block(OverlayBlock {
+				fragments: vec![
+					UiFragment { bg: bg_col, fg: Color::DarkMagenta, text: label, is_flex: false },
+				]
+			});
+			return Some(builder.build(width, h.saturating_sub(1)));
+		}
+		Mode::RecoverSwap => {
+			let label = editor.locale.translate(Message::PromptRecoverTitle);
+			let msg = editor.locale.translate(Message::PromptRecoverMsg);
+			
+			builder.add_block(OverlayBlock {
+				fragments: vec![
+					UiFragment { bg: bg_col, fg: Color::DarkRed, text: format!(" {} ", label), is_flex: false },
+					UiFragment { bg: bg_col, fg: Color::DarkYellow, text: format!(" {} ", msg), is_flex: false },
+				]
+			});
+
+			return Some(builder.build(width, h.saturating_sub(1)));
 		}
 		Mode::ConfirmQuit => {
-			let label1 = " Quit warning: ".to_string();
-			let label2 =
-				" Unsaved changes! (s)ave and quit, (f)orce quit, Esc to cancel ".to_string();
+			let label1 = editor.locale.translate(Message::PromptQuitWarning);
+			let label2 = editor.locale.translate(Message::PromptQuitMsg);
 
-			let total = label1.chars().count() + label2.chars().count();
-			let rows = ((total + w - 1) / w) as u16;
+			builder.add_block(OverlayBlock {
+				fragments: vec![
+					UiFragment { bg: bg_col, fg: Color::DarkRed, text: format!(" {} ", label1), is_flex: false },
+					UiFragment { bg: bg_col, fg: Color::Blue, text: format!(" {} ", label2), is_flex: false },
+				]
+			});
 
-			let blocks = vec![
-				PromptBlock {
-					bg: toolbar_bg_color(editor),
-					fg: Color::DarkRed,
-					text: label1,
-				},
-				PromptBlock {
-					bg: toolbar_bg_color(editor),
-					fg: Color::Blue,
-					text: label2,
-				},
-			];
-			Some(PromptLayout {
-				rows,
-				cursor_offset: 0,
-				blocks,
-			})
+			return Some(builder.build(width, h.saturating_sub(1)));
 		}
-		_ => None,
+		_ => return None,
+	};
+
+	let layout_width = (width as usize).saturating_sub(
+		1 + label.chars().count() + info_prefix.chars().count() + info_suffix.chars().count() + 2 // padding
+	);
+
+	let mut view_start = editor.prompt_view_start.get();
+	let screen_cursor_x = crate::ui::layout::calculate_viewport(
+		0,
+		text_cursor,
+		layout_width.max(10), // minimum sensible width for input
+		&mut view_start
+	);
+	editor.prompt_view_start.set(view_start);
+
+	let available_width = layout_width.max(10);
+	let visible_slice: String = query_text.chars().skip(view_start).take(available_width).collect();
+	
+	let has_left = view_start > 0;
+	let has_right = query_text.chars().count() > view_start + available_width;
+
+	let cursor_offset = label.chars().count() + 1 + screen_cursor_x + (if has_left { 1 } else { 0 });
+	builder = builder.with_cursor(cursor_offset);
+
+	let mut prompt_frags = vec![
+		UiFragment { bg: bg_col, fg: label_color, text: label, is_flex: false },
+		UiFragment { bg: bg_col, fg: Color::White, text: " ".to_string(), is_flex: false },
+	];
+
+	if has_left {
+		prompt_frags.push(UiFragment { bg: bg_col, fg: editor.theme.toolbar_fg_dim, text: editor.locale.translate(Message::PromptClipLeft), is_flex: false });
 	}
+
+	prompt_frags.push(UiFragment { bg: bg_col, fg: Color::White, text: visible_slice, is_flex: false });
+	
+	if has_right {
+		prompt_frags.push(UiFragment { bg: bg_col, fg: editor.theme.toolbar_fg_dim, text: editor.locale.translate(Message::PromptClipRight), is_flex: false });
+	}
+	
+	prompt_frags.push(UiFragment { bg: bg_col, fg: Color::White, text: " ".to_string(), is_flex: false });
+
+	if !info_prefix.is_empty() {
+		prompt_frags.push(UiFragment { bg: bg_col, fg: info_color, text: info_prefix, is_flex: false });
+	}
+	if !info_suffix.is_empty() {
+		prompt_frags.push(UiFragment { bg: bg_col, fg: Color::DarkGrey, text: info_suffix, is_flex: false });
+	}
+
+	builder.add_block(OverlayBlock { fragments: prompt_frags });
+
+	Some(builder.build(width, h.saturating_sub(1)))
 }
+pub fn render_ui(
+	editor: &Editor,
+	screen: &mut super::buffer::ScreenBuffer,
+	vp: &Viewport,
+) -> Option<(u16, u16)> {
+	let mut windows = Vec::new();
 
-/// Uniform renderer interpreting constructed runtime blocks natively.
-pub fn render_prompt_overlay(
-    screen: &mut super::buffer::ScreenBuffer,
-    vp: &Viewport,
-    layout: &PromptLayout,
-) {
-    if layout.rows == 0 {
-        return;
-    }
-    let bar_y = vp.height.saturating_sub(1 + layout.rows);
-    let width = vp.width as usize;
+	windows.push(build_status_bar(editor, vp));
 
-    let mut r: u16 = 0;
-    screen.mov_to(0, bar_y + r);
-    screen.reset_colors();
-    screen.set_fg(Color::Blue);
-    screen.put_str("▌");
-    let mut x = 1;
+	let prompt = build_prompt(editor, vp.width, vp.height);
 
-    for block in &layout.blocks {
-        screen.set_bg(block.bg);
-        screen.set_fg(block.fg);
-        for ch in block.text.chars() {
-            if x >= width {
-                r += 1;
-                if r >= layout.rows { break; }
-                screen.mov_to(0, bar_y + r);
-                screen.reset_colors();
-                screen.set_fg(Color::Blue);
-                screen.put_str("▌");
-                
-                // restore colors for continuation
-                screen.set_bg(block.bg);
-                screen.set_fg(block.fg);
-                x = 1;
-            }
-            screen.put_char(ch);
-            x += 1;
-        }
-    }
+	if prompt.is_none() && editor.show_help {
+		windows.extend(build_help_bar(editor, vp.width, vp.height));
+	}
 
-    // Since prompt blocks now use toolbar_bg_color(editor), we can assume the whole remainder of the line 
-    // should also be filled in with the prompt's background. We can peek at the first block's background,
-    // which corresponds to the toolbar_bg_color correctly.
-    let fill_bg = layout.blocks.first().map(|b| b.bg).unwrap_or(Color::DarkGrey);
+	if let Some(p) = prompt {
+		windows.extend(p);
+	}
 
-    while r < layout.rows {
-        screen.set_bg(fill_bg);
-        while x < width {
-            screen.put_char(' ');
-            x += 1;
-        }
-        r += 1;
-        if r < layout.rows {
-            screen.mov_to(0, bar_y + r);
-            screen.reset_colors();
-            screen.set_fg(Color::Blue);
-            screen.put_str("▌");
-            x = 1;
-        }
-    }
+	windows.sort_by_key(|w| w.z_index);
 
-    screen.reset_colors();
+	let mut interactive_cursor: Option<(u16, u16)> = None;
+
+	for window in &windows {
+		let mut start_y = match window.gravity {
+			Gravity::BottomLeft | Gravity::BottomRight => {
+				vp.height.saturating_sub(window.rect.height)
+			}
+			Gravity::TopLeft | Gravity::TopRight => 0,
+			Gravity::Center => vp.height.saturating_sub(window.rect.height) / 2,
+			Gravity::Fill => 0,
+		};
+		// Direct translation applying stacked overrides
+		if window.rect.y > 0 && window.gravity == Gravity::BottomLeft {
+			start_y = window.rect.y;
+		}
+
+		let start_x = match window.gravity {
+			Gravity::BottomRight | Gravity::TopRight => {
+				vp.width.saturating_sub(window.rect.width)
+			}
+			Gravity::Center => vp.width.saturating_sub(window.rect.width) / 2,
+			_ => window.rect.x,
+		};
+
+		if let Some((cx, cy)) = window.cursor_bounds {
+			interactive_cursor = Some((start_x + cx, start_y + cy));
+		}
+
+		let mut flex_spaces = 0;
+		let mut static_width = 0;
+
+		for frag in &window.fragments {
+			if frag.is_flex {
+				flex_spaces += 1;
+			} else {
+				static_width += frag.text.chars().count() as u16;
+			}
+		}
+
+		let remaining_width = window.rect.width.saturating_sub(static_width);
+		let flex_width = if flex_spaces > 0 { remaining_width / flex_spaces } else { 0 };
+
+		let mut current_x = start_x;
+		let mut current_y = start_y;
+		
+		screen.mov_to(current_x, current_y);
+
+		for frag in &window.fragments {
+			screen.set_bg(frag.bg);
+			screen.set_fg(frag.fg);
+			screen.bold = false;
+			screen.italic = false;
+
+			if frag.is_flex {
+				for _ in 0..flex_width {
+					if current_x >= start_x + window.rect.width {
+						current_y += 1;
+						current_x = start_x;
+						screen.mov_to(current_x, current_y);
+					}
+					screen.put_char(' ');
+					current_x += 1;
+				}
+			} else {
+				for ch in frag.text.chars() {
+					if current_x >= start_x + window.rect.width {
+						current_y += 1;
+						current_x = start_x;
+						screen.mov_to(current_x, current_y);
+					}
+					screen.put_char(ch);
+					current_x += 1;
+				}
+			}
+		}
+	}
+
+	interactive_cursor
 }

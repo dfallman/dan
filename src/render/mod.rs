@@ -34,11 +34,10 @@ impl Viewport {
 		let chrome: u16 = 1;
 		let mut overlay: u16 = 0;
 
-		// Automatically compute overlay rows seamlessly evaluating the unified PromptLayout builder
-		if let Some(layout) = chrome::build_prompt(editor, w) {
-			overlay += layout.rows;
+		if let Some(prompt_windows) = chrome::build_prompt(&*editor, w, h) {
+			overlay += prompt_windows.len() as u16;
 		} else if editor.show_help {
-			overlay += chrome::help_row_count(w);
+			overlay += chrome::build_help_bar(&*editor, w, h).len() as u16;
 		}
 		Self {
 			width: w,
@@ -300,18 +299,8 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 		);
 	}
 
-	// -- Render status bar (always the row just after text) --
-	chrome::render_status_bar(editor, &mut screen, &vp);
-
-	// -- Render help bar or dynamically derived Prompt Overlay (isolated by PromptLayout) --
-	let prompt_layout = chrome::build_prompt(editor, vp.width);
-	if prompt_layout.is_none() && editor.show_help {
-		chrome::render_help_bar(editor, &mut screen, &vp);
-	}
-
-	if let Some(layout) = &prompt_layout {
-		chrome::render_prompt_overlay(&mut screen, &vp, layout);
-	}
+	// -- Render 2D UI Components Orchestrator --
+	let interactive_cursor = chrome::render_ui(editor, &mut screen, &vp);
 
 	// -- Position the cursor --
 	if matches!(
@@ -375,23 +364,14 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 		}
 	}
 
-	if let Some(layout) = &prompt_layout {
-		let offset = layout.cursor_offset;
-		let rows = layout.rows;
-		if rows > 0 && offset > 0 {
-			// offset > 0 effectively bounds cursor-showing modes
-			let prompt_y = vp.height.saturating_sub(1 + rows);
-			let eff_w = vp.width.saturating_sub(1).max(1);
-			let cursor_x = 1 + (offset % eff_w);
-			let cursor_y = prompt_y + (offset / eff_w);
-			screen.term_cursor_x = cursor_x;
-			screen.term_cursor_y = cursor_y;
-			screen.hide_cursor = false;
-			screen.cursor_style = cursor::SetCursorStyle::BlinkingBlock;
-		} else if matches!(editor.mode, Mode::ReplacingStep) {
-			// hide cursor during step evaluations specifically
-			screen.hide_cursor = true;
-		}
+	if let Some((cx, cy)) = interactive_cursor {
+		screen.term_cursor_x = cx;
+		screen.term_cursor_y = cy;
+		screen.hide_cursor = false;
+		screen.cursor_style = cursor::SetCursorStyle::BlinkingBlock;
+	} else if matches!(editor.mode, Mode::ReplacingStep) {
+		// hide cursor during step evaluations specifically
+		screen.hide_cursor = true;
 	} else {
 		// Normal mode — position cursor in the document.
 		let cursor_pos = editor.cursors.cursor();

@@ -12,6 +12,7 @@ pub struct Cell {
 	pub bg: Color,
 	pub underline: bool,
 	pub bold: bool,
+	pub italic: bool,
 }
 
 impl Default for Cell {
@@ -22,6 +23,7 @@ impl Default for Cell {
 			bg: Color::Reset,
 			underline: false,
 			bold: false,
+			italic: false,
 		}
 	}
 }
@@ -38,6 +40,7 @@ pub struct ScreenBuffer {
 	pub bg: Color,
 	pub underline: bool,
 	pub bold: bool,
+	pub italic: bool,
 
 	pub hide_cursor: bool,
 	pub term_cursor_x: u16,
@@ -57,6 +60,7 @@ impl ScreenBuffer {
 			bg: Color::Reset,
 			underline: false,
 			bold: false,
+			italic: false,
 			hide_cursor: false,
 			term_cursor_x: 0,
 			term_cursor_y: 0,
@@ -77,12 +81,6 @@ impl ScreenBuffer {
 		self.underline = underline;
 	}
 
-	pub fn reset_colors(&mut self) {
-		self.fg = Color::Reset;
-		self.bg = Color::Reset;
-		self.bold = false;
-		self.underline = false;
-	}
 
 	pub fn mov_to(&mut self, x: u16, y: u16) {
 		self.cursor_x = x;
@@ -99,6 +97,7 @@ impl ScreenBuffer {
 					bg: self.bg,
 					underline: self.underline,
 					bold: self.bold,
+					italic: self.italic,
 				};
 			}
 		}
@@ -117,6 +116,7 @@ impl ScreenBuffer {
 		let mut last_bg = Color::Reset;
 		let mut last_bold = false;
 		let mut last_underline = false;
+		let mut last_italic = false;
 
 		let mut current_x: Option<u16> = None;
 		let mut current_y: Option<u16> = None;
@@ -175,6 +175,15 @@ impl ScreenBuffer {
 						w.queue(SetAttribute(Attribute::NoUnderline))?;
 					}
 					last_underline = new_cell.underline;
+				}
+
+				if new_cell.italic != last_italic {
+					if new_cell.italic {
+						w.queue(SetAttribute(Attribute::Italic))?;
+					} else {
+						w.queue(SetAttribute(Attribute::NoItalic))?;
+					}
+					last_italic = new_cell.italic;
 				}
 
 				w.queue(style::Print(new_cell.ch))?;

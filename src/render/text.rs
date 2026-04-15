@@ -24,7 +24,7 @@ fn syntax_colors_for_line(
 	editor: &Editor,
 	hi: &mut HighlightLines<'_>,
 	line_text: &str,
-) -> Vec<(Color, bool)> {
+) -> Vec<(Color, bool, bool)> {
 	if !editor.config.syntax_highlight {
 		return Vec::new();
 	}
@@ -32,12 +32,13 @@ fn syntax_colors_for_line(
 		.highlight_line(line_text, &editor.highlighter.syntax_set)
 		.unwrap_or_default();
 
-	let mut colors: Vec<(Color, bool)> = Vec::with_capacity(line_text.len());
+	let mut colors: Vec<(Color, bool, bool)> = Vec::with_capacity(line_text.len());
 	for (style, fragment) in &ranges {
 		let fg = syntect_to_crossterm(style.foreground);
 		let bold = style.font_style.contains(FontStyle::BOLD);
+		let italic = style.font_style.contains(FontStyle::ITALIC);
 		for _ in fragment.chars() {
-			colors.push((fg, bold));
+			colors.push((fg, bold, italic));
 		}
 	}
 	colors
@@ -46,11 +47,11 @@ fn syntax_colors_for_line(
 /// Look up the syntax color for a character at `char_idx`.
 /// Falls back to `Color::Reset` if the index is out of range or the map is empty.
 #[inline]
-fn syntax_fg(colors: &[(Color, bool)], char_idx: usize) -> Color {
+fn syntax_fg(colors: &[(Color, bool, bool)], char_idx: usize) -> (Color, bool, bool) {
 	colors
 		.get(char_idx)
-		.map(|(c, _)| *c)
-		.unwrap_or(Color::Reset)
+		.copied()
+		.unwrap_or((Color::Reset, false, false))
 }
 
 /// Calculate a subtle active line highlight background dynamically derived from
@@ -188,20 +189,28 @@ pub fn render_wrap(
 					.map(|(i, _)| *i == editor.search_match_idx)
 					.unwrap_or(false);
 				let in_search = search_hit.is_some();
-				let cur_syn_fg = syntax_fg(&syn_colors, char_idx);
+				let (cur_syn_fg, cur_syn_bold, cur_syn_italic) = syntax_fg(&syn_colors, char_idx);
 
 				if want_sel {
 					screen.set_bg(Color::Cyan);
 					screen.set_fg(Color::Black);
+					screen.bold = false;
+					screen.italic = false;
 				} else if is_current_match {
 					screen.set_bg(Color::Green);
 					screen.set_fg(Color::Black);
+					screen.bold = false;
+					screen.italic = false;
 				} else if in_search {
 					screen.set_bg(Color::Yellow);
 					screen.set_fg(Color::Black);
+					screen.bold = false;
+					screen.italic = false;
 				} else {
 					screen.set_bg(base_bg);
 					screen.set_fg(cur_syn_fg);
+					screen.bold = cur_syn_bold;
+					screen.italic = cur_syn_italic;
 				}
 
 				if ch == '\t' {
@@ -353,20 +362,28 @@ pub fn render_nowrap(
 					.map(|(i, _)| *i == editor.search_match_idx)
 					.unwrap_or(false);
 				let in_search = search_hit.is_some();
-				let cur_syn_fg = syntax_fg(&syn_colors, char_idx);
+				let (cur_syn_fg, cur_syn_bold, cur_syn_italic) = syntax_fg(&syn_colors, char_idx);
 
 				if want_sel {
 					screen.set_bg(Color::Cyan);
 					screen.set_fg(Color::Black);
+					screen.bold = false;
+					screen.italic = false;
 				} else if is_current_match {
 					screen.set_bg(Color::DarkYellow);
 					screen.set_fg(Color::Black);
+					screen.bold = false;
+					screen.italic = false;
 				} else if in_search {
 					screen.set_bg(Color::Yellow);
 					screen.set_fg(Color::Black);
+					screen.bold = false;
+					screen.italic = false;
 				} else {
 					screen.set_bg(base_bg);
 					screen.set_fg(cur_syn_fg);
+					screen.bold = cur_syn_bold;
+					screen.italic = cur_syn_italic;
 				}
 
 				if ch == '\t' {

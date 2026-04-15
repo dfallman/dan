@@ -25,6 +25,7 @@ mod input;
 pub mod recovery;
 mod render;
 mod syntax;
+pub mod ui;
 mod utils;
 
 use crossterm::event::{self, Event};
