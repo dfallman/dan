@@ -5,11 +5,7 @@ impl Editor {
 	pub(crate) fn refresh_search_matches(&mut self) {
 		self.search_matches = self.buffer().text.find_all(&self.search_query);
 		if self.search_matches.is_empty() {
-			if self.search_query.is_empty() {
-				self.clear_status();
-			} else {
-				self.set_status(format!(" No matches for \"{}\" ", self.search_query));
-			}
+			self.clear_status();
 			return;
 		}
 		// Find the match nearest (at or after) the saved cursor position.
@@ -32,11 +28,7 @@ impl Editor {
 			let line = self.buffer().text.char_to_line(start);
 			let col = start - self.buffer().text.line_to_char(line);
 			self.cursors.set_cursor(line, col);
-			self.set_status(format!(
-				"{}/{} matches, ^G for next, ⏎ to select",
-				self.search_match_idx + 1,
-				self.search_matches.len()
-			));
+
 		}
 	}
 }

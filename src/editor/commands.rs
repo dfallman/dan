@@ -61,9 +61,9 @@ pub enum Command {
 	SearchDeleteChar,
 	SearchConfirm,
 	SearchCancel,
+	SearchConvertToReplace,
 
 	// -- Global Replace --
-	ReplaceOpen,
 	ReplaceInsertChar(char),
 	ReplaceDeleteChar,
 	ReplaceSearchConfirm,

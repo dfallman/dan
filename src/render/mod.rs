@@ -381,8 +381,9 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 		if rows > 0 && offset > 0 {
 			// offset > 0 effectively bounds cursor-showing modes
 			let prompt_y = vp.height.saturating_sub(1 + rows);
-			let cursor_x = offset % vp.width;
-			let cursor_y = prompt_y + (offset / vp.width);
+			let eff_w = vp.width.saturating_sub(1).max(1);
+			let cursor_x = 1 + (offset % eff_w);
+			let cursor_y = prompt_y + (offset / eff_w);
 			screen.term_cursor_x = cursor_x;
 			screen.term_cursor_y = cursor_y;
 			screen.hide_cursor = false;

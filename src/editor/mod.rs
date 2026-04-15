@@ -952,17 +952,6 @@ impl Editor {
 			}
 
 			// -- Global Replace --
-			Command::ReplaceOpen => {
-				self.clear_selection();
-				self.replace_query = self.last_search_query.clone();
-				self.search_query.clear();
-				self.replace_with.clear();
-				self.search_matches.clear();
-				self.search_match_idx = 0;
-				let c = self.cursors.cursor();
-				self.search_saved_cursor = Some((c.line, c.col));
-				self.mode = Mode::ReplacingSearch;
-			}
 			Command::ReplaceInsertChar(ch) => {
 				if self.mode == Mode::ReplacingSearch {
 					self.replace_query.push(ch);
@@ -1134,6 +1123,13 @@ impl Editor {
 				self.mode = Mode::Editing;
 				self.clear_status();
 			}
+			Command::SearchConvertToReplace => {
+				if !self.search_matches.is_empty() {
+					self.replace_query = self.search_query.clone();
+					self.last_search_query = self.search_query.clone();
+					self.mode = Mode::ReplacingWith;
+				}
+			}
 			Command::SearchNext => {
 				if !self.search_matches.is_empty() {
 					self.search_match_idx = (self.search_match_idx + 1) % self.search_matches.len();
@@ -1193,7 +1189,6 @@ impl Editor {
 					.unwrap_or_default();
 				self.save_as_cursor = self.save_as_input.len();
 				self.mode = Mode::SaveAs;
-				self.set_status("Save as: type path, ⏎ Save, Esc Cancel");
 			}
 			Command::SaveAsInsertChar(ch) => {
 				self.save_as_input.insert(self.save_as_cursor, ch);
@@ -1238,7 +1233,6 @@ impl Editor {
 					if path.exists() {
 						self.save_as_pending_path = Some(path_str);
 						self.mode = Mode::ConfirmOverwrite;
-						self.set_status("File exists! ^O Overwrite, Esc Cancel");
 					} else {
 						// New file — save directly.
 						self.save_as_input.clear();
@@ -1247,7 +1241,7 @@ impl Editor {
 						self.buffer_mut().commit_edits();
 						let cfg = self.config.clone();
 						match self.buffer_mut().save_to(path, &cfg) {
-							Ok(()) => self.set_status(format!("Saved as {}", path.display())),
+							Ok(()) => self.set_status(format!("✓ Saved as {}", path.display())),
 							Err(e) => self.set_status(format!("Save failed: {}", e)),
 						}
 					}
@@ -1270,7 +1264,7 @@ impl Editor {
 					self.buffer_mut().commit_edits();
 					let cfg = self.config.clone();
 					match self.buffer_mut().save_to(path, &cfg) {
-						Ok(()) => self.set_status(format!("Saved as {}", path_str)),
+						Ok(()) => self.set_status(format!("✓ Saved as {}", path_str)),
 						Err(e) => self.set_status(format!("Save failed: {}", e)),
 					}
 				}
@@ -1278,7 +1272,6 @@ impl Editor {
 			Command::CancelOverwrite => {
 				self.save_as_pending_path = None;
 				self.mode = Mode::SaveAs;
-				self.set_status("Save as: Save as: type path, ⏎ Save, Esc Cancel");
 			}
 
 			// -- File --
@@ -1289,7 +1282,7 @@ impl Editor {
 					self.buffer_mut().commit_edits();
 					let cfg = self.config.clone();
 					match self.buffer_mut().save(&cfg) {
-						Ok(()) => self.set_status("Saved"),
+						Ok(()) => self.set_status("✓ Saved"),
 						Err(e) => self.set_status(format!("Save failed: {}", e)),
 					}
 				}
