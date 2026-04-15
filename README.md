@@ -59,11 +59,11 @@ For more installation options, see Install below.
 
 - **Differential screen rendering**: The rendering pipeline utilizes an aggressive delta-computation system. Dan only flushes the exact structural text differences directly to standard output frame-by-frame, drastically minimizing I/O and entirely eliminating scroll tearing over network connections.
 
-- **Rope data structure architecture**: The text buffer is internally powered by a Rope graph designed to withstand punishing mutation intervals. This guarantees O(log N) insertion and deletion complexities, maintaining constant memory footprints and instantaneous mutations regardless of file scale.
+- **Rope data structure architecture**: The text buffer is internally powered by a Rope graph designed to withstand punishing mutation intervals. This guarantees O(log N) insertion and deletion complexities, maintaining constant memory footprints, and instantaneous mutations regardless of file scale.
 
 - **Fault-tolerant recovery**: All unsaved changes are asynchronously serialized to a `.swp` recovery file every 5 seconds. If your SSH connection drops, your terminal crashes, or you experience a power cycle, Dan will immediately prompt to recover your atomic state identically upon reopening.
 
-- **Layered deterministic configuration**: Reads from Internal Defaults $\rightarrow$ `~/.config/dan/config.toml` $\rightarrow$ local `.editorconfig` matrices dynamically. It fully respects project-level stylistic constraints (tab widths, CRLF vs LF line endings, trailing whitespace trims) instantly.
+- **Layered deterministic configuration**: Reads from Internal Defaults -> `~/.config/dan/config.toml` -> local `.editorconfig` matrices dynamically. It fully respects project-level stylistic constraints (tab widths, CRLF vs LF line endings, trailing whitespace trims) instantly.
 
 - **Asynchronous auto-formatter**: Never block the main thread while formatting. Dan securely pipes the active buffer to external industry-standard binaries (like Prettier, Rustfmt, or Ruff) in a background thread, effortlessly hot-swapping the buffer when execution confirms success without interrupting your cursor sequence.
 
