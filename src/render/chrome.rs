@@ -9,7 +9,7 @@ pub fn toolbar_bg_color(editor: &Editor) -> Color {
 	if editor.is_light_bg {
 		Color::AnsiValue(254)
 	} else {
-		Color::White
+		Color::AnsiValue(236)
 	}
 }
 
@@ -21,37 +21,49 @@ pub fn render_status_bar(editor: &Editor, screen: &mut super::buffer::ScreenBuff
 	let width = vp.width as usize;
 	let mut used: usize = 0;
 
+	screen.reset_colors();
+	screen.set_fg(Color::Blue);
+	screen.put_str("▌");
+	used += 1;
+
 	// Mode indicator (derive visual mode from selection state)
-	let (mode_bg, mode_text) = if editor.has_selection() {
-		(Color::DarkYellow, "SELECT")
+	let (mode_color, mode_text) = if editor.has_selection() {
+		(Color::DarkYellow, "Select")
 	} else {
 		(editor.mode.color(), editor.mode.label())
 	};
 	let mode_label = format!(" {} ", mode_text);
-	screen.set_bg(mode_bg);
-	screen.set_fg(Color::Black);
+	screen.set_bg(toolbar_bg_color(editor));
+	screen.set_fg(mode_color);
 	screen.put_str(&mode_label);
-	used += mode_label.len();
+	used += mode_label.chars().count();
 
 	screen.set_bg(toolbar_bg_color(editor));
 	screen.set_fg(Color::Black);
 
 	// File name
 	let name = editor.buffer().display_name();
-	let dirty = if editor.buffer().dirty { " [+]" } else { "" };
-	let file_part = format!(" {}{} ", name, dirty);
-	screen.put_str(&file_part);
-	used += file_part.len();
+	let name_part = format!(" {} ", name);
+	
+	screen.set_bg(toolbar_bg_color(editor));
+	screen.set_fg(Color::White);
+	screen.put_str(&name_part);
+	used += name_part.chars().count();
+
+	if editor.buffer().dirty {
+		screen.set_fg(Color::DarkGrey);
+		screen.put_str("+ ");
+		screen.set_fg(Color::White);
+		used += 2;
+	}
 
 	// Status message (if any)
 	if let Some(ref msg) = editor.status_msg {
 		let msg_part = format!(" {} ", msg);
-		screen.set_bg(Color::Blue);
-		screen.set_fg(Color::Black);
-		screen.put_str(&msg_part);
 		screen.set_bg(toolbar_bg_color(editor));
-		screen.set_fg(Color::Black);
-		used += msg_part.len();
+		screen.set_fg(Color::DarkGrey);
+		screen.put_str(&msg_part);
+		used += msg_part.chars().count();
 	}
 
 	// Right side: Language + Help toggle + cursor position
@@ -74,15 +86,21 @@ pub fn render_status_bar(editor: &Editor, screen: &mut super::buffer::ScreenBuff
 
 	let right = format!(" {} ", right_parts.join("  "));
 	let available = width.saturating_sub(used);
-	if available >= right.len() {
-		let padding = available - right.len();
-		for _ in 0..padding {
-			screen.put_char(' ');
+	
+	if available > 0 {
+		screen.set_fg(Color::DarkGrey);
+		let right_len = right.chars().count();
+		if available >= right_len {
+			let padding = available - right_len;
+			for _ in 0..padding {
+				screen.put_char(' ');
+			}
+			screen.put_str(&right);
+		} else {
+			let truncated: String = right.chars().take(available).collect();
+			screen.put_str(&truncated);
 		}
-		screen.put_str(&right);
-	} else if available > 0 {
-		let truncated: String = right.chars().take(available).collect();
-		screen.put_str(&truncated);
+		screen.set_fg(Color::White);
 	}
 
 	screen.reset_colors();
@@ -99,15 +117,14 @@ fn help_shortcuts() -> Vec<(&'static str, &'static str)> {
 		("^C", "Copy"),
 		("^X", "Cut"),
 		("^V", "Paste"),
-		("^F", "Find"),
-		("^R", "Replace"),
+		("^F", "Find & replace"),
 		("^G", "Goto"),
 		("^D", "Duplicate"),
 		("^K", "Delete"),
 		("^W", "Wrap"),
 		("^L", "Lint"),
 		("^E", "Comment"),
-		("^T", "Syntax hlght"),
+		("^T", "Syntax highlight"),
 		("^H", "Help"),
 	]
 }
@@ -115,11 +132,8 @@ fn help_shortcuts() -> Vec<(&'static str, &'static str)> {
 /// Width of a single shortcut entry: key + " label ".
 fn shortcut_width(key: &str, label: &str) -> usize {
 	// key displayed, then " label " (space-label-space)
-	key.len() + 1 + label.len() + 1
+	key.chars().count() + 1 + label.chars().count() + 1
 }
-
-/// The width of the " HELP " label prefix.
-const HELP_LABEL_WIDTH: usize = 6; // " HELP "
 
 /// Calculate how many rows the help bar needs given a terminal width.
 pub fn help_row_count(term_width: u16) -> u16 {
@@ -129,18 +143,23 @@ pub fn help_row_count(term_width: u16) -> u16 {
 		return 1;
 	}
 
-	// First row starts after the " HELP " label.
+	let help_label = " Help  ";
+
+	// First row starts after the "▌" and " Help  " label.
 	let mut rows: u16 = 1;
-	let mut x = HELP_LABEL_WIDTH;
+	let mut x = 1 + help_label.chars().count();
+	let mut items_on_row = 0;
 
 	for (key, label) in &shortcuts {
 		let sw = shortcut_width(key, label);
-		if x + sw > width && x > HELP_LABEL_WIDTH {
+		if x + sw > width && items_on_row > 0 {
 			// Doesn't fit — start a new row.
 			rows += 1;
-			x = sw;
+			x = 1 + sw;
+			items_on_row = 1;
 		} else {
 			x += sw;
+			items_on_row += 1;
 		}
 	}
 	rows
@@ -156,14 +175,15 @@ pub fn render_help_bar(editor: &Editor, screen: &mut super::buffer::ScreenBuffer
 
 	// Layout shortcuts into rows.
 	// Each row is a Vec of (key, label) pairs.
+	let help_label = " Help  ";
 	let mut rows: Vec<Vec<(&str, &str)>> = vec![Vec::new()];
-	let mut x = HELP_LABEL_WIDTH; // first row starts after " HELP "
+	let mut x = 1 + help_label.chars().count(); // first row starts after "▌" and " Help  "
 
 	for (key, label) in &shortcuts {
 		let sw = shortcut_width(key, label);
-		if x + sw > width && x > HELP_LABEL_WIDTH && !rows.last().unwrap().is_empty() {
+		if x + sw > width && !rows.last().unwrap().is_empty() {
 			rows.push(Vec::new());
-			x = sw;
+			x = 1 + sw;
 		} else {
 			x += sw;
 		}
@@ -182,32 +202,38 @@ pub fn render_help_bar(editor: &Editor, screen: &mut super::buffer::ScreenBuffer
 
 		let mut used: usize = 0;
 
+		screen.reset_colors();
+		screen.set_fg(Color::Blue);
+		screen.put_str("▌");
+		used += 1;
+
 		if row_idx == 0 {
-			// First row: " HELP " label in yellow (like mode labels)
-			screen.set_bg(Color::DarkYellow);
-			screen.set_fg(Color::Black);
-			screen.put_str(" HELP ");
-			used += HELP_LABEL_WIDTH;
+			// First row: " Help  " label in yellow (like mode labels)
+			screen.set_bg(toolbar_bg_color(editor));
+			screen.set_fg(Color::DarkYellow);
+			screen.put_str(help_label);
+			used += help_label.chars().count();
 		}
 
 		// Render shortcut items
 		for (key, label) in row_items {
-			screen.set_bg(Color::Blue);
-			screen.set_fg(Color::Black);
+			screen.set_bg(toolbar_bg_color(editor));
+			screen.set_fg(Color::DarkYellow);
 			screen.put_str(key);
 			screen.set_bg(toolbar_bg_color(editor));
-			screen.set_fg(Color::Black);
+			screen.set_fg(Color::White);
 			let lbl = format!(" {} ", label);
 			screen.put_str(&lbl);
-			used += key.len() + lbl.len();
+			used += key.chars().count() + lbl.chars().count();
 		}
 
 		// On the last row, right-align the version string
 		if row_idx == rows.len() - 1 {
 			let version_str = format!("Dan v{} ({}) ", crate::VERSION.trim(), crate::GIT_HASH,);
+			let version_str_len = version_str.chars().count();
 			let available = width.saturating_sub(used);
-			if available >= version_str.len() {
-				let remaining = available - version_str.len();
+			if available >= version_str_len {
+				let remaining = available - version_str_len;
 				if remaining > 0 {
 					screen.set_bg(toolbar_bg_color(editor));
 					for _ in 0..remaining {
@@ -263,44 +289,64 @@ pub fn build_prompt(editor: &Editor, width: u16) -> Option<PromptLayout> {
 		Mode::ReplacingSearch => {
 			let label = " Replace find: ".to_string();
 			let query_display = format!(" {} ", editor.replace_query);
-			let info = if editor.search_matches.is_empty() {
+			let (info_prefix, info_color, info_suffix) = if editor.search_matches.is_empty() {
 				if editor.replace_query.is_empty() {
-					String::new()
+					(String::new(), Color::DarkGrey, " Esc to close ".to_string())
 				} else {
-					" (0) ".to_string()
+					(" 0 matches".to_string(), Color::DarkYellow, ", ⏎ to replace, Esc to close ".to_string())
 				}
 			} else {
-				format!(
-					" ({}/{}) ",
-					editor.search_match_idx + 1,
-					editor.search_matches.len()
+				(
+					format!(" {}/{} matches", editor.search_match_idx + 1, editor.search_matches.len()),
+					Color::Yellow,
+					", ⏎ to replace, Esc to close ".to_string()
 				)
 			};
 
 			let total =
-				label.chars().count() + query_display.chars().count() + info.chars().count();
+				label.chars().count() + query_display.chars().count() + info_prefix.chars().count() + info_suffix.chars().count();
 			let rows = ((total + w - 1) / w) as u16;
 			let cursor_offset =
 				(label.chars().count() + 1 + editor.replace_query.chars().count()) as u16;
+			let current_len = label.chars().count() + query_display.chars().count();
 
 			let mut blocks = vec![
 				PromptBlock {
-					bg: Color::DarkMagenta,
-					fg: Color::Black,
+					bg: toolbar_bg_color(editor),
+					fg: Color::DarkMagenta,
 					text: label,
 				},
 				PromptBlock {
-					bg: Color::DarkGrey,
+					bg: toolbar_bg_color(editor),
 					fg: Color::White,
 					text: query_display,
 				},
 			];
-			if !info.is_empty() {
-				blocks.push(PromptBlock {
-					bg: Color::DarkGrey,
-					fg: Color::White,
-					text: info,
-				});
+			if !info_prefix.is_empty() || !info_suffix.is_empty() {
+				let eff_w = w.saturating_sub(1).max(1);
+				let info_len = info_prefix.chars().count() + info_suffix.chars().count();
+				let pad_len = eff_w.saturating_sub(current_len + info_len);
+				if pad_len > 0 {
+					blocks.push(PromptBlock {
+						bg: toolbar_bg_color(editor),
+						fg: Color::DarkGrey,
+						text: " ".repeat(pad_len),
+					});
+				}
+				if !info_prefix.is_empty() {
+					blocks.push(PromptBlock {
+						bg: toolbar_bg_color(editor),
+						fg: info_color,
+						text: info_prefix,
+					});
+				}
+				if !info_suffix.is_empty() {
+					blocks.push(PromptBlock {
+						bg: toolbar_bg_color(editor),
+						fg: Color::DarkGrey,
+						text: info_suffix,
+					});
+				}
 			}
 			Some(PromptLayout {
 				rows,
@@ -319,12 +365,12 @@ pub fn build_prompt(editor: &Editor, width: u16) -> Option<PromptLayout> {
 
 			let blocks = vec![
 				PromptBlock {
-					bg: Color::DarkMagenta,
-					fg: Color::Black,
+					bg: toolbar_bg_color(editor),
+					fg: Color::DarkMagenta,
 					text: label,
 				},
 				PromptBlock {
-					bg: Color::DarkGrey,
+					bg: toolbar_bg_color(editor),
 					fg: Color::White,
 					text: query_display,
 				},
@@ -340,8 +386,8 @@ pub fn build_prompt(editor: &Editor, width: u16) -> Option<PromptLayout> {
 			let rows = ((label.chars().count() + w - 1) / w) as u16;
 
 			let blocks = vec![PromptBlock {
-				bg: Color::DarkMagenta,
-				fg: Color::Black,
+				bg: toolbar_bg_color(editor),
+					fg: Color::DarkMagenta,
 				text: label,
 			}];
 			Some(PromptLayout {
@@ -351,46 +397,67 @@ pub fn build_prompt(editor: &Editor, width: u16) -> Option<PromptLayout> {
 			})
 		}
 		Mode::Searching => {
-			let label = " Search for: ".to_string();
+			let label = " → ".to_string();
 			let query_display = format!(" {} ", editor.search_query);
-			let info = if editor.search_matches.is_empty() {
+			let (info_prefix, info_color, info_suffix) = if editor.search_matches.is_empty() {
 				if editor.search_query.is_empty() {
-					String::new()
+					// String::new()
+					(String::new(), Color::DarkGrey, " Esc to close ".to_string())
 				} else {
-					" (0) ".to_string()
+					(" 0 matches".to_string(), Color::DarkYellow, ", ^G for next, ⏎ to select, Esc to close ".to_string())
 				}
 			} else {
-				format!(
-					" ({}/{}) ",
-					editor.search_match_idx + 1,
-					editor.search_matches.len()
+				(
+					format!(" {}/{} matches", editor.search_match_idx + 1, editor.search_matches.len()),
+					Color::Yellow,
+					", ^G for next, ^R to replace, ⏎ to select, Esc to close ".to_string()
 				)
 			};
 
 			let total =
-				label.chars().count() + query_display.chars().count() + info.chars().count();
+				label.chars().count() + query_display.chars().count() + info_prefix.chars().count() + info_suffix.chars().count();
 			let rows = ((total + w - 1) / w) as u16;
 			let cursor_offset =
 				(label.chars().count() + 1 + editor.search_query.chars().count()) as u16;
+			let current_len = label.chars().count() + query_display.chars().count();
 
 			let mut blocks = vec![
 				PromptBlock {
-					bg: Color::DarkYellow,
-					fg: Color::Black,
+					bg: toolbar_bg_color(editor),
+					fg: Color::DarkYellow,
 					text: label,
 				},
 				PromptBlock {
-					bg: Color::DarkGrey,
+					bg: toolbar_bg_color(editor),
 					fg: Color::White,
 					text: query_display,
 				},
 			];
-			if !info.is_empty() {
-				blocks.push(PromptBlock {
-					bg: Color::DarkGrey,
-					fg: Color::White,
-					text: info,
-				});
+			if !info_prefix.is_empty() || !info_suffix.is_empty() {
+				let eff_w = w.saturating_sub(1).max(1);
+				let info_len = info_prefix.chars().count() + info_suffix.chars().count();
+				let pad_len = eff_w.saturating_sub(current_len + info_len);
+				if pad_len > 0 {
+					blocks.push(PromptBlock {
+						bg: toolbar_bg_color(editor),
+						fg: Color::DarkGrey,
+						text: " ".repeat(pad_len),
+					});
+				}
+				if !info_prefix.is_empty() {
+					blocks.push(PromptBlock {
+						bg: toolbar_bg_color(editor),
+						fg: info_color,
+						text: info_prefix,
+					});
+				}
+				if !info_suffix.is_empty() {
+					blocks.push(PromptBlock {
+						bg: toolbar_bg_color(editor),
+						fg: Color::DarkGrey,
+						text: info_suffix,
+					});
+				}
 			}
 			Some(PromptLayout {
 				rows,
@@ -412,17 +479,17 @@ pub fn build_prompt(editor: &Editor, width: u16) -> Option<PromptLayout> {
 
 			let blocks = vec![
 				PromptBlock {
-					bg: Color::DarkCyan,
-					fg: Color::Black,
+					bg: toolbar_bg_color(editor),
+					fg: Color::DarkCyan,
 					text: label,
 				},
 				PromptBlock {
-					bg: Color::DarkGrey,
+					bg: toolbar_bg_color(editor),
 					fg: Color::White,
 					text: input_display,
 				},
 				PromptBlock {
-					bg: Color::DarkGrey,
+					bg: toolbar_bg_color(editor),
 					fg: Color::Grey,
 					text: hint,
 				},
@@ -434,19 +501,19 @@ pub fn build_prompt(editor: &Editor, width: u16) -> Option<PromptLayout> {
 			})
 		}
 		Mode::RecoverSwap => {
-			let label = " RECOVERY ".to_string();
+			let label = " Recovery ".to_string();
 			let msg = " Swap file detected! Restore unsaved changes? (y)es, (n)o ".to_string();
 			let total = label.chars().count() + msg.chars().count();
 			let rows = ((total + w - 1) / w) as u16;
 			let blocks = vec![
 				PromptBlock {
-					bg: Color::DarkRed,
-					fg: Color::Black,
+					bg: toolbar_bg_color(editor),
+					fg: Color::DarkRed,
 					text: label,
 				},
 				PromptBlock {
-					bg: Color::DarkYellow,
-					fg: Color::Black,
+					bg: toolbar_bg_color(editor),
+					fg: Color::DarkYellow,
 					text: msg,
 				},
 			];
@@ -459,23 +526,47 @@ pub fn build_prompt(editor: &Editor, width: u16) -> Option<PromptLayout> {
 		Mode::SaveAs | Mode::ConfirmOverwrite => {
 			let label = " Save as: ".to_string();
 			let input_display = format!(" {} ", editor.save_as_input);
+			let info = if editor.mode == Mode::ConfirmOverwrite {
+				" File exists! ^O Overwrite, Esc Cancel ".to_string()
+			} else {
+				" type path, ⏎ Save, Esc Cancel ".to_string()
+			};
 
-			let total = label.chars().count() + input_display.chars().count();
+			let current_len = label.chars().count() + input_display.chars().count();
+			let total = current_len + info.chars().count();
 			let rows = ((total + w - 1) / w) as u16;
 			let cursor_offset = (label.chars().count() + 1 + editor.save_as_cursor) as u16;
 
-			let blocks = vec![
+			let mut blocks = vec![
 				PromptBlock {
-					bg: Color::DarkGreen,
-					fg: Color::Black,
+					bg: toolbar_bg_color(editor),
+					fg: Color::DarkGreen,
 					text: label,
 				},
 				PromptBlock {
-					bg: Color::DarkGrey,
+					bg: toolbar_bg_color(editor),
 					fg: Color::White,
 					text: input_display,
 				},
 			];
+
+			if !info.is_empty() {
+				let eff_w = w.saturating_sub(1).max(1);
+				let info_len = info.chars().count();
+				let pad_len = eff_w.saturating_sub(current_len + info_len);
+				if pad_len > 0 {
+					blocks.push(PromptBlock {
+						bg: toolbar_bg_color(editor),
+						fg: Color::DarkGrey,
+						text: " ".repeat(pad_len),
+					});
+				}
+				blocks.push(PromptBlock {
+					bg: toolbar_bg_color(editor),
+					fg: if editor.mode == Mode::ConfirmOverwrite { Color::DarkRed } else { Color::DarkGrey },
+					text: info,
+				});
+			}
 			Some(PromptLayout {
 				rows,
 				cursor_offset,
@@ -492,13 +583,13 @@ pub fn build_prompt(editor: &Editor, width: u16) -> Option<PromptLayout> {
 
 			let blocks = vec![
 				PromptBlock {
-					bg: Color::DarkRed,
-					fg: Color::Black,
+					bg: toolbar_bg_color(editor),
+					fg: Color::DarkRed,
 					text: label1,
 				},
 				PromptBlock {
-					bg: Color::Blue,
-					fg: Color::Black,
+					bg: toolbar_bg_color(editor),
+					fg: Color::Blue,
 					text: label2,
 				},
 			];
@@ -514,33 +605,65 @@ pub fn build_prompt(editor: &Editor, width: u16) -> Option<PromptLayout> {
 
 /// Uniform renderer interpreting constructed runtime blocks natively.
 pub fn render_prompt_overlay(
-	screen: &mut super::buffer::ScreenBuffer,
-	vp: &Viewport,
-	layout: &PromptLayout,
+    screen: &mut super::buffer::ScreenBuffer,
+    vp: &Viewport,
+    layout: &PromptLayout,
 ) {
-	if layout.rows == 0 {
-		return;
-	}
-	let bar_y = vp.height.saturating_sub(1 + layout.rows);
-	screen.mov_to(0, bar_y);
+    if layout.rows == 0 {
+        return;
+    }
+    let bar_y = vp.height.saturating_sub(1 + layout.rows);
+    let width = vp.width as usize;
 
-	let mut used: usize = 0;
+    let mut r: u16 = 0;
+    screen.mov_to(0, bar_y + r);
+    screen.reset_colors();
+    screen.set_fg(Color::Blue);
+    screen.put_str("▌");
+    let mut x = 1;
 
-	for block in &layout.blocks {
-		screen.set_bg(block.bg);
-		screen.set_fg(block.fg);
-		screen.put_str(&block.text);
-		used += block.text.chars().count();
-	}
+    for block in &layout.blocks {
+        screen.set_bg(block.bg);
+        screen.set_fg(block.fg);
+        for ch in block.text.chars() {
+            if x >= width {
+                r += 1;
+                if r >= layout.rows { break; }
+                screen.mov_to(0, bar_y + r);
+                screen.reset_colors();
+                screen.set_fg(Color::Blue);
+                screen.put_str("▌");
+                
+                // restore colors for continuation
+                screen.set_bg(block.bg);
+                screen.set_fg(block.fg);
+                x = 1;
+            }
+            screen.put_char(ch);
+            x += 1;
+        }
+    }
 
-	let total_cells = (layout.rows as usize) * (vp.width as usize);
-	let remaining = total_cells.saturating_sub(used);
-	if remaining > 0 {
-		screen.set_bg(Color::DarkGrey);
-		for _ in 0..remaining {
-			screen.put_char(' ');
-		}
-	}
+    // Since prompt blocks now use toolbar_bg_color(editor), we can assume the whole remainder of the line 
+    // should also be filled in with the prompt's background. We can peek at the first block's background,
+    // which corresponds to the toolbar_bg_color correctly.
+    let fill_bg = layout.blocks.first().map(|b| b.bg).unwrap_or(Color::DarkGrey);
 
-	screen.reset_colors();
+    while r < layout.rows {
+        screen.set_bg(fill_bg);
+        while x < width {
+            screen.put_char(' ');
+            x += 1;
+        }
+        r += 1;
+        if r < layout.rows {
+            screen.mov_to(0, bar_y + r);
+            screen.reset_colors();
+            screen.set_fg(Color::Blue);
+            screen.put_str("▌");
+            x = 1;
+        }
+    }
+
+    screen.reset_colors();
 }

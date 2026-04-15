@@ -237,7 +237,7 @@ pub fn render_wrap(
 		screen.set_bg(Color::Reset);
 		let mut cols_written: usize = 0;
 		if show_line_numbers {
-			let tilde_gutter = format!("{:>width$} ", ".", width = gutter_width);
+			let tilde_gutter = format!("{:>width$} ", "⋅", width = gutter_width);
 			screen.set_fg(if editor.is_light_bg { Color::Grey } else { Color::DarkGrey });
 			screen.put_str(&tilde_gutter);
 			cols_written = gutter_width + 1;
@@ -389,10 +389,10 @@ pub fn render_nowrap(
 			cols_written += visible_written;
 		} else {
 			if show_line_numbers {
-				let line_num = format!("{:>width$} ", line_idx + 1, width = gutter_width);
-				cols_written += line_num.len();
+				let tilde_gutter = format!("{:>width$} ", "⋅", width = gutter_width);
+				cols_written += gutter_width + 1;
 				screen.set_fg(if editor.is_light_bg { Color::Grey } else { Color::DarkGrey });
-				screen.put_str(&line_num);
+				screen.put_str(&tilde_gutter);
 				screen.set_fg(Color::Reset);
 			}
 		}

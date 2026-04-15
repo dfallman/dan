@@ -62,6 +62,8 @@ fn map_search_key(key: &KeyEvent) -> Command {
 		// Ctrl+G = next match, Ctrl+Shift+G = prev match
 		KeyCode::Char('g') if ctrl && shift => Command::SearchPrev,
 		KeyCode::Char('g') | KeyCode::Char('G') if ctrl => Command::SearchNext,
+		// Ctrl+R = elevate search matches directly into global Replace loop
+		KeyCode::Char('r') | KeyCode::Char('R') if ctrl => Command::SearchConvertToReplace,
 		// Backspace deletes from query
 		KeyCode::Backspace => Command::SearchDeleteChar,
 		// Printable chars (including shifted) are appended to the query
@@ -179,7 +181,6 @@ fn map_key(key: &KeyEvent) -> Command {
 			KeyCode::Char('d') => Command::DuplicateLineOrSelection,
 			KeyCode::Char('w') => Command::ToggleWrap,
 			KeyCode::Char('h') => Command::ToggleHelp,
-			KeyCode::Char('r') => Command::ReplaceOpen,
 			KeyCode::Char('l') => Command::FormatDocument,
 			KeyCode::Char('t') => Command::ToggleSyntax,
 			_ => Command::Noop,

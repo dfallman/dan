@@ -29,16 +29,16 @@ impl Mode {
 	/// Label shown in the status bar.
 	pub fn label(self) -> &'static str {
 		match self {
-			Mode::Editing => "EDIT",
-			Mode::Searching => "FIND",
-			Mode::GoToLine => "GOTO",
-			Mode::SaveAs => "SAVE",
-			Mode::ConfirmQuit => "QUIT",
-			Mode::ConfirmOverwrite => "SAVE",
-			Mode::ReplacingSearch => "REPL",
-			Mode::ReplacingWith => "RWTH",
-			Mode::ReplacingStep => "REPL",
-			Mode::RecoverSwap => "SWAP",
+			Mode::Editing => "Edit",
+			Mode::Searching => "Find",
+			Mode::GoToLine => "Goto",
+			Mode::SaveAs => "Save",
+			Mode::ConfirmQuit => "Quit",
+			Mode::ConfirmOverwrite => "Save",
+			Mode::ReplacingSearch => "Repl",
+			Mode::ReplacingWith => "Rwth",
+			Mode::ReplacingStep => "Repl",
+			Mode::RecoverSwap => "Swap",
 		}
 	}
 
@@ -71,16 +71,16 @@ mod tests {
 
 	#[test]
 	fn test_mode_labels() {
-		assert_eq!(Mode::Editing.label(), "EDIT");
-		assert_eq!(Mode::Searching.label(), "FIND");
-		assert_eq!(Mode::GoToLine.label(), "GOTO");
-		assert_eq!(Mode::SaveAs.label(), "SAVE");
-		assert_eq!(Mode::ConfirmQuit.label(), "QUIT");
-		assert_eq!(Mode::ConfirmOverwrite.label(), "SAVE");
+		assert_eq!(Mode::Editing.label(), "Edit");
+		assert_eq!(Mode::Searching.label(), "Find");
+		assert_eq!(Mode::GoToLine.label(), "Goto");
+		assert_eq!(Mode::SaveAs.label(), "Save");
+		assert_eq!(Mode::ConfirmQuit.label(), "Quit");
+		assert_eq!(Mode::ConfirmOverwrite.label(), "Save");
 	}
 
 	#[test]
 	fn test_mode_display() {
-		assert_eq!(format!("{}", Mode::Editing), "EDIT");
+		assert_eq!(format!("{}", Mode::Editing), "Edit");
 	}
 }
