@@ -34,6 +34,8 @@ pub struct Config {
 	pub fast_scroll_steps: usize,
 	/// Automatically insert closing brackets and quotes
 	pub auto_close: bool,
+	/// Show comments in italics natively.
+	pub comments_are_italics: bool,
 	/// Formats all excess spaces terminating lines globally during save commits.
 	#[serde(skip)]
 	pub trim_trailing_whitespace: Option<bool>,
@@ -59,6 +61,7 @@ impl Default for Config {
 			show_lang: true,
 			fast_scroll_steps: 10,
 			auto_close: true,
+			comments_are_italics: false,
 			trim_trailing_whitespace: None,
 			end_of_line: None,
 		}

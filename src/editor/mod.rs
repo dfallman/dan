@@ -77,7 +77,8 @@ pub struct Editor {
 	/// Current input text in the save-as prompt.
 	pub save_as_input: String,
 	/// Cursor position within the save-as input.
-	pub save_as_cursor: usize,
+	pub prompt_cursor: usize,
+	pub prompt_view_start: std::cell::Cell<usize>,
 	/// Path pending overwrite confirmation.
 	pub save_as_pending_path: Option<String>,
 	/// Asynchronous background process payload receiver for formatting hooks.
@@ -90,6 +91,10 @@ pub struct Editor {
 	pub last_screen: Option<crate::render::buffer::ScreenBuffer>,
 	/// Whether the terminal background uses a light color natively detected via OSC 11 queries.
 	pub is_light_bg: bool,
+	/// System UI component styling logic mapping bounds cleanly defining global presentation values.
+	pub theme: std::sync::Arc<crate::ui::theme::Theme>,
+	/// Bound thread-safe string localization parameters wrapping global dictionaries completely securely across instances.
+	pub locale: Box<dyn crate::ui::i18n::Locale>,
 }
 
 impl Editor {
@@ -113,12 +118,28 @@ impl Editor {
 			};
 		}
 
-		let highlighter = std::thread::Builder::new()
+		let mut highlighter = std::thread::Builder::new()
 			.stack_size(32 * 1024 * 1024)
 			.spawn(move || Highlighter::new(&theme))
 			.expect("Failed to spawn syntect tokenizer thread")
 			.join()
 			.expect("Highlighter instantiation crashed");
+
+		if config.comments_are_italics {
+			use syntect::highlighting::{FontStyle, ScopeSelectors, StyleModifier, ThemeItem};
+			use std::str::FromStr;
+			
+			if let Ok(scope) = ScopeSelectors::from_str("comment") {
+				highlighter.theme.scopes.push(ThemeItem {
+					scope,
+					style: StyleModifier {
+						foreground: None,
+						background: None,
+						font_style: Some(FontStyle::ITALIC),
+					},
+				});
+			}
+		}
 
 		Self {
 			config,
@@ -147,13 +168,16 @@ impl Editor {
 			highlighter,
 			goto_line_input: String::new(),
 			save_as_input: String::new(),
-			save_as_cursor: 0,
+			prompt_cursor: 0,
+			prompt_view_start: std::cell::Cell::new(0),
 			save_as_pending_path: None,
 			fmt_rx: None,
 			is_formatting: false,
 			last_autosave: std::time::Instant::now(),
 			last_screen: None,
 			is_light_bg,
+			theme: std::sync::Arc::new(crate::ui::theme::Theme::default(is_light_bg)),
+			locale: Box::new(crate::ui::i18n::EnglishLocale),
 		}
 	}
 
@@ -1073,18 +1097,33 @@ impl Editor {
 				self.search_matches.clear();
 				self.search_match_idx = 0;
 				self.mode = Mode::Searching;
+				self.prompt_cursor = self.search_query.chars().count();
+				self.prompt_view_start.set(0);
 				// If we have a previous query, run the search immediately.
 				if !self.search_query.is_empty() {
 					self.refresh_search_matches();
 				}
 			}
 			Command::SearchInsertChar(ch) => {
-				self.search_query.push(ch);
+				// We assume ASCII/simple UTF-8 char indexing for simple inputs.
+				// A true robust implementation tracks char indices, but dan currently uses byte-level `.insert` or `.remove` 
+				// when handling simple characters or we can convert to chars and back.
+				// Let's use `chars()` to guarantee UTF-8 mapping limits accurately natively gracefully:
+				let mut chars: Vec<char> = self.search_query.chars().collect();
+				chars.insert(self.prompt_cursor, ch);
+				self.search_query = chars.into_iter().collect();
+				self.prompt_cursor += 1;
+
 				self.refresh_search_matches();
 			}
 			Command::SearchDeleteChar => {
-				self.search_query.pop();
-				self.refresh_search_matches();
+				if self.prompt_cursor > 0 {
+					self.prompt_cursor -= 1;
+					let mut chars: Vec<char> = self.search_query.chars().collect();
+					chars.remove(self.prompt_cursor);
+					self.search_query = chars.into_iter().collect();
+					self.refresh_search_matches();
+				}
 			}
 			Command::SearchConfirm => {
 				// Accept the current match — exit search, select matched text.
@@ -1128,6 +1167,8 @@ impl Editor {
 					self.replace_query = self.search_query.clone();
 					self.last_search_query = self.search_query.clone();
 					self.mode = Mode::ReplacingWith;
+					self.prompt_cursor = self.replace_with.chars().count();
+					self.prompt_view_start.set(0);
 				}
 			}
 			Command::SearchNext => {
@@ -1187,34 +1228,42 @@ impl Editor {
 					.as_ref()
 					.map(|p| p.to_string_lossy().to_string())
 					.unwrap_or_default();
-				self.save_as_cursor = self.save_as_input.len();
+				self.prompt_cursor = self.save_as_input.len();
 				self.mode = Mode::SaveAs;
 			}
 			Command::SaveAsInsertChar(ch) => {
-				self.save_as_input.insert(self.save_as_cursor, ch);
-				self.save_as_cursor += 1;
+				self.save_as_input.insert(self.prompt_cursor, ch);
+				self.prompt_cursor += 1;
 			}
 			Command::SaveAsDeleteChar => {
-				if self.save_as_cursor > 0 {
-					self.save_as_cursor -= 1;
-					self.save_as_input.remove(self.save_as_cursor);
+				if self.prompt_cursor > 0 {
+					self.prompt_cursor -= 1;
+					self.save_as_input.remove(self.prompt_cursor);
 				}
 			}
-			Command::SaveAsCursorLeft => {
-				if self.save_as_cursor > 0 {
-					self.save_as_cursor -= 1;
+			Command::PromptCursorLeft => {
+				if self.prompt_cursor > 0 {
+					self.prompt_cursor -= 1;
 				}
 			}
-			Command::SaveAsCursorRight => {
-				if self.save_as_cursor < self.save_as_input.len() {
-					self.save_as_cursor += 1;
+			Command::PromptCursorRight => {
+				let max_len = match self.mode {
+					Mode::Searching => self.search_query.chars().count(),
+					Mode::ReplacingSearch => self.replace_query.chars().count(),
+					Mode::ReplacingWith => self.replace_with.chars().count(),
+					Mode::GoToLine => self.goto_line_input.chars().count(),
+					Mode::SaveAs | Mode::ConfirmOverwrite => self.save_as_input.chars().count(),
+					_ => 0,
+				};
+				if self.prompt_cursor < max_len {
+					self.prompt_cursor += 1;
 				}
 			}
 			Command::SaveAsConfirm => {
 				let path_str = self.save_as_input.clone();
 				if path_str.is_empty() {
 					self.save_as_input.clear();
-					self.save_as_cursor = 0;
+					self.prompt_cursor = 0;
 					self.mode = Mode::Editing;
 					self.set_status("Save as cancelled: no path given");
 				} else {
@@ -1236,7 +1285,7 @@ impl Editor {
 					} else {
 						// New file — save directly.
 						self.save_as_input.clear();
-						self.save_as_cursor = 0;
+						self.prompt_cursor = 0;
 						self.mode = Mode::Editing;
 						self.buffer_mut().commit_edits();
 						let cfg = self.config.clone();
@@ -1249,7 +1298,7 @@ impl Editor {
 			}
 			Command::SaveAsCancel => {
 				self.save_as_input.clear();
-				self.save_as_cursor = 0;
+				self.prompt_cursor = 0;
 				self.mode = Mode::Editing;
 				self.clear_status();
 			}
@@ -1259,7 +1308,7 @@ impl Editor {
 				if let Some(path_str) = self.save_as_pending_path.take() {
 					let path = std::path::Path::new(&path_str);
 					self.save_as_input.clear();
-					self.save_as_cursor = 0;
+					self.prompt_cursor = 0;
 					self.mode = Mode::Editing;
 					self.buffer_mut().commit_edits();
 					let cfg = self.config.clone();

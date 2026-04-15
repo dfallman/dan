@@ -40,10 +40,11 @@ pub fn map_event(event: &Event, mode: Mode) -> Command {
 fn map_confirm_quit_key(key: &KeyEvent) -> Command {
 	let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
 	match key.code {
-		KeyCode::Char('s') | KeyCode::Char('S') => Command::SaveAndQuit,
-		KeyCode::Char('f') | KeyCode::Char('F') => Command::ForceQuit,
+		KeyCode::Char('s') | KeyCode::Char('S') if ctrl => Command::SaveAndQuit,
+		KeyCode::Char('f') | KeyCode::Char('F') if ctrl => Command::ForceQuit,
 		KeyCode::Char('q') | KeyCode::Char('Q') if ctrl => Command::CancelQuit,
-		_ => Command::CancelQuit,
+		KeyCode::Esc => Command::CancelQuit,
+		_ => Command::Noop,
 	}
 }
 
@@ -66,6 +67,8 @@ fn map_search_key(key: &KeyEvent) -> Command {
 		KeyCode::Char('r') | KeyCode::Char('R') if ctrl => Command::SearchConvertToReplace,
 		// Backspace deletes from query
 		KeyCode::Backspace => Command::SearchDeleteChar,
+		KeyCode::Left => Command::PromptCursorLeft,
+		KeyCode::Right => Command::PromptCursorRight,
 		// Printable chars (including shifted) are appended to the query
 		KeyCode::Char(ch) if !ctrl => Command::SearchInsertChar(ch),
 		_ => Command::Noop,
@@ -80,6 +83,8 @@ fn map_replace_search_key(key: &KeyEvent) -> Command {
 		KeyCode::Esc => Command::ReplaceCancel,
 		KeyCode::Enter => Command::ReplaceSearchConfirm,
 		KeyCode::Backspace => Command::ReplaceDeleteChar,
+		KeyCode::Left => Command::PromptCursorLeft,
+		KeyCode::Right => Command::PromptCursorRight,
 		KeyCode::Char(ch) if !ctrl => Command::ReplaceInsertChar(ch),
 		_ => Command::Noop,
 	}
@@ -93,6 +98,8 @@ fn map_replace_with_key(key: &KeyEvent) -> Command {
 		KeyCode::Esc => Command::ReplaceCancel,
 		KeyCode::Enter => Command::ReplaceWithConfirm,
 		KeyCode::Backspace => Command::ReplaceDeleteChar,
+		KeyCode::Left => Command::PromptCursorLeft,
+		KeyCode::Right => Command::PromptCursorRight,
 		KeyCode::Char(ch) if !ctrl => Command::ReplaceInsertChar(ch),
 		_ => Command::Noop,
 	}
@@ -100,20 +107,23 @@ fn map_replace_with_key(key: &KeyEvent) -> Command {
 
 /// Key mapping while interacting through Match Replacement Steps.
 fn map_replace_step_key(key: &KeyEvent) -> Command {
+	let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
 	match key.code {
-		KeyCode::Char('y') | KeyCode::Char('Y') => Command::ReplaceActionYes,
-		KeyCode::Char('n') | KeyCode::Char('N') => Command::ReplaceActionNo,
-		KeyCode::Char('a') | KeyCode::Char('A') => Command::ReplaceActionAll,
-		KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc => Command::ReplaceCancel,
+		KeyCode::Char('y') | KeyCode::Char('Y') if ctrl => Command::ReplaceActionYes,
+		KeyCode::Char('n') | KeyCode::Char('N') if ctrl => Command::ReplaceActionNo,
+		KeyCode::Char('a') | KeyCode::Char('A') if ctrl => Command::ReplaceActionAll,
+		KeyCode::Esc => Command::ReplaceCancel,
 		_ => Command::Noop,
 	}
 }
 
 /// Key mapping for crash recovery prompt selections
 fn map_recover_swap_key(key: &KeyEvent) -> Command {
+	let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
 	match key.code {
-		KeyCode::Char('y') | KeyCode::Char('Y') => Command::RecoverSwapAccept,
-		KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => Command::RecoverSwapDecline,
+		KeyCode::Char('y') | KeyCode::Char('Y') if ctrl => Command::RecoverSwapAccept,
+		KeyCode::Char('n') | KeyCode::Char('N') if ctrl => Command::RecoverSwapDecline,
+		KeyCode::Esc => Command::RecoverSwapDecline,
 		_ => Command::Noop,
 	}
 }
@@ -252,6 +262,8 @@ fn map_goto_line_key(key: &KeyEvent) -> Command {
 		KeyCode::Esc => Command::GoToLineCancel,
 		KeyCode::Enter => Command::GoToLineConfirm,
 		KeyCode::Backspace => Command::GoToLineDeleteChar,
+		KeyCode::Left => Command::PromptCursorLeft,
+		KeyCode::Right => Command::PromptCursorRight,
 		KeyCode::Char(ch) if !ctrl => Command::GoToLineInsertChar(ch),
 		_ => Command::Noop,
 	}
@@ -265,8 +277,8 @@ fn map_save_as_key(key: &KeyEvent) -> Command {
 		KeyCode::Esc => Command::SaveAsCancel,
 		KeyCode::Enter => Command::SaveAsConfirm,
 		KeyCode::Backspace => Command::SaveAsDeleteChar,
-		KeyCode::Left => Command::SaveAsCursorLeft,
-		KeyCode::Right => Command::SaveAsCursorRight,
+		KeyCode::Left => Command::PromptCursorLeft,
+		KeyCode::Right => Command::PromptCursorRight,
 		KeyCode::Char(ch) if !ctrl => Command::SaveAsInsertChar(ch),
 		_ => Command::Noop,
 	}

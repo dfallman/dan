@@ -84,8 +84,8 @@ pub enum Command {
 	SaveAsOpen,
 	SaveAsInsertChar(char),
 	SaveAsDeleteChar,
-	SaveAsCursorLeft,
-	SaveAsCursorRight,
+	PromptCursorLeft,
+	PromptCursorRight,
 	SaveAsConfirm,
 	SaveAsCancel,
 
