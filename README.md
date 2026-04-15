@@ -188,7 +188,7 @@ Out of the box, Dan follows a layered configuration model, but is project-aware.
 
 Your global config file should be saved in `~/.config/dan/config.toml`
 
-If you're new to unix-based systems, `~/` denotes your home folder. In macOS, this folder is `/Users/<username>` and in Linux it's (usually) at `/home/<username>`.
+If you're new to unix-based systems, `~/` denotes your home folder. In macOS, this folder is `/Users/<username>` and on Linux it's (usually) `/home/<username>`.
 
 **Note**: this file is _not_ created by default as Dan ships with sensible (and somewhat opinionated) defaults and doesn't _require_ any configuration to be used. If you do wish to tweak Dan however, simply create the config file: 
 ```dan ~/.config/dan/config.toml```
