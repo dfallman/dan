@@ -81,6 +81,9 @@ impl ScreenBuffer {
 		self.underline = underline;
 	}
 
+	pub fn set_bold(&mut self, bold: bool) {
+		self.bold = bold;
+	}
 
 	pub fn mov_to(&mut self, x: u16, y: u16) {
 		self.cursor_x = x;

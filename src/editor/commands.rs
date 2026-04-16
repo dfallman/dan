@@ -109,3 +109,12 @@ pub enum Command {
 	ToggleComment,
 	Noop,
 }
+
+/// Natively maps bounded states corresponding to independent undo/redo footprints securely.
+#[derive(PartialEq, Clone, Copy, Debug)]
+pub enum EditAction {
+    Insert,
+    Whitespace,
+    Delete,
+    Other,
+}

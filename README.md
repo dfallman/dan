@@ -202,27 +202,28 @@ Then, copy and paste the below defaults into it using `Ctrl-V`. Change what you 
 
 ```toml
 # Display
-wrap_lines = true                   # Enforce word boundary wrapping algorithms
-tab_width = 4                       # Space calculation for single level depth
-expand_tab = false                  # Mutate raw tabs to whitespace equivalent
-line_numbers = true                 # Render active line indexing matrix
-highlight_active = true             # Isolate editing line luminance
-scroll_off = 5                      # Number of structural lines enforcing padding
-fast_scroll_steps = 10              # Delta coefficient for fast vertical scanning
+wrap_lines = true                   # Wrap long lines so they stay in view (default: true)
+tab_width = 4                       # Set how many spaces wide a tab should be (default: 4)
+expand_tab = false                  # Swap out tabs for spaces (default: false)
+line_numbers = true                 # Show line numbers on the side (default: true)
+highlight_active = true             # Light up the line you're currently working on (default: true)
+scroll_off = 5                      # How many lines to keep visible when scrolling (default: 5)
+fast_scroll_steps = 10              # How many lines to jump during a fast scroll (default: 10)
+show_full_path = false              # Show the file's full path in the toolbar (default: false)
 
 # Editing
-auto_indent = true                  # Clone prior whitespace arrays linearly
-auto_close = true                   # Inject closure algorithms naturally
-syntax_highlight = true             # Toggle native highlighting
+auto_indent = true                  # Automatically match the indentation of the line above (default: true)
+auto_close = true                   # Automatically finish brackets and quotes for you (default: true)
+syntax_highlight = true             # Color the code to make it easier to read (default: true)
 
 # Interface
-show_help = true                    # Persist dynamic shortcut reference bar
-show_encoding = true                # Show active file encoding
-show_lang = true                    # Show current syntax highlighting language
+show_help = true                    # Keep the shortcut guide visible at the bottom (default: true)
+show_encoding = true                # Show the file's encoding format (default: true)
+show_lang = true                    # Show which programming language is being used (default: true)
 
 # Theme for syntax highlighting
-theme = "default"                   # Default color theme for light/dark
-comments_are_italics = true         # Show comments in italics
+theme = "default"                   # Pick your favorite color scheme (default: "default")
+comments_are_italics = true         # Use italics for comments to make them stand out (default: true)
 ```
 
 # Themes

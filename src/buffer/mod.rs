@@ -203,6 +203,14 @@ impl Buffer {
 			.unwrap_or_else(|| "[Scratch]".to_string())
 	}
 
+	/// Get the full path representation for this buffer.
+	pub fn full_path_display(&self) -> String {
+		self.file_path
+			.as_ref()
+			.map(|p| p.display().to_string())
+			.unwrap_or_else(|| "[Scratch]".to_string())
+	}
+
 	// -- Edit operations with history tracking --
 
 	/// Insert a character at a char position.
