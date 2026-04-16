@@ -1,6 +1,6 @@
 [package]
 name = "dan"
-version = "0.2.52"
+version = "0.2.53"
 edition = "2021"
 authors = ["Daniel Fallman <dfallman@gmail.com>"]
 description = "Dan is a fast, friendly, and zero-fuss terminal text editor written in Rust"

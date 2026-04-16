@@ -8,6 +8,7 @@ pub struct OverlayBlock {
 pub struct OverlayBuilder {
     pub blocks: Vec<OverlayBlock>,
     pub prefix: Option<UiFragment>,
+    pub overflow_prefix: Option<UiFragment>,
     pub flex_bg: Color,
     pub z_index: u8,
     pub cursor_offset: Option<usize>,
@@ -19,6 +20,7 @@ impl OverlayBuilder {
         Self {
             blocks: Vec::new(),
             prefix: None,
+            overflow_prefix: None,
             flex_bg,
             z_index,
             cursor_offset: None,
@@ -28,6 +30,11 @@ impl OverlayBuilder {
 
     pub fn with_prefix(mut self, prefix: UiFragment) -> Self {
         self.prefix = Some(prefix);
+        self
+    }
+
+    pub fn with_overflow_prefix(mut self, prefix: UiFragment) -> Self {
+        self.overflow_prefix = Some(prefix);
         self
     }
 
@@ -49,6 +56,7 @@ impl OverlayBuilder {
         let blocks = std::mem::take(&mut self.blocks);
         let mut windows = Vec::new();
         let prefix_width = self.prefix.as_ref().map_or(0, |p| p.text.chars().count() as u16);
+        let overflow_prefix_width = self.overflow_prefix.as_ref().map_or(prefix_width, |p| p.text.chars().count() as u16);
         let eff_width = width;
         let mut cursor_window_idx: Option<usize> = None;
         let mut cursor_x_final: Option<u16> = None;
@@ -58,6 +66,14 @@ impl OverlayBuilder {
         let mut string_idx = 0; // Maps text dimensions independently of prefix
 
         for block in blocks {
+            let block_chars: usize = block.fragments.iter().map(|f| f.text.chars().count()).sum();
+            
+            if !current_row_fragments.is_empty() && current_x + (block_chars as u16) > eff_width {
+                windows.push(self.emit_row(current_row_fragments, width, 0, Some(self.flex_bg), windows.is_empty()));
+                current_row_fragments = Vec::new();
+                current_x = overflow_prefix_width;
+            }
+
             for frag in block.fragments {
                 let text_chars = frag.text.chars().count();
                 
@@ -67,9 +83,9 @@ impl OverlayBuilder {
                     while !text_rem.is_empty() {
                         let space_left = (eff_width.saturating_sub(current_x)) as usize;
                         if space_left == 0 {
-                            windows.push(self.emit_row(current_row_fragments, width, 0, Some(self.flex_bg)));
+                            windows.push(self.emit_row(current_row_fragments, width, 0, Some(self.flex_bg), windows.is_empty()));
                             current_row_fragments = Vec::new();
-                            current_x = prefix_width;
+                            current_x = overflow_prefix_width;
                             continue;
                         }
 
@@ -112,14 +128,14 @@ impl OverlayBuilder {
         if let Some(t) = self.trailing.take() {
             let t_len = t.text.chars().count() as u16;
             if current_x + t_len > eff_width {
-                windows.push(self.emit_row(current_row_fragments, width, 0, None));
+                windows.push(self.emit_row(current_row_fragments, width, 0, None, windows.is_empty()));
                 current_row_fragments = Vec::new();
             }
             current_row_fragments.push(UiFragment { text: String::new(), fg: self.flex_bg, bg: self.flex_bg, is_flex: true });
             current_row_fragments.push(t);
-            windows.push(self.emit_row(current_row_fragments, width, 0, None));
+            windows.push(self.emit_row(current_row_fragments, width, 0, None, windows.is_empty()));
         } else if !current_row_fragments.is_empty() || windows.is_empty() {
-            windows.push(self.emit_row(current_row_fragments, width, 0, Some(self.flex_bg)));
+            windows.push(self.emit_row(current_row_fragments, width, 0, Some(self.flex_bg), windows.is_empty()));
         }
 
         let total_rows = windows.len() as u16;
@@ -136,10 +152,18 @@ impl OverlayBuilder {
         windows
     }
 
-    fn emit_row(&self, fragments: Vec<UiFragment>, width: u16, y: u16, trailing_flex: Option<Color>) -> Window {
+    fn emit_row(&self, fragments: Vec<UiFragment>, width: u16, y: u16, trailing_flex: Option<Color>, is_first_row: bool) -> Window {
         let mut final_frags = Vec::new();
-        if let Some(p) = &self.prefix {
-            final_frags.push(p.clone());
+        if is_first_row {
+            if let Some(p) = &self.prefix {
+                final_frags.push(p.clone());
+            }
+        } else {
+            if let Some(p) = &self.overflow_prefix {
+                final_frags.push(p.clone());
+            } else if let Some(p) = &self.prefix {
+                final_frags.push(p.clone());
+            }
         }
         final_frags.extend(fragments);
         

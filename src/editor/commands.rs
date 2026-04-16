@@ -66,7 +66,6 @@ pub enum Command {
 	// -- Global Replace --
 	ReplaceInsertChar(char),
 	ReplaceDeleteChar,
-	ReplaceSearchConfirm,
 	ReplaceWithConfirm,
 	ReplaceActionYes,
 	ReplaceActionNo,

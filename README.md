@@ -2,9 +2,12 @@
 
 **Dan** is a fast, friendly, and zero fuss terminal text editor. Written natively in [Rust](https://rust-lang.org/), it is designed to be modeless, resource-efficient, and with the lowest possible latency, even over fluctuating SSH connections. 
 
-We've built Dan to handle very large files and complex editing tasks while remaining easy to use and configure to your liking. Dan works in most terminal emulator environments, whether you're using macOS, Linux, or Windows.
+Dan is designed to work out of the box with no configuration for most users. It ships with sensible defaults, so most users can start using Dan without any configuration. Dan has no strange modes to learn, no archaic shortcuts, and no massive dot files. 
 
-Dan has no strange modes to learn, no archaic shortcuts, and no massive dot files. Dan ships with sensible defaults, so most users can start using Dan without any configuration.
+We've built Dan to handle very large files and complex editing tasks while remaining easy to use, provide a good editing experience with modern features like linting and syntax highlighting, and be configurable to your liking. 
+
+Dan works in most terminal emulator environments, whether you're using macOS, Linux, or Windows.
+
 
 <img width="3584" height="2036" alt="CleanShot 2026-04-06 at 15 01 18@2x" src="https://github.com/user-attachments/assets/bb923556-50f5-439d-b745-6ca87344b607" />
 
@@ -29,7 +32,7 @@ For more installation options, see Install below.
 
 - **Zero configuration**: Dan works out of the box with sensible defaults. No need to configure anything. However, Dan is highly configurable if you want it to be, see below.
 
-- **Sensible defaults**: Dan uses familiar shortcuts and keybindings, so you don't need a cheat sheet. Use `Ctrl-C` and `Ctrl-V` for copy and paste, `Ctrl-S` to save, `Ctrl-Z` and `Ctrl-Y` for undo and redo, `Ctrl-F` to search, and `Ctrl-Q` to quit. If you're lost, just press `Ctrl-H` for help and it's all there.
+- **Sensible defaults**: Dan uses familiar shortcuts and keybindings, so you don't need a cheat sheet. Use `Ctrl-C` and `Ctrl-V` for copy and paste, `Ctrl-S` to save, `Ctrl-Z` and `Ctrl-Y` for undo and redo, `Ctrl-F` to search and replace, and `Ctrl-Q` to quit. If you're lost, just press `Ctrl-H` for help and it's all there.
 
 - **Smart rendering engine**: Dan uses a differential rendering system. By computing exactly what has changed on your screen, it only sends the necessary updates to your terminal. This makes scrolling 100MB files over SSH feel as smooth as local editing.
 
@@ -50,7 +53,7 @@ For more installation options, see Install below.
 
 - **Quick formatting**: Clean up your code instantly with `Ctrl-L`. Dan pipes your text through industry-standard tools like **Prettier**, **Ruff**, or **Rustfmt** in the background. It's non-blocking, so you can keep typing while it's working.
 
-- **Smart comment toggling**: Use `Ctrl+E` to toggle language-specific comments across multi-line selections. Dan understands the syntax logic of your file and will comment out a single line or your selected section.
+- **Smart comment toggling**: Use `Ctrl-E` to toggle language-specific comments across multi-line selections. Dan understands the syntax logic of your file and will comment out a single line or your selected section.
 
 - **Automatic pair insertion**: Save keystrokes with auto-closing brackets. If you highlight a block of code and type a bracket, Dan will wrap the selection for you.
 
@@ -129,12 +132,12 @@ For macOS users who simply can't get used to using `Ctrl` over `⌘`, note that 
 ### Search & replace
 | **Key**                         | **Action**                                               |
 | ------------------------------- | -------------------------------------------------------- |
-| `Ctrl` + `F`                    | **Search**: Search for phrase.  |
-| `Ctrl` + `R`                    | **Replace**: Search and replace phrase.  |
+| `Ctrl` + `F`                    | **Search**: Search for phrases.  |
+| `Ctrl` + `R`                    | **Replace**: While searching, replace phrase.  |
 
 
 # Installation
-You need the latest [Rust](https://rustup.rs/) to compile Dan from source (currently, v1.94 is recommended). Note that on most systems, installing rustc using your package manager (such as apt and brew) will _not_ give you the latest version, and older versions might fail to compile Dan. Therefore, we highly recommend you use the official rust installation manager available at [https://rustup.rs/](https://rustup.rs/) instead.
+You need the latest [Rust](https://rustup.rs/) to compile Dan from source (v1.94 or later is recommended). Note that on most systems, installing rustc using your package manager (such as apt and brew) will _not_ give you the latest version. Older versions might fail to compile Dan. Therefore, we highly recommend you use the official rust installation manager available at [https://rustup.rs/](https://rustup.rs/) instead.
 
 For all unix based systems, you can use:
 
@@ -199,26 +202,27 @@ Then, copy and paste the below defaults into it using `Ctrl-V`. Change what you 
 
 ```toml
 # Display
-wrap_lines = true       # Enforce word boundary wrapping algorithms
-tab_width = 4           # Space calculation for single level depth
-expand_tab = false      # Mutate raw tabs to whitespace equivalent
-line_numbers = true     # Render active line indexing matrix
-highlight_active = true # Isolate editing line luminance
-scroll_off = 5          # Number of structural lines enforcing padding
-fast_scroll_steps = 10  # Delta coefficient for fast vertical scanning
+wrap_lines = true                   # Enforce word boundary wrapping algorithms
+tab_width = 4                       # Space calculation for single level depth
+expand_tab = false                  # Mutate raw tabs to whitespace equivalent
+line_numbers = true                 # Render active line indexing matrix
+highlight_active = true             # Isolate editing line luminance
+scroll_off = 5                      # Number of structural lines enforcing padding
+fast_scroll_steps = 10              # Delta coefficient for fast vertical scanning
 
 # Editing
-auto_indent = true      # Clone prior whitespace arrays linearly
-auto_close = true       # Inject closure algorithms naturally
-syntax_highlight = true # Toggle native highlighting
+auto_indent = true                  # Clone prior whitespace arrays linearly
+auto_close = true                   # Inject closure algorithms naturally
+syntax_highlight = true             # Toggle native highlighting
 
 # Interface
-show_help = true        # Persist dynamic shortcut reference bar
-show_encoding = true    # Show active file encoding
-show_lang = true        # Show current syntax highlighting language
+show_help = true                    # Persist dynamic shortcut reference bar
+show_encoding = true                # Show active file encoding
+show_lang = true                    # Show current syntax highlighting language
 
 # Theme for syntax highlighting
-theme = "default"       # Default color theme for light/dark
+theme = "default"                   # Default color theme for light/dark
+comments_are_italics = true         # Show comments in italics
 ```
 
 # Themes
@@ -259,6 +263,7 @@ theme = "DarkNeon"
 - `gruvbox-light`: A retro "groove" color scheme with earthy, warm light tones.
 - `zenburn`: A low-contrast "alien" dark color scheme designed to be extremely easy on the eyes.
 
+**Note**: macOS's built in Terminal app is still (after all these years!) not capable of correctly displaying ANSI colors. To get the most out of Dan, you should use a different terminal emulator, such as [iTerm2](https://iterm2.com/). If you for some reason _have_ to use the default terminal, enabling "Use bright colors" in the Terminal app's preferences might help a little, but it's not guaranteed to work for all themes. If it's still not acceptable, switch off the syntax highlighter in Dan with `Ctrl-T`.
 
 # Formatter
 Dan comes with a straightforward and simple yet powerful approach to auto-formatting (or linting) your document. Rather than implementing its own formatting algorithms, Dan relies on existing external tools to format your document (that do this for a living). Dan securely pipes the active buffer to the external tools (at the moment, we support **Prettier**, **Rustfmt**, and **Ruff**) in a background thread, and then hot-swaps the buffer when execution confirms success without interrupting your cursor sequence. Hence, the formatting happens asynchronous in the background, so we'll never block the main thread while formatting (which, unless you're linting a very large file, is rarely a problem anyway as it's usually fast).

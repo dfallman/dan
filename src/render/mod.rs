@@ -305,7 +305,7 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 	// -- Position the cursor --
 	if matches!(
 		editor.mode,
-		Mode::Searching | Mode::ReplacingSearch | Mode::ReplacingWith
+		Mode::Searching | Mode::ReplacingWith
 	) {
 		// During search, draw an outline cursor in the document at the saved position.
 		if let Some((saved_line, saved_col)) = editor.search_saved_cursor {

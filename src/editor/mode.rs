@@ -15,8 +15,6 @@ pub enum Mode {
 	ConfirmQuit,
 	/// Confirming overwrite of existing file.
 	ConfirmOverwrite,
-	/// Capturing global replace target string.
-	ReplacingSearch,
 	/// Capturing global replacement macro string.
 	ReplacingWith,
 	/// Interactive Replace confirmation step.
@@ -27,60 +25,23 @@ pub enum Mode {
 
 impl Mode {
 	/// Label shown in the status bar.
-	pub fn label(self) -> &'static str {
-		match self {
-			Mode::Editing => "Edit",
-			Mode::Searching => "Find",
-			Mode::GoToLine => "Goto",
-			Mode::SaveAs => "Save",
-			Mode::ConfirmQuit => "Quit",
-			Mode::ConfirmOverwrite => "Save",
-			Mode::ReplacingSearch => "Repl",
-			Mode::ReplacingWith => "Rwth",
-			Mode::ReplacingStep => "Repl",
-			Mode::RecoverSwap => "Swap",
-		}
-	}
 
-	/// Status bar background color.
-	pub fn color(self) -> Color {
+
+
+	/// Status bar background color mapping visually cleanly to the explicit active theme contexts globally natively.
+	pub fn color(self, theme: &crate::ui::theme::Theme) -> Color {
 		match self {
-			Mode::Editing => Color::Blue,
-			Mode::Searching => Color::DarkYellow,
-			Mode::GoToLine => Color::DarkCyan,
-			Mode::SaveAs => Color::DarkGreen,
-			Mode::ConfirmQuit => Color::DarkRed,
-			Mode::ConfirmOverwrite => Color::DarkRed,
-			Mode::ReplacingSearch => Color::DarkMagenta,
-			Mode::ReplacingWith => Color::DarkMagenta,
-			Mode::ReplacingStep => Color::DarkMagenta,
-			Mode::RecoverSwap => Color::DarkRed,
+			Mode::Editing => theme.mode_edit,
+			Mode::Searching => theme.mode_search,
+			Mode::GoToLine => theme.mode_goto,
+			Mode::SaveAs => theme.mode_save,
+			Mode::ConfirmQuit => theme.mode_danger,
+			Mode::ConfirmOverwrite => theme.mode_danger,
+			Mode::ReplacingWith => theme.mode_replace,
+			Mode::ReplacingStep => theme.mode_replace,
+			Mode::RecoverSwap => theme.mode_danger,
 		}
 	}
 }
 
-impl std::fmt::Display for Mode {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		write!(f, "{}", self.label())
-	}
-}
 
-#[cfg(test)]
-mod tests {
-	use super::*;
-
-	#[test]
-	fn test_mode_labels() {
-		assert_eq!(Mode::Editing.label(), "Edit");
-		assert_eq!(Mode::Searching.label(), "Find");
-		assert_eq!(Mode::GoToLine.label(), "Goto");
-		assert_eq!(Mode::SaveAs.label(), "Save");
-		assert_eq!(Mode::ConfirmQuit.label(), "Quit");
-		assert_eq!(Mode::ConfirmOverwrite.label(), "Save");
-	}
-
-	#[test]
-	fn test_mode_display() {
-		assert_eq!(format!("{}", Mode::Editing), "Edit");
-	}
-}

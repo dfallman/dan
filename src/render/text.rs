@@ -90,11 +90,7 @@ pub fn render_wrap(
 	while screen_row < text_height && buf_line < line_count {
 		let is_active = highlight_active && buf_line == cursor_line;
 		let base_bg = if is_active {
-			if editor.is_light_bg {
-				Color::AnsiValue(254)
-			} else {
-				Color::AnsiValue(236)
-			}
+			editor.theme.active_row_bg
 		} else {
 			Color::Reset
 		};
@@ -120,9 +116,9 @@ pub fn render_wrap(
 				let line_num = format!("{:>width$} ", buf_line + 1, width = gutter_width);
 				screen.set_bg(base_bg);
 				screen.set_fg(if buf_line == cursor_line {
-					if editor.is_light_bg { Color::Blue } else { Color::White }
+					editor.theme.line_nr_active
 				} else {
-					if editor.is_light_bg { Color::Grey } else { Color::DarkGrey }
+					editor.theme.line_nr
 				});
 				screen.put_str(&line_num);
 			}
@@ -163,9 +159,9 @@ pub fn render_wrap(
 						let wrap_gutter = format!("{:>width$} ", "↳", width = gutter_width);
 						screen.set_bg(base_bg);
 						screen.set_fg(if buf_line == cursor_line {
-							if editor.is_light_bg { Color::Blue } else { Color::White }
+							editor.theme.line_nr_active
 						} else {
-							if editor.is_light_bg { Color::Grey } else { Color::DarkGrey }
+							editor.theme.line_nr
 						});
 						screen.put_str(&wrap_gutter);
 					}
@@ -192,20 +188,20 @@ pub fn render_wrap(
 				let (cur_syn_fg, cur_syn_bold, cur_syn_italic) = syntax_fg(&syn_colors, char_idx);
 
 				if want_sel {
-					screen.set_bg(Color::Cyan);
-					screen.set_fg(Color::Black);
-					screen.bold = false;
-					screen.italic = false;
+					screen.set_bg(editor.theme.selection_bg);
+					screen.set_fg(editor.theme.selection_fg);
+					screen.bold = cur_syn_bold;
+					screen.italic = cur_syn_italic;
 				} else if is_current_match {
-					screen.set_bg(Color::Green);
-					screen.set_fg(Color::Black);
-					screen.bold = false;
-					screen.italic = false;
+					screen.set_bg(editor.theme.active_match_bg);
+					screen.set_fg(editor.theme.active_match_fg);
+					screen.bold = cur_syn_bold;
+					screen.italic = cur_syn_italic;
 				} else if in_search {
-					screen.set_bg(Color::Yellow);
-					screen.set_fg(Color::Black);
-					screen.bold = false;
-					screen.italic = false;
+					screen.set_bg(editor.theme.match_bg);
+					screen.set_fg(editor.theme.match_fg);
+					screen.bold = cur_syn_bold;
+					screen.italic = cur_syn_italic;
 				} else {
 					screen.set_bg(base_bg);
 					screen.set_fg(cur_syn_fg);
@@ -247,7 +243,7 @@ pub fn render_wrap(
 		let mut cols_written: usize = 0;
 		if show_line_numbers {
 			let tilde_gutter = format!("{:>width$} ", "⋅", width = gutter_width);
-			screen.set_fg(if editor.is_light_bg { Color::Grey } else { Color::DarkGrey });
+			screen.set_fg(editor.theme.eof_marker);
 			screen.put_str(&tilde_gutter);
 			cols_written = gutter_width + 1;
 		}
@@ -291,11 +287,7 @@ pub fn render_nowrap(
 		let line_idx = editor.scroll_y + row;
 		let is_active = highlight_active && line_idx == cursor_line;
 		let base_bg = if is_active {
-			if editor.is_light_bg {
-				Color::AnsiValue(254)
-			} else {
-				Color::AnsiValue(236)
-			}
+			editor.theme.active_row_bg
 		} else {
 			Color::Reset
 		};
@@ -308,9 +300,9 @@ pub fn render_nowrap(
 				let line_num = format!("{:>width$} ", line_idx + 1, width = gutter_width);
 				cols_written += line_num.len();
 				screen.set_fg(if line_idx == cursor_line {
-					if editor.is_light_bg { Color::Blue } else { Color::White }
+					editor.theme.line_nr_active
 				} else {
-					if editor.is_light_bg { Color::Grey } else { Color::DarkGrey }
+					editor.theme.line_nr
 				});
 				screen.put_str(&line_num);
 			}
@@ -365,20 +357,20 @@ pub fn render_nowrap(
 				let (cur_syn_fg, cur_syn_bold, cur_syn_italic) = syntax_fg(&syn_colors, char_idx);
 
 				if want_sel {
-					screen.set_bg(Color::Cyan);
-					screen.set_fg(Color::Black);
-					screen.bold = false;
-					screen.italic = false;
+					screen.set_bg(editor.theme.selection_bg);
+					screen.set_fg(editor.theme.selection_fg);
+					screen.bold = cur_syn_bold;
+					screen.italic = cur_syn_italic;
 				} else if is_current_match {
-					screen.set_bg(Color::DarkYellow);
-					screen.set_fg(Color::Black);
-					screen.bold = false;
-					screen.italic = false;
+					screen.set_bg(editor.theme.active_match_bg);
+					screen.set_fg(editor.theme.active_match_fg);
+					screen.bold = cur_syn_bold;
+					screen.italic = cur_syn_italic;
 				} else if in_search {
-					screen.set_bg(Color::Yellow);
-					screen.set_fg(Color::Black);
-					screen.bold = false;
-					screen.italic = false;
+					screen.set_bg(editor.theme.match_bg);
+					screen.set_fg(editor.theme.match_fg);
+					screen.bold = cur_syn_bold;
+					screen.italic = cur_syn_italic;
 				} else {
 					screen.set_bg(base_bg);
 					screen.set_fg(cur_syn_fg);
@@ -408,7 +400,7 @@ pub fn render_nowrap(
 			if show_line_numbers {
 				let tilde_gutter = format!("{:>width$} ", "⋅", width = gutter_width);
 				cols_written += gutter_width + 1;
-				screen.set_fg(if editor.is_light_bg { Color::Grey } else { Color::DarkGrey });
+				screen.set_fg(editor.theme.eof_marker);
 				screen.put_str(&tilde_gutter);
 				screen.set_fg(Color::Reset);
 			}
