@@ -24,7 +24,7 @@ pub fn map_event(event: &Event, mode: Mode) -> Command {
 				return map_confirm_overwrite_key(key);
 			}
 			match mode {
-				Mode::ReplacingSearch => map_replace_search_key(key),
+
 				Mode::ReplacingWith => map_replace_with_key(key),
 				Mode::ReplacingStep => map_replace_step_key(key),
 				Mode::RecoverSwap => map_recover_swap_key(key),
@@ -75,20 +75,7 @@ fn map_search_key(key: &KeyEvent) -> Command {
 	}
 }
 
-/// Key mapping while inside the Replace: target prompt.
-fn map_replace_search_key(key: &KeyEvent) -> Command {
-	let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
 
-	match key.code {
-		KeyCode::Esc => Command::ReplaceCancel,
-		KeyCode::Enter => Command::ReplaceSearchConfirm,
-		KeyCode::Backspace => Command::ReplaceDeleteChar,
-		KeyCode::Left => Command::PromptCursorLeft,
-		KeyCode::Right => Command::PromptCursorRight,
-		KeyCode::Char(ch) if !ctrl => Command::ReplaceInsertChar(ch),
-		_ => Command::Noop,
-	}
-}
 
 /// Key mapping while inside the Replace With: prompt.
 fn map_replace_with_key(key: &KeyEvent) -> Command {
@@ -123,7 +110,8 @@ fn map_recover_swap_key(key: &KeyEvent) -> Command {
 	match key.code {
 		KeyCode::Char('y') | KeyCode::Char('Y') if ctrl => Command::RecoverSwapAccept,
 		KeyCode::Char('n') | KeyCode::Char('N') if ctrl => Command::RecoverSwapDecline,
-		KeyCode::Esc => Command::RecoverSwapDecline,
+		KeyCode::Char('q') | KeyCode::Char('Q') if ctrl => Command::ForceQuit,
+		KeyCode::Esc => Command::ForceQuit,
 		_ => Command::Noop,
 	}
 }

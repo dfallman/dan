@@ -89,8 +89,6 @@ pub struct Editor {
 	pub last_autosave: std::time::Instant,
 	/// Active rendering double-buffer tracking stateful matrices natively isolating ANSI boundaries.
 	pub last_screen: Option<crate::render::buffer::ScreenBuffer>,
-	/// Whether the terminal background uses a light color natively detected via OSC 11 queries.
-	pub is_light_bg: bool,
 	/// System UI component styling logic mapping bounds cleanly defining global presentation values.
 	pub theme: std::sync::Arc<crate::ui::theme::Theme>,
 	/// Bound thread-safe string localization parameters wrapping global dictionaries completely securely across instances.
@@ -175,7 +173,6 @@ impl Editor {
 			is_formatting: false,
 			last_autosave: std::time::Instant::now(),
 			last_screen: None,
-			is_light_bg,
 			theme: std::sync::Arc::new(crate::ui::theme::Theme::default(is_light_bg)),
 			locale: Box::new(crate::ui::i18n::EnglishLocale),
 		}
@@ -977,31 +974,17 @@ impl Editor {
 
 			// -- Global Replace --
 			Command::ReplaceInsertChar(ch) => {
-				if self.mode == Mode::ReplacingSearch {
-					self.replace_query.push(ch);
-					self.search_query = self.replace_query.clone();
-					self.refresh_search_matches();
-				} else if self.mode == Mode::ReplacingWith {
-					self.replace_with.push(ch);
+				if self.mode == Mode::ReplacingWith {
+					self.replace_with.insert(self.prompt_cursor, ch);
+					self.prompt_cursor += 1;
 				}
 			}
 			Command::ReplaceDeleteChar => {
-				if self.mode == Mode::ReplacingSearch {
-					self.replace_query.pop();
-					self.search_query = self.replace_query.clone();
-					self.refresh_search_matches();
-				} else if self.mode == Mode::ReplacingWith {
-					self.replace_with.pop();
-				}
-			}
-			Command::ReplaceSearchConfirm => {
-				if !self.replace_query.is_empty() {
-					self.last_search_query = self.replace_query.clone();
-					self.mode = Mode::ReplacingWith;
-				} else {
-					self.mode = Mode::Editing;
-					self.search_query.clear();
-					self.clear_status();
+				if self.mode == Mode::ReplacingWith {
+					if self.prompt_cursor > 0 {
+						self.prompt_cursor -= 1;
+						self.replace_with.remove(self.prompt_cursor);
+					}
 				}
 			}
 			Command::ReplaceWithConfirm => {
@@ -1192,15 +1175,20 @@ impl Editor {
 			Command::GoToLineOpen => {
 				self.clear_selection();
 				self.goto_line_input.clear();
+				self.prompt_cursor = 0;
 				self.mode = Mode::GoToLine;
 			}
 			Command::GoToLineInsertChar(ch) => {
 				if ch.is_ascii_digit() {
-					self.goto_line_input.push(ch);
+					self.goto_line_input.insert(self.prompt_cursor, ch);
+					self.prompt_cursor += 1;
 				}
 			}
 			Command::GoToLineDeleteChar => {
-				self.goto_line_input.pop();
+				if self.prompt_cursor > 0 {
+					self.prompt_cursor -= 1;
+					self.goto_line_input.remove(self.prompt_cursor);
+				}
 			}
 			Command::GoToLineConfirm => {
 				if let Ok(n) = self.goto_line_input.parse::<usize>() {
@@ -1211,10 +1199,12 @@ impl Editor {
 					self.set_status(format!("Jumped to line {}", line + 1));
 				}
 				self.goto_line_input.clear();
+				self.prompt_cursor = 0;
 				self.mode = Mode::Editing;
 			}
 			Command::GoToLineCancel => {
 				self.goto_line_input.clear();
+				self.prompt_cursor = 0;
 				self.mode = Mode::Editing;
 				self.clear_status();
 			}
@@ -1228,7 +1218,7 @@ impl Editor {
 					.as_ref()
 					.map(|p| p.to_string_lossy().to_string())
 					.unwrap_or_default();
-				self.prompt_cursor = self.save_as_input.len();
+				self.prompt_cursor = self.save_as_input.chars().count();
 				self.mode = Mode::SaveAs;
 			}
 			Command::SaveAsInsertChar(ch) => {
@@ -1249,7 +1239,6 @@ impl Editor {
 			Command::PromptCursorRight => {
 				let max_len = match self.mode {
 					Mode::Searching => self.search_query.chars().count(),
-					Mode::ReplacingSearch => self.replace_query.chars().count(),
 					Mode::ReplacingWith => self.replace_with.chars().count(),
 					Mode::GoToLine => self.goto_line_input.chars().count(),
 					Mode::SaveAs | Mode::ConfirmOverwrite => self.save_as_input.chars().count(),

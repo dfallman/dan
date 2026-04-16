@@ -4,14 +4,7 @@ use super::Viewport;
 use crate::editor::mode::Mode;
 use crate::editor::Editor;
 
-/// Unified toolbar background color based on terminal theme.
-pub fn toolbar_bg_color(editor: &Editor) -> Color {
-	if editor.is_light_bg {
-		Color::AnsiValue(254)
-	} else {
-		Color::AnsiValue(236)
-	}
-}
+
 
 use crate::ui::layout::{Gravity, Rect, UiFragment, Window};
 use crate::ui::overlay::{OverlayBlock, OverlayBuilder};
@@ -28,15 +21,17 @@ pub fn build_status_bar(editor: &Editor, vp: &Viewport) -> Window {
 		is_flex: false,
 	});
 
+	fragments.push(UiFragment { text: " ".to_string(), fg: editor.theme.toolbar_bg, bg: editor.theme.toolbar_bg, is_flex: false });
+
 	let mode_text = if editor.has_selection() {
 		editor.locale.translate(Message::SelectionModeLabel)
 	} else {
-		editor.locale.translate(Message::ModeLabel(editor.mode.label().to_string()))
+		editor.locale.translate(Message::ModeLabelEditing)
 	};
 	let mode_color = if editor.has_selection() {
-		editor.theme.warning
+		editor.theme.mode_select
 	} else {
-		editor.mode.color()
+		editor.mode.color(&editor.theme)
 	};
 
 	fragments.push(UiFragment {
@@ -45,6 +40,8 @@ pub fn build_status_bar(editor: &Editor, vp: &Viewport) -> Window {
 		bg: editor.theme.toolbar_bg,
 		is_flex: false,
 	});
+
+	fragments.push(UiFragment { text: " ".to_string(), fg: editor.theme.toolbar_bg, bg: editor.theme.toolbar_bg, is_flex: false });
 
 	let name = editor.buffer().display_name();
 	fragments.push(UiFragment {
@@ -55,6 +52,7 @@ pub fn build_status_bar(editor: &Editor, vp: &Viewport) -> Window {
 	});
 
 	if editor.buffer().dirty {
+		fragments.push(UiFragment { text: " ".to_string(), fg: editor.theme.toolbar_bg, bg: editor.theme.toolbar_bg, is_flex: false });
 		fragments.push(UiFragment {
 			text: editor.locale.translate(Message::DirtyFlag),
 			fg: editor.theme.dirty_flag,
@@ -64,6 +62,7 @@ pub fn build_status_bar(editor: &Editor, vp: &Viewport) -> Window {
 	}
 
 	if let Some(ref msg) = editor.status_msg {
+		fragments.push(UiFragment { text: " ".to_string(), fg: editor.theme.toolbar_bg, bg: editor.theme.toolbar_bg, is_flex: false });
 		fragments.push(UiFragment {
 			text: editor.locale.translate(Message::StatusMessage(msg.clone())),
 			fg: editor.theme.dirty_flag,
@@ -149,35 +148,51 @@ fn help_shortcuts(editor: &Editor) -> Vec<(String, String)> {
 
 pub fn build_help_bar(editor: &Editor, width: u16, h: u16) -> Vec<Window> {
 	let shortcuts = help_shortcuts(editor);
+	let help_title = editor.locale.translate(Message::HelpTitle);
+	let help_width = 1 + help_title.chars().count();
+	let overflow_padding = " ".repeat(help_width);
+	let prefix_str = editor.locale.translate(Message::ToolbarPrefix);
 	
 	let mut builder = OverlayBuilder::new(editor.theme.toolbar_bg, 0)
 		.with_prefix(UiFragment {
-			text: editor.locale.translate(Message::ToolbarPrefix),
+			text: prefix_str.clone(),
+			fg: editor.theme.status_bg,
+			bg: editor.theme.toolbar_bg,
+			is_flex: false,
+		})
+		.with_overflow_prefix(UiFragment {
+			text: format!("{}{}", prefix_str, overflow_padding),
 			fg: editor.theme.status_bg,
 			bg: editor.theme.toolbar_bg,
 			is_flex: false,
 		});
 
+
 	builder.add_block(OverlayBlock {
-		fragments: vec![UiFragment {
-			text: editor.locale.translate(Message::HelpTitle),
-			fg: editor.theme.help_label,
-			bg: editor.theme.toolbar_bg,
-			is_flex: false,
-		}],
+		fragments: vec![
+			UiFragment { text: " ".to_string(), fg: editor.theme.toolbar_bg, bg: editor.theme.toolbar_bg, is_flex: false },
+			UiFragment {
+				text: editor.locale.translate(Message::HelpTitle),
+				fg: editor.theme.help_label,
+				bg: editor.theme.toolbar_bg,
+				is_flex: false,
+			},
+		],
 	});
 
 	for (key, label) in &shortcuts {
 		builder.add_block(OverlayBlock {
 			fragments: vec![
+				UiFragment { text: " ".to_string(), fg: editor.theme.toolbar_bg, bg: editor.theme.toolbar_bg, is_flex: false },
 				UiFragment {
 					text: key.to_string(),
-					fg: editor.theme.help_key,
+					fg: editor.theme.hotkey,
 					bg: editor.theme.toolbar_bg,
 					is_flex: false,
 				},
+				UiFragment { text: " ".to_string(), fg: editor.theme.toolbar_bg, bg: editor.theme.toolbar_bg, is_flex: false },
 				UiFragment {
-					text: format!(" {} ", label),
+					text: label.clone(),
 					fg: editor.theme.toolbar_fg,
 					bg: editor.theme.toolbar_bg,
 					is_flex: false,
@@ -187,12 +202,15 @@ pub fn build_help_bar(editor: &Editor, width: u16, h: u16) -> Vec<Window> {
 	}
 
 	builder.add_block(OverlayBlock {
-		fragments: vec![UiFragment {
-			text: format!("  {}", editor.locale.translate(Message::Version(crate::VERSION.trim().to_string(), crate::GIT_HASH.to_string()))),
-			fg: Color::DarkGrey,
-			bg: editor.theme.toolbar_bg,
-			is_flex: false,
-		}],
+		fragments: vec![
+			UiFragment { text: " ".to_string(), fg: editor.theme.toolbar_bg, bg: editor.theme.toolbar_bg, is_flex: false },
+			UiFragment {
+				text: editor.locale.translate(Message::Version(crate::VERSION.trim().to_string(), crate::GIT_HASH.to_string())),
+				fg: editor.theme.toolbar_fg_dim,
+				bg: editor.theme.toolbar_bg,
+				is_flex: false,
+			}
+		],
 	});
 
 	builder.build(width, h.saturating_sub(2))
@@ -203,7 +221,10 @@ pub fn build_prompt(editor: &Editor, width: u16, h: u16) -> Option<Vec<Window>> 
 		return None;
 	}
 
-	let bg_col = toolbar_bg_color(editor);
+	let bg_col = match editor.mode {
+		Mode::RecoverSwap | Mode::ConfirmQuit => editor.theme.toolbar_bg,
+		_ => editor.theme.prompt_bg,
+	};
 	let mut builder = OverlayBuilder::new(bg_col, 10)
 		.with_prefix(UiFragment {
 			text: editor.locale.translate(Message::ToolbarPrefix),
@@ -217,62 +238,52 @@ pub fn build_prompt(editor: &Editor, width: u16, h: u16) -> Option<Vec<Window>> 
 	let label_color;
 	let query_text;
 	let mut info_prefix = String::new();
-	let mut info_color = Color::DarkGrey;
-	let mut info_suffix = String::new();
+	let mut info_color = editor.theme.prompt_info;
+	let mut info_bg = bg_col;
+	let info_suffix;
 	let text_cursor;
 
 	match editor.mode {
-		Mode::ReplacingSearch => {
-			label = editor.locale.translate(Message::PromptReplaceTarget);
-			label_color = Color::DarkMagenta;
-			query_text = editor.replace_query.clone();
-			text_cursor = editor.prompt_cursor;
 
-			if editor.search_matches.is_empty() {
-				if editor.replace_query.is_empty() {
-					info_suffix = format!(" {} ", editor.locale.translate(Message::EscToClose));
-				} else {
-					info_prefix = editor.locale.translate(Message::ZeroMatches);
-					info_color = Color::DarkYellow;
-					info_suffix = editor.locale.translate(Message::ReplaceShortcuts);
-				}
-			} else {
-				info_prefix = editor.locale.translate(Message::MatchFraction(editor.search_match_idx + 1, editor.search_matches.len()));
-				info_color = Color::Yellow;
-				info_suffix = editor.locale.translate(Message::ReplaceShortcuts);
-			}
-		}
 		Mode::ReplacingWith => {
 			label = editor.locale.translate(Message::PromptReplaceWith);
-			label_color = Color::DarkMagenta;
+			label_color = editor.theme.mode_replace;
 			query_text = editor.replace_with.clone();
 			text_cursor = editor.prompt_cursor;
+
+			if !editor.search_matches.is_empty() {
+				info_prefix = editor.locale.translate(Message::MatchFraction(editor.search_match_idx + 1, editor.search_matches.len()));
+				info_color = editor.theme.prompt_warning_fg;
+				info_bg = editor.theme.prompt_warning_bg;
+			}
+			info_suffix = editor.locale.translate(Message::ReplaceShortcuts);
 		}
 		Mode::GoToLine => {
 			let total_lines = editor.buffers[editor.active_buffer].line_count();
 			label = editor.locale.translate(Message::PromptGoToLine);
-			label_color = Color::DarkCyan;
+			label_color = editor.theme.mode_goto;
 			query_text = editor.goto_line_input.clone();
 			text_cursor = editor.prompt_cursor;
 			info_suffix = editor.locale.translate(Message::PromptGoToLineHint(total_lines));
 		}
 		Mode::SaveAs | Mode::ConfirmOverwrite => {
 			label = editor.locale.translate(Message::PromptSaveAs);
-			label_color = Color::DarkGreen;
+			label_color = editor.theme.mode_save;
 			query_text = editor.save_as_input.clone();
 			text_cursor = editor.prompt_cursor;
 			
 			if editor.mode == Mode::ConfirmOverwrite {
 				info_suffix = editor.locale.translate(Message::PromptConfirmOverwrite);
-				info_color = Color::DarkRed;
+				info_color = editor.theme.prompt_danger_fg;
+				info_bg = editor.theme.prompt_danger_bg;
 			} else {
 				info_suffix = editor.locale.translate(Message::PromptSaveAsShortcuts);
-				info_color = Color::DarkGrey;
+				info_color = editor.theme.prompt_info;
 			}
 		}
 		Mode::Searching => {
 			label = editor.locale.translate(Message::PromptSearch);
-			label_color = Color::DarkYellow;
+			label_color = editor.theme.mode_search;
 			query_text = editor.search_query.clone();
 			text_cursor = editor.prompt_cursor;
 			
@@ -281,34 +292,39 @@ pub fn build_prompt(editor: &Editor, width: u16, h: u16) -> Option<Vec<Window>> 
 					info_suffix = format!(" {} ", editor.locale.translate(Message::EscToClose));
 				} else {
 					info_prefix = editor.locale.translate(Message::ZeroMatches);
-					info_color = Color::DarkYellow;
+					info_color = editor.theme.prompt_warning_fg;
+					info_bg = editor.theme.prompt_warning_bg;
 					info_suffix = editor.locale.translate(Message::SearchShortcuts);
 				}
 			} else {
 				info_prefix = editor.locale.translate(Message::MatchFraction(editor.search_match_idx + 1, editor.search_matches.len()));
-				info_color = Color::Yellow;
+				info_color = editor.theme.prompt_warning_fg;
+				info_bg = editor.theme.prompt_warning_bg;
 				info_suffix = editor.locale.translate(Message::SearchReplaceShortcuts);
 			}
 		}
 		Mode::ReplacingStep => {
 			let label = editor.locale.translate(Message::PromptReplaceStep);
-			builder.add_block(OverlayBlock {
-				fragments: vec![
-					UiFragment { bg: bg_col, fg: Color::DarkMagenta, text: label, is_flex: false },
-				]
-			});
+			let mut fragments = vec![
+				UiFragment { bg: bg_col, fg: editor.theme.prompt_fg, text: " ".to_string(), is_flex: false },
+			];
+			fragments.extend(parse_hotkeys(&label, bg_col, editor.theme.mode_replace, Some(editor.theme.prompt_fg), editor.theme.hotkey));
+			builder.add_block(OverlayBlock { fragments });
 			return Some(builder.build(width, h.saturating_sub(1)));
 		}
 		Mode::RecoverSwap => {
 			let label = editor.locale.translate(Message::PromptRecoverTitle);
 			let msg = editor.locale.translate(Message::PromptRecoverMsg);
 			
-			builder.add_block(OverlayBlock {
-				fragments: vec![
-					UiFragment { bg: bg_col, fg: Color::DarkRed, text: format!(" {} ", label), is_flex: false },
-					UiFragment { bg: bg_col, fg: Color::DarkYellow, text: format!(" {} ", msg), is_flex: false },
-				]
-			});
+			let mut fragments = vec![
+				UiFragment { bg: editor.theme.prompt_danger_bg, fg: editor.theme.prompt_danger_fg, text: format!(" {} ", label), is_flex: false },
+				UiFragment { bg: bg_col, fg: editor.theme.prompt_fg, text: " ".to_string(), is_flex: false },
+			];
+			fragments.extend(parse_hotkeys(&msg, bg_col, editor.theme.prompt_info, Some(editor.theme.prompt_fg), editor.theme.hotkey));
+
+			let cursor_pos = fragments.iter().map(|f| f.text.chars().count()).sum::<usize>();
+			builder = builder.with_cursor(cursor_pos);
+			builder.add_block(OverlayBlock { fragments });
 
 			return Some(builder.build(width, h.saturating_sub(1)));
 		}
@@ -316,20 +332,27 @@ pub fn build_prompt(editor: &Editor, width: u16, h: u16) -> Option<Vec<Window>> 
 			let label1 = editor.locale.translate(Message::PromptQuitWarning);
 			let label2 = editor.locale.translate(Message::PromptQuitMsg);
 
-			builder.add_block(OverlayBlock {
-				fragments: vec![
-					UiFragment { bg: bg_col, fg: Color::DarkRed, text: format!(" {} ", label1), is_flex: false },
-					UiFragment { bg: bg_col, fg: Color::Blue, text: format!(" {} ", label2), is_flex: false },
-				]
-			});
+			let mut fragments = vec![
+				UiFragment { bg: editor.theme.prompt_danger_bg, fg: editor.theme.prompt_danger_fg, text: format!(" {} ", label1), is_flex: false },
+				UiFragment { bg: bg_col, fg: editor.theme.prompt_fg, text: " ".to_string(), is_flex: false },
+			];
+			fragments.extend(parse_hotkeys(&label2, bg_col, editor.theme.prompt_info, Some(editor.theme.prompt_fg), editor.theme.hotkey));
+
+			let cursor_pos = fragments.iter().map(|f| f.text.chars().count()).sum::<usize>();
+			builder = builder.with_cursor(cursor_pos);
+			builder.add_block(OverlayBlock { fragments });
 
 			return Some(builder.build(width, h.saturating_sub(1)));
 		}
 		_ => return None,
 	};
 
+	let mut info_chars = info_prefix.chars().count() + info_suffix.chars().count();
+	if !info_prefix.is_empty() && !info_suffix.is_empty() {
+		info_chars += 1;
+	}
 	let layout_width = (width as usize).saturating_sub(
-		1 + label.chars().count() + info_prefix.chars().count() + info_suffix.chars().count() + 2 // padding
+		1 + 1 + label.chars().count() + 1 + 1 + info_chars + 2 // padding
 	);
 
 	let mut view_start = editor.prompt_view_start.get();
@@ -347,31 +370,35 @@ pub fn build_prompt(editor: &Editor, width: u16, h: u16) -> Option<Vec<Window>> 
 	let has_left = view_start > 0;
 	let has_right = query_text.chars().count() > view_start + available_width;
 
-	let cursor_offset = label.chars().count() + 1 + screen_cursor_x + (if has_left { 1 } else { 0 });
+	let cursor_offset = 1 + label.chars().count() + 1 + screen_cursor_x + (if has_left { 1 } else { 0 });
 	builder = builder.with_cursor(cursor_offset);
 
 	let mut prompt_frags = vec![
+		UiFragment { bg: bg_col, fg: editor.theme.prompt_fg, text: " ".to_string(), is_flex: false },
 		UiFragment { bg: bg_col, fg: label_color, text: label, is_flex: false },
-		UiFragment { bg: bg_col, fg: Color::White, text: " ".to_string(), is_flex: false },
+		UiFragment { bg: bg_col, fg: editor.theme.prompt_fg, text: " ".to_string(), is_flex: false },
 	];
 
 	if has_left {
 		prompt_frags.push(UiFragment { bg: bg_col, fg: editor.theme.toolbar_fg_dim, text: editor.locale.translate(Message::PromptClipLeft), is_flex: false });
 	}
 
-	prompt_frags.push(UiFragment { bg: bg_col, fg: Color::White, text: visible_slice, is_flex: false });
+	prompt_frags.push(UiFragment { bg: bg_col, fg: editor.theme.prompt_fg, text: visible_slice, is_flex: false });
 	
 	if has_right {
 		prompt_frags.push(UiFragment { bg: bg_col, fg: editor.theme.toolbar_fg_dim, text: editor.locale.translate(Message::PromptClipRight), is_flex: false });
 	}
 	
-	prompt_frags.push(UiFragment { bg: bg_col, fg: Color::White, text: " ".to_string(), is_flex: false });
+	prompt_frags.push(UiFragment { bg: bg_col, fg: editor.theme.prompt_fg, text: " ".to_string(), is_flex: false });
 
 	if !info_prefix.is_empty() {
-		prompt_frags.push(UiFragment { bg: bg_col, fg: info_color, text: info_prefix, is_flex: false });
+		prompt_frags.push(UiFragment { bg: info_bg, fg: info_color, text: info_prefix.clone(), is_flex: false });
 	}
 	if !info_suffix.is_empty() {
-		prompt_frags.push(UiFragment { bg: bg_col, fg: Color::DarkGrey, text: info_suffix, is_flex: false });
+		if !info_prefix.is_empty() {
+			prompt_frags.push(UiFragment { bg: bg_col, fg: editor.theme.prompt_fg, text: " ".to_string(), is_flex: false });
+		}
+		prompt_frags.extend(parse_hotkeys(&info_suffix, info_bg, info_color, Some(editor.theme.prompt_fg), editor.theme.hotkey));
 	}
 
 	builder.add_block(OverlayBlock { fragments: prompt_frags });
@@ -477,4 +504,61 @@ pub fn render_ui(
 	}
 
 	interactive_cursor
+}
+
+/// Parses strings containing hotkey markers (`^X`, `Esc`, `⏎`) isolating them dynamically
+/// structurally tracking distinct explicit foreground values natively separating interactive bounds seamlessly.
+fn parse_hotkeys(text: &str, bg: Color, text_color: Color, instruction_color: Option<Color>, hotkey_color: Color) -> Vec<UiFragment> {
+	let mut fragments = Vec::new();
+	let mut current_text = String::new();
+	let chars: Vec<char> = text.chars().collect();
+	let mut i = 0;
+	let mut hit_first_hotkey = false;
+
+	while i < chars.len() {
+		// Match "^X" hotkey identifiers gracefully
+		if chars[i] == '^' && i + 1 < chars.len() && chars[i+1].is_uppercase() {
+			if !current_text.is_empty() {
+				fragments.push(UiFragment { bg, fg: if hit_first_hotkey { text_color } else { instruction_color.unwrap_or(text_color) }, text: current_text, is_flex: false });
+				current_text = String::new();
+			}
+			fragments.push(UiFragment { bg, fg: hotkey_color, text: format!("^{}", chars[i+1]), is_flex: false });
+			hit_first_hotkey = true;
+			i += 2;
+			continue;
+		}
+
+		// Match "Esc" conditionally dynamically natively
+		if i + 2 < chars.len() && chars[i] == 'E' && chars[i+1] == 's' && chars[i+2] == 'c' {
+			if !current_text.is_empty() {
+				fragments.push(UiFragment { bg, fg: if hit_first_hotkey { text_color } else { instruction_color.unwrap_or(text_color) }, text: current_text, is_flex: false });
+				current_text = String::new();
+			}
+			fragments.push(UiFragment { bg, fg: hotkey_color, text: "Esc".to_string(), is_flex: false });
+			hit_first_hotkey = true;
+			i += 3;
+			continue;
+		}
+
+		// Match "⏎" implicitly dynamically mapping targets gracefully
+		if chars[i] == '⏎' {
+			if !current_text.is_empty() {
+				fragments.push(UiFragment { bg, fg: if hit_first_hotkey { text_color } else { instruction_color.unwrap_or(text_color) }, text: current_text, is_flex: false });
+				current_text = String::new();
+			}
+			fragments.push(UiFragment { bg, fg: hotkey_color, text: "⏎".to_string(), is_flex: false });
+			hit_first_hotkey = true;
+			i += 1;
+			continue;
+		}
+
+		current_text.push(chars[i]);
+		i += 1;
+	}
+
+	if !current_text.is_empty() {
+		fragments.push(UiFragment { bg, fg: if hit_first_hotkey { text_color } else { instruction_color.unwrap_or(text_color) }, text: current_text, is_flex: false });
+	}
+
+	fragments
 }
