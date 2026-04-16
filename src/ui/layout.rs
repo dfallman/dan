@@ -24,6 +24,7 @@ pub struct UiFragment {
     pub fg: Color,
     pub bg: Color,
     pub is_flex: bool,
+    pub is_bold: bool,
 }
 
 #[derive(Debug, Clone)]

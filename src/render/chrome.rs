@@ -10,74 +10,48 @@ use crate::ui::layout::{Gravity, Rect, UiFragment, Window};
 use crate::ui::overlay::{OverlayBlock, OverlayBuilder};
 use crate::ui::i18n::Message;
 
+fn truncate_path(path: &str, max_len: usize) -> String {
+    if path.chars().count() <= max_len {
+        return path.to_string();
+    }
+    let parts: Vec<&str> = path.split('/').collect();
+    if parts.len() <= 3 {
+        let start_len = 6.min(max_len.saturating_sub(4));
+        let end_len = max_len.saturating_sub(start_len + 3);
+        let start: String = path.chars().take(start_len).collect();
+        let end: String = path.chars().skip(path.chars().count().saturating_sub(end_len)).collect();
+        return format!("{}...{}", start, end);
+    }
+    let start_idx = if path.starts_with('/') { 2 } else { 1 };
+    let start_end = start_idx.min(parts.len().saturating_sub(2));
+    let start_str = parts[0..=start_end].join("/"); 
+
+    let mut end_idx = parts.len() - 1;
+    let mut end_str = parts[end_idx].to_string();
+    
+    while end_idx > start_end + 1 {
+        let next_end = format!("{}/{}", parts[end_idx - 1], end_str);
+        if start_str.chars().count() + 4 + next_end.chars().count() <= max_len {
+            end_str = next_end;
+            end_idx -= 1;
+        } else {
+            break;
+        }
+    }
+    if start_str.chars().count() + 4 + end_str.chars().count() <= max_len {
+        format!("{}/.../{}", start_str, end_str)
+    } else {
+        let start_len = 6.min(max_len.saturating_sub(4));
+        let end_len = max_len.saturating_sub(start_len + 3);
+        let start: String = path.chars().take(start_len).collect();
+        let end: String = path.chars().skip(path.chars().count().saturating_sub(end_len)).collect();
+        format!("{}...{}", start, end)
+    }
+}
+
 /// Render the status bar.
 pub fn build_status_bar(editor: &Editor, vp: &Viewport) -> Window {
 	let mut fragments = Vec::new();
-
-	fragments.push(UiFragment {
-		text: editor.locale.translate(Message::ToolbarPrefix),
-		fg: editor.theme.status_bg,
-		bg: editor.theme.toolbar_bg,
-		is_flex: false,
-	});
-
-	fragments.push(UiFragment { text: " ".to_string(), fg: editor.theme.toolbar_bg, bg: editor.theme.toolbar_bg, is_flex: false });
-
-	let mode_text = if editor.has_selection() {
-		editor.locale.translate(Message::SelectionModeLabel)
-	} else {
-		editor.locale.translate(Message::ModeLabelEditing)
-	};
-	let mode_color = if editor.has_selection() {
-		editor.theme.mode_select
-	} else {
-		editor.mode.color(&editor.theme)
-	};
-
-	fragments.push(UiFragment {
-		text: mode_text,
-		fg: mode_color,
-		bg: editor.theme.toolbar_bg,
-		is_flex: false,
-	});
-
-	fragments.push(UiFragment { text: " ".to_string(), fg: editor.theme.toolbar_bg, bg: editor.theme.toolbar_bg, is_flex: false });
-
-	let name = editor.buffer().display_name();
-	fragments.push(UiFragment {
-		text: editor.locale.translate(Message::FilenameLabel(name)),
-		fg: editor.theme.toolbar_fg,
-		bg: editor.theme.toolbar_bg,
-		is_flex: false,
-	});
-
-	if editor.buffer().dirty {
-		fragments.push(UiFragment { text: " ".to_string(), fg: editor.theme.toolbar_bg, bg: editor.theme.toolbar_bg, is_flex: false });
-		fragments.push(UiFragment {
-			text: editor.locale.translate(Message::DirtyFlag),
-			fg: editor.theme.dirty_flag,
-			bg: editor.theme.toolbar_bg,
-			is_flex: false,
-		});
-	}
-
-	if let Some(ref msg) = editor.status_msg {
-		fragments.push(UiFragment { text: " ".to_string(), fg: editor.theme.toolbar_bg, bg: editor.theme.toolbar_bg, is_flex: false });
-		fragments.push(UiFragment {
-			text: editor.locale.translate(Message::StatusMessage(msg.clone())),
-			fg: editor.theme.dirty_flag,
-			bg: editor.theme.toolbar_bg,
-			is_flex: false,
-		});
-	}
-
-	// Dynamic Flex padding pushing remaining elements cleanly to the right
-	fragments.push(UiFragment {
-		text: String::new(),
-		fg: editor.theme.toolbar_bg,
-		bg: editor.theme.toolbar_bg,
-		is_flex: true,
-	});
 
 	let c = editor.cursors.cursor();
 	let mut right_parts = Vec::new();
@@ -97,12 +71,105 @@ pub fn build_status_bar(editor: &Editor, vp: &Viewport) -> Window {
 	right_parts.push(editor.locale.translate(Message::LineCol(c.line + 1, c.col + 1)));
 
 	let right = format!(" {} ", right_parts.join("  "));
-	
+	let right_width = right.chars().count();
+
+	fragments.push(UiFragment {
+		text: editor.locale.translate(Message::ToolbarPrefix),
+		fg: editor.theme.status_bg,
+		bg: editor.theme.toolbar_bg,
+		is_flex: false, is_bold: false,
+	});
+
+	fragments.push(UiFragment { text: " ".to_string(), fg: editor.theme.toolbar_bg, bg: editor.theme.toolbar_bg, is_flex: false, is_bold: false });
+
+	let mode_text = if editor.has_selection() {
+		editor.locale.translate(Message::SelectionModeLabel)
+	} else {
+		editor.locale.translate(Message::ModeLabelEditing)
+	};
+	let mode_color = if editor.has_selection() {
+		editor.theme.mode_select
+	} else {
+		editor.mode.color(&editor.theme)
+	};
+
+	let mut left_width = editor.locale.translate(Message::ToolbarPrefix).chars().count() + 1 + mode_text.chars().count() + 1;
+
+	fragments.push(UiFragment {
+		text: mode_text,
+		fg: mode_color,
+		bg: editor.theme.toolbar_bg,
+		is_flex: false, is_bold: true,
+	});
+
+	fragments.push(UiFragment { text: " ".to_string(), fg: editor.theme.toolbar_bg, bg: editor.theme.toolbar_bg, is_flex: false, is_bold: false });
+
+	if editor.buffer().dirty {
+		left_width += 1 + editor.locale.translate(Message::DirtyFlag).chars().count();
+	}
+	if let Some(ref msg) = editor.status_msg {
+		left_width += 1 + editor.locale.translate(Message::StatusMessage(msg.clone())).chars().count();
+	}
+
+	let label_margin = editor.locale.translate(Message::FilenameLabel(String::new())).chars().count();
+	let max_name_len = (vp.width as usize).saturating_sub(left_width + right_width + label_margin + 5);
+
+	let raw_name = if editor.config.show_full_path {
+		editor.buffer().full_path_display()
+	} else {
+		editor.buffer().display_name()
+	};
+
+	let name = if raw_name.chars().count() > max_name_len && max_name_len > 0 {
+		if editor.config.show_full_path {
+			truncate_path(&raw_name, max_name_len)
+		} else {
+			let trunc: String = raw_name.chars().take(max_name_len.saturating_sub(3)).collect();
+			format!("{}...", trunc)
+		}
+	} else {
+		raw_name
+	};
+
+	fragments.push(UiFragment {
+		text: editor.locale.translate(Message::FilenameLabel(name)),
+		fg: editor.theme.toolbar_fg,
+		bg: editor.theme.toolbar_bg,
+		is_flex: false, is_bold: false,
+	});
+
+	if editor.buffer().dirty {
+		fragments.push(UiFragment { text: " ".to_string(), fg: editor.theme.toolbar_bg, bg: editor.theme.toolbar_bg, is_flex: false, is_bold: false });
+		fragments.push(UiFragment {
+			text: editor.locale.translate(Message::DirtyFlag),
+			fg: editor.theme.dirty_flag,
+			bg: editor.theme.toolbar_bg,
+			is_flex: false, is_bold: false,
+		});
+	}
+
+	if let Some(ref msg) = editor.status_msg {
+		fragments.push(UiFragment { text: " ".to_string(), fg: editor.theme.toolbar_bg, bg: editor.theme.toolbar_bg, is_flex: false, is_bold: false });
+		fragments.push(UiFragment {
+			text: editor.locale.translate(Message::StatusMessage(msg.clone())),
+			fg: editor.theme.dirty_flag,
+			bg: editor.theme.toolbar_bg,
+			is_flex: false, is_bold: false,
+		});
+	}
+
+	fragments.push(UiFragment {
+		text: String::new(),
+		fg: editor.theme.toolbar_bg,
+		bg: editor.theme.toolbar_bg,
+		is_flex: true, is_bold: false,
+	});
+
 	fragments.push(UiFragment {
 		text: right,
 		fg: editor.theme.toolbar_fg_dim,
 		bg: editor.theme.toolbar_bg,
-		is_flex: false,
+		is_flex: false, is_bold: false,
 	});
 
 	let status_y = vp.height.saturating_sub(vp.chrome_rows);
@@ -158,24 +225,24 @@ pub fn build_help_bar(editor: &Editor, width: u16, h: u16) -> Vec<Window> {
 			text: prefix_str.clone(),
 			fg: editor.theme.status_bg,
 			bg: editor.theme.toolbar_bg,
-			is_flex: false,
+			is_flex: false, is_bold: false,
 		})
 		.with_overflow_prefix(UiFragment {
 			text: format!("{}{}", prefix_str, overflow_padding),
 			fg: editor.theme.status_bg,
 			bg: editor.theme.toolbar_bg,
-			is_flex: false,
+			is_flex: false, is_bold: false,
 		});
 
 
 	builder.add_block(OverlayBlock {
 		fragments: vec![
-			UiFragment { text: " ".to_string(), fg: editor.theme.toolbar_bg, bg: editor.theme.toolbar_bg, is_flex: false },
+			UiFragment { text: " ".to_string(), fg: editor.theme.toolbar_bg, bg: editor.theme.toolbar_bg, is_flex: false, is_bold: false },
 			UiFragment {
 				text: editor.locale.translate(Message::HelpTitle),
 				fg: editor.theme.help_label,
 				bg: editor.theme.toolbar_bg,
-				is_flex: false,
+				is_flex: false, is_bold: false,
 			},
 		],
 	});
@@ -183,19 +250,19 @@ pub fn build_help_bar(editor: &Editor, width: u16, h: u16) -> Vec<Window> {
 	for (key, label) in &shortcuts {
 		builder.add_block(OverlayBlock {
 			fragments: vec![
-				UiFragment { text: " ".to_string(), fg: editor.theme.toolbar_bg, bg: editor.theme.toolbar_bg, is_flex: false },
+				UiFragment { text: " ".to_string(), fg: editor.theme.toolbar_bg, bg: editor.theme.toolbar_bg, is_flex: false, is_bold: false },
 				UiFragment {
 					text: key.to_string(),
 					fg: editor.theme.hotkey,
 					bg: editor.theme.toolbar_bg,
-					is_flex: false,
+					is_flex: false, is_bold: false,
 				},
-				UiFragment { text: " ".to_string(), fg: editor.theme.toolbar_bg, bg: editor.theme.toolbar_bg, is_flex: false },
+				UiFragment { text: " ".to_string(), fg: editor.theme.toolbar_bg, bg: editor.theme.toolbar_bg, is_flex: false, is_bold: false },
 				UiFragment {
 					text: label.clone(),
 					fg: editor.theme.toolbar_fg,
 					bg: editor.theme.toolbar_bg,
-					is_flex: false,
+					is_flex: false, is_bold: false,
 				},
 			],
 		});
@@ -203,12 +270,12 @@ pub fn build_help_bar(editor: &Editor, width: u16, h: u16) -> Vec<Window> {
 
 	builder.add_block(OverlayBlock {
 		fragments: vec![
-			UiFragment { text: " ".to_string(), fg: editor.theme.toolbar_bg, bg: editor.theme.toolbar_bg, is_flex: false },
+			UiFragment { text: " ".to_string(), fg: editor.theme.toolbar_bg, bg: editor.theme.toolbar_bg, is_flex: false, is_bold: false },
 			UiFragment {
 				text: editor.locale.translate(Message::Version(crate::VERSION.trim().to_string(), crate::GIT_HASH.to_string())),
 				fg: editor.theme.toolbar_fg_dim,
 				bg: editor.theme.toolbar_bg,
-				is_flex: false,
+				is_flex: false, is_bold: false,
 			}
 		],
 	});
@@ -225,21 +292,31 @@ pub fn build_prompt(editor: &Editor, width: u16, h: u16) -> Option<Vec<Window>> 
 		Mode::RecoverSwap | Mode::ConfirmQuit => editor.theme.toolbar_bg,
 		_ => editor.theme.prompt_bg,
 	};
-	let mut builder = OverlayBuilder::new(bg_col, 10)
-		.with_prefix(UiFragment {
+	
+	let prefix = match editor.mode {
+		Mode::ConfirmQuit | Mode::RecoverSwap => UiFragment {
+			text: editor.locale.translate(Message::ToolbarPrefix),
+			fg: editor.theme.prompt_danger_bg,
+			bg: bg_col,
+			is_flex: false, is_bold: true,
+		},
+		_ => UiFragment {
 			text: editor.locale.translate(Message::ToolbarPrefix),
 			fg: editor.theme.status_bg,
 			bg: bg_col,
-			is_flex: false,
-		});
+			is_flex: false, is_bold: false,
+		},
+	};
+
+	let mut builder = OverlayBuilder::new(bg_col, 10).with_prefix(prefix);
 
 	// Dynamic inputs require generic sliding viewport mapping 
 	let label;
 	let label_color;
 	let query_text;
 	let mut info_prefix = String::new();
-	let mut info_color = editor.theme.prompt_info;
-	let mut info_bg = bg_col;
+	let info_color = editor.theme.prompt_info;
+	let info_bg = bg_col;
 	let info_suffix;
 	let text_cursor;
 
@@ -253,8 +330,6 @@ pub fn build_prompt(editor: &Editor, width: u16, h: u16) -> Option<Vec<Window>> 
 
 			if !editor.search_matches.is_empty() {
 				info_prefix = editor.locale.translate(Message::MatchFraction(editor.search_match_idx + 1, editor.search_matches.len()));
-				info_color = editor.theme.prompt_warning_fg;
-				info_bg = editor.theme.prompt_warning_bg;
 			}
 			info_suffix = editor.locale.translate(Message::ReplaceShortcuts);
 		}
@@ -274,11 +349,8 @@ pub fn build_prompt(editor: &Editor, width: u16, h: u16) -> Option<Vec<Window>> 
 			
 			if editor.mode == Mode::ConfirmOverwrite {
 				info_suffix = editor.locale.translate(Message::PromptConfirmOverwrite);
-				info_color = editor.theme.prompt_danger_fg;
-				info_bg = editor.theme.prompt_danger_bg;
 			} else {
 				info_suffix = editor.locale.translate(Message::PromptSaveAsShortcuts);
-				info_color = editor.theme.prompt_info;
 			}
 		}
 		Mode::Searching => {
@@ -292,23 +364,19 @@ pub fn build_prompt(editor: &Editor, width: u16, h: u16) -> Option<Vec<Window>> 
 					info_suffix = format!(" {} ", editor.locale.translate(Message::EscToClose));
 				} else {
 					info_prefix = editor.locale.translate(Message::ZeroMatches);
-					info_color = editor.theme.prompt_warning_fg;
-					info_bg = editor.theme.prompt_warning_bg;
 					info_suffix = editor.locale.translate(Message::SearchShortcuts);
 				}
 			} else {
 				info_prefix = editor.locale.translate(Message::MatchFraction(editor.search_match_idx + 1, editor.search_matches.len()));
-				info_color = editor.theme.prompt_warning_fg;
-				info_bg = editor.theme.prompt_warning_bg;
 				info_suffix = editor.locale.translate(Message::SearchReplaceShortcuts);
 			}
 		}
 		Mode::ReplacingStep => {
 			let label = editor.locale.translate(Message::PromptReplaceStep);
 			let mut fragments = vec![
-				UiFragment { bg: bg_col, fg: editor.theme.prompt_fg, text: " ".to_string(), is_flex: false },
+				UiFragment { bg: bg_col, fg: editor.theme.prompt_fg, text: " ".to_string(), is_flex: false, is_bold: false },
 			];
-			fragments.extend(parse_hotkeys(&label, bg_col, editor.theme.mode_replace, Some(editor.theme.prompt_fg), editor.theme.hotkey));
+			fragments.extend(parse_hotkeys(&label, bg_col, editor.theme.prompt_info, Some(editor.theme.prompt_fg), editor.theme.hotkey));
 			builder.add_block(OverlayBlock { fragments });
 			return Some(builder.build(width, h.saturating_sub(1)));
 		}
@@ -317,8 +385,8 @@ pub fn build_prompt(editor: &Editor, width: u16, h: u16) -> Option<Vec<Window>> 
 			let msg = editor.locale.translate(Message::PromptRecoverMsg);
 			
 			let mut fragments = vec![
-				UiFragment { bg: editor.theme.prompt_danger_bg, fg: editor.theme.prompt_danger_fg, text: format!(" {} ", label), is_flex: false },
-				UiFragment { bg: bg_col, fg: editor.theme.prompt_fg, text: " ".to_string(), is_flex: false },
+				UiFragment { bg: editor.theme.prompt_danger_bg, fg: editor.theme.prompt_danger_fg, text: format!(" {} ", label), is_flex: false, is_bold: true },
+				UiFragment { bg: bg_col, fg: editor.theme.prompt_fg, text: " ".to_string(), is_flex: false, is_bold: false },
 			];
 			fragments.extend(parse_hotkeys(&msg, bg_col, editor.theme.prompt_info, Some(editor.theme.prompt_fg), editor.theme.hotkey));
 
@@ -333,8 +401,8 @@ pub fn build_prompt(editor: &Editor, width: u16, h: u16) -> Option<Vec<Window>> 
 			let label2 = editor.locale.translate(Message::PromptQuitMsg);
 
 			let mut fragments = vec![
-				UiFragment { bg: editor.theme.prompt_danger_bg, fg: editor.theme.prompt_danger_fg, text: format!(" {} ", label1), is_flex: false },
-				UiFragment { bg: bg_col, fg: editor.theme.prompt_fg, text: " ".to_string(), is_flex: false },
+				UiFragment { bg: editor.theme.prompt_danger_bg, fg: editor.theme.prompt_danger_fg, text: format!(" {} ", label1), is_flex: false, is_bold: true },
+				UiFragment { bg: bg_col, fg: editor.theme.prompt_fg, text: " ".to_string(), is_flex: false, is_bold: false },
 			];
 			fragments.extend(parse_hotkeys(&label2, bg_col, editor.theme.prompt_info, Some(editor.theme.prompt_fg), editor.theme.hotkey));
 
@@ -374,29 +442,29 @@ pub fn build_prompt(editor: &Editor, width: u16, h: u16) -> Option<Vec<Window>> 
 	builder = builder.with_cursor(cursor_offset);
 
 	let mut prompt_frags = vec![
-		UiFragment { bg: bg_col, fg: editor.theme.prompt_fg, text: " ".to_string(), is_flex: false },
-		UiFragment { bg: bg_col, fg: label_color, text: label, is_flex: false },
-		UiFragment { bg: bg_col, fg: editor.theme.prompt_fg, text: " ".to_string(), is_flex: false },
+		UiFragment { bg: bg_col, fg: editor.theme.prompt_fg, text: " ".to_string(), is_flex: false, is_bold: false },
+		UiFragment { bg: bg_col, fg: label_color, text: label, is_flex: false, is_bold: true },
+		UiFragment { bg: bg_col, fg: editor.theme.prompt_fg, text: " ".to_string(), is_flex: false, is_bold: false },
 	];
 
 	if has_left {
-		prompt_frags.push(UiFragment { bg: bg_col, fg: editor.theme.toolbar_fg_dim, text: editor.locale.translate(Message::PromptClipLeft), is_flex: false });
+		prompt_frags.push(UiFragment { bg: bg_col, fg: editor.theme.toolbar_fg_dim, text: editor.locale.translate(Message::PromptClipLeft), is_flex: false, is_bold: false });
 	}
 
-	prompt_frags.push(UiFragment { bg: bg_col, fg: editor.theme.prompt_fg, text: visible_slice, is_flex: false });
+	prompt_frags.push(UiFragment { bg: bg_col, fg: editor.theme.prompt_fg, text: visible_slice, is_flex: false, is_bold: false });
 	
 	if has_right {
-		prompt_frags.push(UiFragment { bg: bg_col, fg: editor.theme.toolbar_fg_dim, text: editor.locale.translate(Message::PromptClipRight), is_flex: false });
+		prompt_frags.push(UiFragment { bg: bg_col, fg: editor.theme.toolbar_fg_dim, text: editor.locale.translate(Message::PromptClipRight), is_flex: false, is_bold: false });
 	}
 	
-	prompt_frags.push(UiFragment { bg: bg_col, fg: editor.theme.prompt_fg, text: " ".to_string(), is_flex: false });
+	prompt_frags.push(UiFragment { bg: bg_col, fg: editor.theme.prompt_fg, text: "  ".to_string(), is_flex: false, is_bold: false });
 
 	if !info_prefix.is_empty() {
-		prompt_frags.push(UiFragment { bg: info_bg, fg: info_color, text: info_prefix.clone(), is_flex: false });
+		prompt_frags.push(UiFragment { bg: bg_col, fg: editor.theme.prompt_fg, text: info_prefix.clone(), is_flex: false, is_bold: false });
 	}
 	if !info_suffix.is_empty() {
 		if !info_prefix.is_empty() {
-			prompt_frags.push(UiFragment { bg: bg_col, fg: editor.theme.prompt_fg, text: " ".to_string(), is_flex: false });
+			prompt_frags.push(UiFragment { bg: bg_col, fg: editor.theme.prompt_fg, text: " ".to_string(), is_flex: false, is_bold: false });
 		}
 		prompt_frags.extend(parse_hotkeys(&info_suffix, info_bg, info_color, Some(editor.theme.prompt_fg), editor.theme.hotkey));
 	}
@@ -476,7 +544,7 @@ pub fn render_ui(
 		for frag in &window.fragments {
 			screen.set_bg(frag.bg);
 			screen.set_fg(frag.fg);
-			screen.bold = false;
+			screen.set_bold(frag.is_bold);
 			screen.italic = false;
 
 			if frag.is_flex {
@@ -519,10 +587,10 @@ fn parse_hotkeys(text: &str, bg: Color, text_color: Color, instruction_color: Op
 		// Match "^X" hotkey identifiers gracefully
 		if chars[i] == '^' && i + 1 < chars.len() && chars[i+1].is_uppercase() {
 			if !current_text.is_empty() {
-				fragments.push(UiFragment { bg, fg: if hit_first_hotkey { text_color } else { instruction_color.unwrap_or(text_color) }, text: current_text, is_flex: false });
+				fragments.push(UiFragment { bg, fg: if hit_first_hotkey { text_color } else { instruction_color.unwrap_or(text_color) }, text: current_text, is_flex: false, is_bold: false });
 				current_text = String::new();
 			}
-			fragments.push(UiFragment { bg, fg: hotkey_color, text: format!("^{}", chars[i+1]), is_flex: false });
+			fragments.push(UiFragment { bg, fg: hotkey_color, text: format!("^{}", chars[i+1]), is_flex: false, is_bold: false });
 			hit_first_hotkey = true;
 			i += 2;
 			continue;
@@ -531,10 +599,10 @@ fn parse_hotkeys(text: &str, bg: Color, text_color: Color, instruction_color: Op
 		// Match "Esc" conditionally dynamically natively
 		if i + 2 < chars.len() && chars[i] == 'E' && chars[i+1] == 's' && chars[i+2] == 'c' {
 			if !current_text.is_empty() {
-				fragments.push(UiFragment { bg, fg: if hit_first_hotkey { text_color } else { instruction_color.unwrap_or(text_color) }, text: current_text, is_flex: false });
+				fragments.push(UiFragment { bg, fg: if hit_first_hotkey { text_color } else { instruction_color.unwrap_or(text_color) }, text: current_text, is_flex: false, is_bold: false });
 				current_text = String::new();
 			}
-			fragments.push(UiFragment { bg, fg: hotkey_color, text: "Esc".to_string(), is_flex: false });
+			fragments.push(UiFragment { bg, fg: hotkey_color, text: "Esc".to_string(), is_flex: false, is_bold: false });
 			hit_first_hotkey = true;
 			i += 3;
 			continue;
@@ -543,10 +611,10 @@ fn parse_hotkeys(text: &str, bg: Color, text_color: Color, instruction_color: Op
 		// Match "⏎" implicitly dynamically mapping targets gracefully
 		if chars[i] == '⏎' {
 			if !current_text.is_empty() {
-				fragments.push(UiFragment { bg, fg: if hit_first_hotkey { text_color } else { instruction_color.unwrap_or(text_color) }, text: current_text, is_flex: false });
+				fragments.push(UiFragment { bg, fg: if hit_first_hotkey { text_color } else { instruction_color.unwrap_or(text_color) }, text: current_text, is_flex: false, is_bold: false });
 				current_text = String::new();
 			}
-			fragments.push(UiFragment { bg, fg: hotkey_color, text: "⏎".to_string(), is_flex: false });
+			fragments.push(UiFragment { bg, fg: hotkey_color, text: "⏎".to_string(), is_flex: false, is_bold: false });
 			hit_first_hotkey = true;
 			i += 1;
 			continue;
@@ -557,7 +625,7 @@ fn parse_hotkeys(text: &str, bg: Color, text_color: Color, instruction_color: Op
 	}
 
 	if !current_text.is_empty() {
-		fragments.push(UiFragment { bg, fg: if hit_first_hotkey { text_color } else { instruction_color.unwrap_or(text_color) }, text: current_text, is_flex: false });
+		fragments.push(UiFragment { bg, fg: if hit_first_hotkey { text_color } else { instruction_color.unwrap_or(text_color) }, text: current_text, is_flex: false, is_bold: false });
 	}
 
 	fragments

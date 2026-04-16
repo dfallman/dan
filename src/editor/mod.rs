@@ -93,6 +93,8 @@ pub struct Editor {
 	pub theme: std::sync::Arc<crate::ui::theme::Theme>,
 	/// Bound thread-safe string localization parameters wrapping global dictionaries completely securely across instances.
 	pub locale: Box<dyn crate::ui::i18n::Locale>,
+	/// Internal execution pipeline structural state retaining the context footprint representing global interaction dynamically.
+	pub last_edit_action: crate::editor::commands::EditAction,
 }
 
 impl Editor {
@@ -175,6 +177,7 @@ impl Editor {
 			last_screen: None,
 			theme: std::sync::Arc::new(crate::ui::theme::Theme::default(is_light_bg)),
 			locale: Box::new(crate::ui::i18n::EnglishLocale),
+			last_edit_action: crate::editor::commands::EditAction::Other,
 		}
 	}
 
@@ -380,6 +383,19 @@ impl Editor {
 
 	/// Execute a command.
 	pub fn execute(&mut self, cmd: Command) {
+		let action = match &cmd {
+			Command::InsertChar(ch) if ch.is_whitespace() || ch.is_ascii_punctuation() => crate::editor::commands::EditAction::Whitespace,
+			Command::InsertChar(_) | Command::InsertTab | Command::Paste | Command::Dedent | Command::InsertString(_) => crate::editor::commands::EditAction::Insert,
+			Command::InsertNewline => crate::editor::commands::EditAction::Whitespace,
+			Command::DeleteBackward | Command::DeleteForward | Command::DeleteLine | Command::Cut => crate::editor::commands::EditAction::Delete,
+			_ => crate::editor::commands::EditAction::Other,
+		};
+
+		if action != self.last_edit_action || action == crate::editor::commands::EditAction::Other {
+			self.buffer_mut().commit_edits();
+		}
+		self.last_edit_action = action;
+
 		match cmd {
 			// -- Motion (clears selection) --
 			Command::MoveLeft => {

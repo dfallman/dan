@@ -32,6 +32,8 @@ pub struct Config {
 	pub show_lang: bool,
 	/// How many lines to jump for fast scroll navigation (Ctrl+Shift+Up/Down)
 	pub fast_scroll_steps: usize,
+	/// Show the full path in the status bar instead of just the filename
+	pub show_full_path: bool,
 	/// Automatically insert closing brackets and quotes
 	pub auto_close: bool,
 	/// Show comments in italics natively.
@@ -59,6 +61,7 @@ impl Default for Config {
 			show_help: true,
 			show_encoding: true,
 			show_lang: true,
+			show_full_path: false,
 			fast_scroll_steps: 10,
 			auto_close: true,
 			comments_are_italics: false,

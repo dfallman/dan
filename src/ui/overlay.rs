@@ -104,7 +104,7 @@ impl OverlayBuilder {
                             text: take_str,
                             fg: frag.fg,
                             bg: frag.bg,
-                            is_flex: false,
+                            is_flex: false, is_bold: false,
                         });
                         
                         current_x += take_len as u16;
@@ -131,7 +131,7 @@ impl OverlayBuilder {
                 windows.push(self.emit_row(current_row_fragments, width, 0, None, windows.is_empty()));
                 current_row_fragments = Vec::new();
             }
-            current_row_fragments.push(UiFragment { text: String::new(), fg: self.flex_bg, bg: self.flex_bg, is_flex: true });
+            current_row_fragments.push(UiFragment { text: String::new(), fg: self.flex_bg, bg: self.flex_bg, is_flex: true, is_bold: false });
             current_row_fragments.push(t);
             windows.push(self.emit_row(current_row_fragments, width, 0, None, windows.is_empty()));
         } else if !current_row_fragments.is_empty() || windows.is_empty() {
@@ -172,7 +172,7 @@ impl OverlayBuilder {
                 text: String::new(),
                 fg: bg,
                 bg: bg,
-                is_flex: true,
+                is_flex: true, is_bold: false,
             });
         }
 
