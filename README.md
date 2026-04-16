@@ -8,8 +8,7 @@ We've built Dan to handle very large files and complex editing tasks while remai
 
 Dan works in most terminal emulator environments, whether you're using macOS, Linux, or Windows.
 
-
-<img width="3584" height="2036" alt="CleanShot 2026-04-06 at 15 01 18@2x" src="https://github.com/user-attachments/assets/bb923556-50f5-439d-b745-6ca87344b607" />
+<img width="2080" height="1610" alt="CleanShot 2026-04-16 at 15 19 44@2x" src="https://github.com/user-attachments/assets/f356397d-e24c-40fc-86fd-932ab7c45017" />
 
 # Quick install
 Install/update to latest version of [Rust](https://rustup.rs/)
@@ -186,6 +185,7 @@ Out of the box, Dan follows a layered configuration model, but is project-aware.
 ### Project-aware styling
 ...however, Dan understands that different projects have different rules. Whenever you open a file, Dan automatically scans for local `.editorconfig` guidelines. It also automatically parses your project's specific styling rules—like tab sizes, space preferences, trailing whitespace rules, and line endings—and automatically prioritizes them over your global defaults. The idea is that you should never have to manually adjust your editor just to contribute to a new project. Also, you'll not drive your collaborators nuts by consistently using your preferred indentation or line endings (although, as we all know, Tab and 4 spaces are the only acceptable indentation options. That's why they're the defaults).
 
+<img width="2080" height="1610" alt="CleanShot 2026-04-16 at 15 19 24@2x" src="https://github.com/user-attachments/assets/81620335-6df2-494c-ad9c-dca863df526e" />
 
 ## Global config
 
