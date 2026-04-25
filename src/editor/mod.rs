@@ -128,7 +128,7 @@ impl Editor {
 		if config.comments_are_italics {
 			use syntect::highlighting::{FontStyle, ScopeSelectors, StyleModifier, ThemeItem};
 			use std::str::FromStr;
-			
+
 			if let Ok(scope) = ScopeSelectors::from_str("comment") {
 				highlighter.theme.scopes.push(ThemeItem {
 					scope,
@@ -138,6 +138,33 @@ impl Editor {
 						font_style: Some(FontStyle::ITALIC),
 					},
 				});
+			}
+		}
+
+		// Force markdown emphasis scopes to render with the corresponding font style,
+		// regardless of whether the active theme defines font_style on these scopes.
+		// Mirrors the comments_are_italics pattern above.
+		{
+			use syntect::highlighting::{FontStyle, ScopeSelectors, StyleModifier, ThemeItem};
+			use std::str::FromStr;
+
+			let md_scopes: &[(&str, FontStyle)] = &[
+				("markup.bold", FontStyle::BOLD),
+				("markup.italic", FontStyle::ITALIC),
+				("markup.heading", FontStyle::BOLD),
+				("markup.underline", FontStyle::UNDERLINE),
+			];
+			for (sel, fs) in md_scopes {
+				if let Ok(scope) = ScopeSelectors::from_str(sel) {
+					highlighter.theme.scopes.push(ThemeItem {
+						scope,
+						style: StyleModifier {
+							foreground: None,
+							background: None,
+							font_style: Some(*fs),
+						},
+					});
+				}
 			}
 		}
 
