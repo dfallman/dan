@@ -24,7 +24,7 @@ fn syntax_colors_for_line(
 	editor: &Editor,
 	hi: &mut HighlightLines<'_>,
 	line_text: &str,
-) -> Vec<(Color, bool, bool)> {
+) -> Vec<(Color, bool, bool, bool)> {
 	if !editor.config.syntax_highlight {
 		return Vec::new();
 	}
@@ -32,13 +32,14 @@ fn syntax_colors_for_line(
 		.highlight_line(line_text, &editor.highlighter.syntax_set)
 		.unwrap_or_default();
 
-	let mut colors: Vec<(Color, bool, bool)> = Vec::with_capacity(line_text.len());
+	let mut colors: Vec<(Color, bool, bool, bool)> = Vec::with_capacity(line_text.len());
 	for (style, fragment) in &ranges {
 		let fg = syntect_to_crossterm(style.foreground);
 		let bold = style.font_style.contains(FontStyle::BOLD);
 		let italic = style.font_style.contains(FontStyle::ITALIC);
+		let underline = style.font_style.contains(FontStyle::UNDERLINE);
 		for _ in fragment.chars() {
-			colors.push((fg, bold, italic));
+			colors.push((fg, bold, italic, underline));
 		}
 	}
 	colors
@@ -47,11 +48,11 @@ fn syntax_colors_for_line(
 /// Look up the syntax color for a character at `char_idx`.
 /// Falls back to `Color::Reset` if the index is out of range or the map is empty.
 #[inline]
-fn syntax_fg(colors: &[(Color, bool, bool)], char_idx: usize) -> (Color, bool, bool) {
+fn syntax_fg(colors: &[(Color, bool, bool, bool)], char_idx: usize) -> (Color, bool, bool, bool) {
 	colors
 		.get(char_idx)
 		.copied()
-		.unwrap_or((Color::Reset, false, false))
+		.unwrap_or((Color::Reset, false, false, false))
 }
 
 /// Calculate a subtle active line highlight background dynamically derived from
@@ -185,28 +186,33 @@ pub fn render_wrap(
 					.map(|(i, _)| *i == editor.search_match_idx)
 					.unwrap_or(false);
 				let in_search = search_hit.is_some();
-				let (cur_syn_fg, cur_syn_bold, cur_syn_italic) = syntax_fg(&syn_colors, char_idx);
+				let (cur_syn_fg, cur_syn_bold, cur_syn_italic, cur_syn_underline) =
+					syntax_fg(&syn_colors, char_idx);
 
 				if want_sel {
 					screen.set_bg(editor.theme.selection_bg);
 					screen.set_fg(editor.theme.selection_fg);
 					screen.bold = cur_syn_bold;
 					screen.italic = cur_syn_italic;
+					screen.underline = cur_syn_underline;
 				} else if is_current_match {
 					screen.set_bg(editor.theme.active_match_bg);
 					screen.set_fg(editor.theme.active_match_fg);
 					screen.bold = cur_syn_bold;
 					screen.italic = cur_syn_italic;
+					screen.underline = cur_syn_underline;
 				} else if in_search {
 					screen.set_bg(editor.theme.match_bg);
 					screen.set_fg(editor.theme.match_fg);
 					screen.bold = cur_syn_bold;
 					screen.italic = cur_syn_italic;
+					screen.underline = cur_syn_underline;
 				} else {
 					screen.set_bg(base_bg);
 					screen.set_fg(cur_syn_fg);
 					screen.bold = cur_syn_bold;
 					screen.italic = cur_syn_italic;
+					screen.underline = cur_syn_underline;
 				}
 
 				if ch == '\t' {
@@ -354,28 +360,33 @@ pub fn render_nowrap(
 					.map(|(i, _)| *i == editor.search_match_idx)
 					.unwrap_or(false);
 				let in_search = search_hit.is_some();
-				let (cur_syn_fg, cur_syn_bold, cur_syn_italic) = syntax_fg(&syn_colors, char_idx);
+				let (cur_syn_fg, cur_syn_bold, cur_syn_italic, cur_syn_underline) =
+					syntax_fg(&syn_colors, char_idx);
 
 				if want_sel {
 					screen.set_bg(editor.theme.selection_bg);
 					screen.set_fg(editor.theme.selection_fg);
 					screen.bold = cur_syn_bold;
 					screen.italic = cur_syn_italic;
+					screen.underline = cur_syn_underline;
 				} else if is_current_match {
 					screen.set_bg(editor.theme.active_match_bg);
 					screen.set_fg(editor.theme.active_match_fg);
 					screen.bold = cur_syn_bold;
 					screen.italic = cur_syn_italic;
+					screen.underline = cur_syn_underline;
 				} else if in_search {
 					screen.set_bg(editor.theme.match_bg);
 					screen.set_fg(editor.theme.match_fg);
 					screen.bold = cur_syn_bold;
 					screen.italic = cur_syn_italic;
+					screen.underline = cur_syn_underline;
 				} else {
 					screen.set_bg(base_bg);
 					screen.set_fg(cur_syn_fg);
 					screen.bold = cur_syn_bold;
 					screen.italic = cur_syn_italic;
+					screen.underline = cur_syn_underline;
 				}
 
 				if ch == '\t' {
