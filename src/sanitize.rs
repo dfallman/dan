@@ -41,33 +41,30 @@ pub fn is_control_char(ch: char) -> bool {
 
 /// Sanitize a single character for safe terminal display.
 ///
-/// Returns (display_char, is_sanitized) where:
-/// - display_char is the character to show (may be substituted)
-/// - is_sanitized is true if the character was replaced
+/// Returns `(display_char, is_sanitized)`. The renderer styles sanitized
+/// cells distinctly (magenta + bold) so they stand out from any literal
+/// instance of the substitute glyph the user might have typed.
+///
+/// C0 controls (U+0000..U+001F, except tab/newline/CR which pass through)
+/// map 1:1 onto the Unicode "Control Pictures" block U+2400..U+241F so
+/// each substitution remains a single column wide. DEL maps to U+2421
+/// (SYMBOL FOR DELETE). C1 controls and Unicode bidi formatting map to
+/// the middle-dot `·` — there is no symmetric Unicode block for them.
 #[inline]
 pub fn sanitize_char(ch: char) -> (char, bool) {
-    if is_control_char(ch) {
-        let cp = ch as u32;
-        // ASCII C0 → caret notation glyphs (printable substitute).
-        if cp < 0x20 {
-            match ch {
-                '\x1b' => return ('^', true),
-                _ => {
-                    let control_char = (ch as u8 + 0x40) as char;
-                    return (control_char, true);
-                }
-            }
-        }
-        // DEL.
-        if cp == 0x7F {
-            return ('^', true);
-        }
-        // C1 controls and Unicode bidi formatting → middle dot.
-        // The Cell.sanitized flag plus the magenta+bold renderer style
-        // make these visibly distinct from real `·` characters.
-        return ('·', true);
+    if !is_control_char(ch) {
+        return (ch, false);
     }
-    (ch, false)
+    let cp = ch as u32;
+    let glyph = if cp < 0x20 {
+        // U+2400 + cp mirrors U+0000..U+001F as printable pictures.
+        char::from_u32(0x2400 + cp).unwrap_or('·')
+    } else if cp == 0x7F {
+        '\u{2421}' // SYMBOL FOR DELETE
+    } else {
+        '·'
+    };
+    (glyph, true)
 }
 
 /// Sanitize a string for safe terminal display.
@@ -119,19 +116,14 @@ mod tests {
 
     #[test]
     fn test_escape_sequence_stopped() {
-        // A file containing \x1b[2J should not clear the screen
-        // The ESC should be shown as '^' (which renders as ^[)
+        // A file containing \x1b[2J must not actually clear the screen.
         let input = "\x1b[2J\x1b[31mPWNED\x1b[0m\nhello\n";
         let (sanitized, count) = sanitize_str(input);
-        
-        // Should have sanitized the 3 ESC characters
+
         assert_eq!(count, 3);
-        
-        // Should not contain raw ESC
         assert!(!sanitized.contains('\x1b'));
-        
-        // Should contain ^ character (for ESC)
-        assert!(sanitized.contains('^'));
+        // ESC → U+241B (SYMBOL FOR ESCAPE).
+        assert!(sanitized.contains('\u{241B}'));
     }
 
     #[test]
@@ -148,10 +140,37 @@ mod tests {
         let malicious = "\x1b[31mRed\x1b[0m and \x1b[1mBold\x1b[0m";
         let clean = sanitize_paste(malicious);
 
-        // Should not have escape sequences
         assert!(!clean.contains('\x1b'));
-        // Should have ^ character (for ESC)
-        assert!(clean.contains('^'));
+        assert!(clean.contains('\u{241B}'));
+    }
+
+    #[test]
+    fn esc_and_del_are_distinct_glyphs() {
+        // Previously both mapped to '^', so a literal '^' in a file was
+        // indistinguishable from a stripped ESC or DEL.
+        let (esc_glyph, _) = sanitize_char('\x1b');
+        let (del_glyph, _) = sanitize_char('\x7f');
+        let (caret, was_sanitized) = sanitize_char('^');
+        assert_eq!(esc_glyph, '\u{241B}');
+        assert_eq!(del_glyph, '\u{2421}');
+        assert_eq!(caret, '^');
+        assert!(!was_sanitized, "literal '^' must pass through unchanged");
+        assert_ne!(esc_glyph, del_glyph);
+        assert_ne!(esc_glyph, caret);
+    }
+
+    #[test]
+    fn c0_controls_use_control_pictures_block() {
+        // U+2400 + cp for cp in 0x00..=0x1F (except tab/newline/CR which pass through).
+        for cp in 0x00u32..=0x1F {
+            let ch = char::from_u32(cp).unwrap();
+            if ch == '\t' || ch == '\n' || ch == '\r' {
+                continue;
+            }
+            let (glyph, sanitized) = sanitize_char(ch);
+            assert!(sanitized);
+            assert_eq!(glyph as u32, 0x2400 + cp, "U+{:04X} should map to U+{:04X}", cp, 0x2400 + cp);
+        }
     }
 
     #[test]

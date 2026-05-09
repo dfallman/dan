@@ -162,14 +162,33 @@ impl Buffer {
 		text
 	}
 
+	/// Encode `text` using this buffer's stored encoding. Refuses if the
+	/// encoding cannot losslessly represent every character — silently
+	/// substituting `?` (encoding_rs's default) would corrupt the user's
+	/// file (D4.5).
+	fn encode_for_save(&self, text: &str) -> io::Result<Vec<u8>> {
+		let (encoded_bytes, _, had_unmappable) = self.encoding.encode(text);
+		if had_unmappable {
+			return Err(io::Error::new(
+				io::ErrorKind::InvalidData,
+				format!(
+					"Save aborted: file contains characters that cannot be represented in {}. \
+					 Use Save As to write a UTF-8 copy.",
+					self.encoding.name()
+				),
+			));
+		}
+		Ok(encoded_bytes.into_owned())
+	}
+
 	/// Save the buffer to its current file path. Uses temp-file + rename so
 	/// a partial write (disk-full, crash, kill mid-write) cannot corrupt the
 	/// on-disk file.
 	pub fn save(&mut self, config: &crate::config::Config) -> io::Result<()> {
 		if let Some(ref path) = self.file_path {
 			let text = self.prepare_save_text(config);
-			let (encoded_bytes, _, _) = self.encoding.encode(&text);
-			crate::atomic_io::write(path, encoded_bytes.as_ref())?;
+			let encoded_bytes = self.encode_for_save(&text)?;
+			crate::atomic_io::write(path, &encoded_bytes)?;
 
 			if let Some(ref swp) = self.swp_path {
 				crate::recovery::cleanup_swap(swp);
@@ -188,8 +207,8 @@ impl Buffer {
 	/// temp+rename strategy as `save`.
 	pub fn save_to(&mut self, path: &Path, config: &crate::config::Config) -> io::Result<()> {
 		let text = self.prepare_save_text(config);
-		let (encoded_bytes, _, _) = self.encoding.encode(&text);
-		crate::atomic_io::write(path, encoded_bytes.as_ref())?;
+		let encoded_bytes = self.encode_for_save(&text)?;
+		crate::atomic_io::write(path, &encoded_bytes)?;
 		self.file_path = Some(path.to_path_buf());
 
 		if let Some(ref swp) = self.swp_path {
@@ -361,6 +380,41 @@ mod tests {
 
 		b.delete_range(0, 1);
 		assert_eq!(b.version, 5);
+	}
+
+	#[test]
+	fn save_refuses_when_encoding_cannot_represent_content() {
+		// D4.5 regression: encoding_rs replaces unmappable chars with '?'
+		// silently. We must refuse the save instead.
+		let mut b = Buffer::new();
+		b.encoding = encoding_rs::WINDOWS_1252;
+		let mut tmp = std::env::temp_dir();
+		tmp.push(format!("dan_d45_test_{}.txt", std::process::id()));
+		b.file_path = Some(tmp.clone());
+
+		// '🌍' is not representable in Windows-1252.
+		b.insert_str(0, "hello 🌍");
+
+		let cfg = crate::config::Config::default();
+		let result = b.save(&cfg);
+		assert!(result.is_err(), "save should refuse unmappable chars");
+		assert!(!tmp.exists(), "no file should be written when save refuses");
+	}
+
+	#[test]
+	fn save_succeeds_when_encoding_can_represent_content() {
+		let mut b = Buffer::new();
+		b.encoding = encoding_rs::WINDOWS_1252;
+		let mut tmp = std::env::temp_dir();
+		tmp.push(format!("dan_d45_ok_{}.txt", std::process::id()));
+		b.file_path = Some(tmp.clone());
+		b.insert_str(0, "hello world");
+
+		let cfg = crate::config::Config::default();
+		assert!(b.save(&cfg).is_ok());
+		let written = std::fs::read(&tmp).unwrap();
+		assert_eq!(written, b"hello world");
+		std::fs::remove_file(&tmp).unwrap();
 	}
 
 	#[test]
