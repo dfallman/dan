@@ -90,7 +90,7 @@ impl Editor {
 
 		self.buffer_mut().text.remove(above_start..cur_end);
 		self.buffer_mut().text.insert_str(above_start, &new_text);
-		self.buffer_mut().dirty = true;
+		self.buffer_mut().mark_mutated();
 
 		self.cursors.set_cursor(line - 1, col);
 	}
@@ -131,7 +131,7 @@ impl Editor {
 
 		self.buffer_mut().text.remove(cur_start..below_end);
 		self.buffer_mut().text.insert_str(cur_start, &new_text);
-		self.buffer_mut().dirty = true;
+		self.buffer_mut().mark_mutated();
 
 		self.cursors.set_cursor(line + 1, col);
 	}
@@ -181,7 +181,7 @@ impl Editor {
 
 		self.buffer_mut().text.remove(above_start..block_end);
 		self.buffer_mut().text.insert_str(above_start, &new_text);
-		self.buffer_mut().dirty = true;
+		self.buffer_mut().mark_mutated();
 
 		// Shift both anchor and head up by one line to follow the block.
 		let sel = self.cursors.primary_mut();
@@ -231,7 +231,7 @@ impl Editor {
 
 		self.buffer_mut().text.remove(block_start..below_end);
 		self.buffer_mut().text.insert_str(block_start, &new_text);
-		self.buffer_mut().dirty = true;
+		self.buffer_mut().mark_mutated();
 
 		// Shift both anchor and head down by one line to follow the block.
 		let sel = self.cursors.primary_mut();
@@ -239,72 +239,4 @@ impl Editor {
 		sel.head.line += 1;
 	}
 
-	/// Sanitize pasted / externally-sourced text.
-	///
-	/// Strips:
-	///  - HTML / XML tags  (e.g. `<span style="...">`, `</p>`, `<br/>`)
-	///  - Carriage returns  (`\r`) — we normalise to Unix `\n`.
-	///  - Zero-width chars  (U+200B .. U+200F, U+FEFF BOM, U+2060 WJ).
-	pub(crate) fn sanitize_paste(text: &str) -> String {
-		// 1. Normalise line endings.
-		let text = text.replace("\r\n", "\n").replace('\r', "\n");
-
-		// 2. Strip HTML/XML tags with a simple state machine.
-		//    This handles `<tag attr="...">`, `</tag>`, `<br/>`,
-		//    and also strips `&nbsp;` → space.
-		let mut out = String::with_capacity(text.len());
-		let mut in_tag = false;
-		let mut chars = text.chars().peekable();
-
-		while let Some(ch) = chars.next() {
-			if ch == '<' {
-				in_tag = true;
-				continue;
-			}
-			if ch == '>' && in_tag {
-				in_tag = false;
-				continue;
-			}
-			if in_tag {
-				continue;
-			}
-
-			// Decode common HTML entities.
-			if ch == '&' {
-				let entity: String = chars.by_ref().take_while(|c| *c != ';').collect();
-				match entity.as_str() {
-					"nbsp" => out.push(' '),
-					"amp" => out.push('&'),
-					"lt" => out.push('<'),
-					"gt" => out.push('>'),
-					"quot" => out.push('"'),
-					"apos" => out.push('\''),
-					"tab" => out.push('\t'),
-					_ => {
-						// Unknown entity — preserve as-is.
-						out.push('&');
-						out.push_str(&entity);
-						out.push(';');
-					}
-				}
-				continue;
-			}
-
-			// 3. Strip zero-width / invisible unicode characters.
-			match ch {
-				'\u{200B}' // zero-width space
-				| '\u{200C}' // zero-width non-joiner
-				| '\u{200D}' // zero-width joiner
-				| '\u{200E}' // LTR mark
-				| '\u{200F}' // RTL mark
-				| '\u{FEFF}' // BOM / zero-width no-break space
-				| '\u{2060}' // word joiner
-				| '\u{00AD}' // soft hyphen
-				=> continue,
-				_ => out.push(ch),
-			}
-		}
-
-		out
-	}
 }

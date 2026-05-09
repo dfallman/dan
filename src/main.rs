@@ -20,10 +20,12 @@
 	
 mod buffer;
 mod config;
+mod atomic_io;
 mod editor;
 mod input;
 pub mod recovery;
 mod render;
+mod sanitize;
 mod syntax;
 pub mod ui;
 mod utils;
@@ -172,9 +174,9 @@ fn run_loop(editor: &mut Editor, writer: &mut BufWriter<io::Stdout>) -> io::Resu
 		let cmd = input::map_event(&evt, editor.mode);
 		editor.execute(cmd);
 
-		// Drain any additional buffered events with a small micro-timeout.
-		// This collapses rapid bursts of key events (e.g. fast typing
-		// or continuous scrolling) into a single render pass securely.
+		// Drain extra buffered events with a 5ms micro-timeout so a burst
+		// of key events (fast typing, continuous scrolling) collapses into
+		// one render pass.
 		while event::poll(Duration::from_millis(5))? {
 			let evt = event::read()?;
 			if matches!(evt, Event::Key(_) | Event::Paste(_))

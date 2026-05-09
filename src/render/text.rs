@@ -55,13 +55,9 @@ fn syntax_fg(colors: &[(Color, bool, bool, bool)], char_idx: usize) -> (Color, b
 		.unwrap_or((Color::Reset, false, false, false))
 }
 
-/// Calculate a subtle active line highlight background dynamically derived from
-/// the theme's default background luminance. This safely avoids garish active
-/// line colors defined by eccentric theme authors.
-
-/// Render text lines in wrap mode (soft-wrap).
-///
-/// Each buffer line may occupy multiple screen rows.
+/// Render text lines in wrap mode (soft-wrap). Each buffer line may occupy
+/// multiple screen rows.
+#[allow(clippy::too_many_arguments)]
 pub fn render_wrap(
 	editor: &Editor,
 	screen: &mut super::buffer::ScreenBuffer,
@@ -264,6 +260,7 @@ pub fn render_wrap(
 }
 
 /// Render text lines in no-wrap mode (horizontal scroll).
+#[allow(clippy::too_many_arguments)]
 pub fn render_nowrap(
 	editor: &Editor,
 	screen: &mut super::buffer::ScreenBuffer,

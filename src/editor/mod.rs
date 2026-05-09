@@ -58,9 +58,9 @@ pub struct Editor {
 	pub show_help: bool,
 	/// Current search query string (populated during search mode).
 	pub search_query: String,
-	/// Target query string globally tracked for replace execution limits.
+	/// Pattern entered in the replace prompt's first step.
 	pub replace_query: String,
-	/// Target format payload tracking during step bindings natively.
+	/// Replacement text entered in the replace prompt's second step.
 	pub replace_with: String,
 	/// All current matches as (start_char, end_char) pairs.
 	pub search_matches: Vec<(usize, usize)>,
@@ -81,19 +81,25 @@ pub struct Editor {
 	pub prompt_view_start: std::cell::Cell<usize>,
 	/// Path pending overwrite confirmation.
 	pub save_as_pending_path: Option<String>,
-	/// Asynchronous background process payload receiver for formatting hooks.
+	/// Receiver for the result of an in-flight async formatter run.
 	pub fmt_rx: Option<std::sync::mpsc::Receiver<Result<String, String>>>,
-	/// Internal execution tag denoting background formatter blocks exclusively.
+	/// True while a formatter run is in flight.
 	pub is_formatting: bool,
-	/// Tracker storing elapsed time bounds handling the async 5s Auto-Save shadow thread natively.
+	/// `Buffer::version` captured when the formatter was spawned. On result
+	/// arrival, if the buffer's current version differs the result is
+	/// discarded — the user typed during the format and the diff would
+	/// otherwise misattribute their keystrokes (R3.3).
+	pub fmt_baseline_version: Option<u64>,
+	/// Timestamp of the last autosave run; gates the 5-second autosave cadence.
 	pub last_autosave: std::time::Instant,
-	/// Active rendering double-buffer tracking stateful matrices natively isolating ANSI boundaries.
+	/// Previous frame's screen buffer; used by the differential renderer.
 	pub last_screen: Option<crate::render::buffer::ScreenBuffer>,
-	/// System UI component styling logic mapping bounds cleanly defining global presentation values.
+	/// Active UI theme.
 	pub theme: std::sync::Arc<crate::ui::theme::Theme>,
-	/// Bound thread-safe string localization parameters wrapping global dictionaries completely securely across instances.
+	/// Active UI locale.
 	pub locale: Box<dyn crate::ui::i18n::Locale>,
-	/// Internal execution pipeline structural state retaining the context footprint representing global interaction dynamically.
+	/// Kind of the most recent edit; used to group consecutive same-kind
+	/// edits into a single undo step.
 	pub last_edit_action: crate::editor::commands::EditAction,
 }
 
@@ -102,10 +108,10 @@ impl Editor {
 		let (tw, th) = terminal::size().unwrap_or((80, 24));
 		let config = Config::load();
 		
-		// The macOS main thread strictly limits execution stack depth natively to 8MB.
-		// In `--release` builds, traversing the `syntect` static binary payload via LLVM optimization 
-		// instantly unwinds natively generating a `SIGKILL (Killed 9)` crash. 
-		// Initializing it within a localized 32MB stack-bound securely bypasses Apple Silicon's hard limit!
+		// macOS limits the main-thread stack to 8 MB. In release builds,
+		// syntect's syntax-set initialization can blow that and SIGKILL the
+		// process. Spawn a dedicated 32 MB-stack thread and join it so the
+		// expensive initialization happens off the main thread.
 		let mode = terminal_colorsaurus::theme_mode(terminal_colorsaurus::QueryOptions::default()).unwrap_or(terminal_colorsaurus::ThemeMode::Dark);
 		let is_light_bg = mode == terminal_colorsaurus::ThemeMode::Light;
 
@@ -200,6 +206,7 @@ impl Editor {
 			save_as_pending_path: None,
 			fmt_rx: None,
 			is_formatting: false,
+			fmt_baseline_version: None,
 			last_autosave: std::time::Instant::now(),
 			last_screen: None,
 			theme: std::sync::Arc::new(crate::ui::theme::Theme::default(is_light_bg)),
@@ -208,7 +215,10 @@ impl Editor {
 		}
 	}
 
-	/// Evaluates unbound background systems actively verifying task payload receptions cleanly.
+	/// Drive periodic background work: writes the autosave swap-file when
+	/// the buffer has been dirty for ≥5s, and applies any in-flight
+	/// formatter result that's now ready. Returns true if any work was
+	/// performed (signalling the caller to re-render).
 	pub fn poll_async_tasks(&mut self) -> bool {
 		let mut did_work = false;
 
@@ -229,7 +239,14 @@ impl Editor {
 			if let Ok(res) = rx.try_recv() {
 				self.is_formatting = false;
 				self.fmt_rx = None;
+				let baseline = self.fmt_baseline_version.take();
+				let buffer_changed = baseline
+					.map(|v| v != self.buffer().version)
+					.unwrap_or(false);
 				match res {
+					Ok(_) if buffer_changed => {
+						self.set_status("Formatter result discarded — buffer changed during format");
+					}
 					Ok(formatted_text) => {
 						let content = self.buffer().text.to_string_full();
 						let content_chars: Vec<char> = content.chars().collect();
@@ -313,12 +330,12 @@ impl Editor {
 		&mut self.buffers[self.active_buffer]
 	}
 
-	/// Returns the effective tab width natively structurally mapped logically globally.
+	/// The configured tab display width (columns).
 	pub fn tab_width(&self) -> usize {
 		self.config.tab_width
 	}
 
-	/// Returns the effective expand_tab setting natively tracking global bounds cleanly.
+	/// Whether Tab inserts spaces (true) or a literal tab (false).
 	pub fn expand_tab(&self) -> bool {
 		self.config.expand_tab
 	}
@@ -364,7 +381,7 @@ impl Editor {
 			(l, l)
 		};
 
-		// Check if ALL non-empty lines already start with the comment prefix natively ignoring whitespace buffers
+		// Toggle is uncomment-if-all-already-commented, else comment-all.
 		let mut all_commented = true;
 		for line_idx in start_line..=end_line {
 			let line_text: String = self.buffer().text.line_slice(line_idx).chars().collect();
@@ -377,7 +394,7 @@ impl Editor {
 			}
 		}
 
-		// Apply toggle synchronously iterating in reverse to protect positional string mutations dynamically mapped down buffer
+		// Iterate bottom-up so each insert/remove leaves earlier line offsets intact.
 		for line_idx in (start_line..=end_line).rev() {
 			let line_text: String = self.buffer().text.line_slice(line_idx).chars().collect();
 			let stripped = line_text.trim_start();
@@ -390,7 +407,7 @@ impl Editor {
 			let insert_pos = self.buffer().text.line_to_char(line_idx) + indent_len;
 
 			if all_commented {
-				// Strip prefix (+ physically bound contextual whitespace logically attached)
+				// Also consume the space we inserted alongside the prefix, if present.
 				let to_remove = if stripped.starts_with(&format!("{} ", prefix)) {
 					prefix.chars().count() + 1
 				} else {
@@ -399,7 +416,6 @@ impl Editor {
 				self.buffer_mut()
 					.delete_range(insert_pos, insert_pos + to_remove);
 			} else {
-				// Inject comment natively pushing boundaries
 				self.buffer_mut()
 					.insert_str(insert_pos, &format!("{} ", prefix));
 			}
@@ -573,15 +589,15 @@ impl Editor {
 			Command::SelectLineEnd => {
 				self.begin_selection_if_needed();
 				let c = self.cursors.cursor();
-				let _len = self.line_len_no_newline(c.line);
-				let line_text = self.buffer().text.line_slice(c.line);
 				let len = self.line_len_no_newline(c.line);
-				self.cursors.primary_mut().head.desired_vcol =
-					crate::editor::visual_col::visual_col_at(
-						line_text.chars(),
-						len,
-						self.tab_width(),
-					);
+				let tab_w = self.tab_width();
+				let vcol = crate::editor::visual_col::visual_col_at(
+					self.buffer().text.line_slice(c.line).chars(),
+					len,
+					tab_w,
+				);
+				self.cursors.primary_mut().head.set_col(len);
+				self.cursors.primary_mut().head.desired_vcol = vcol;
 			}
 			Command::SelectAll => {
 				let last_line = self.buffer().line_count().saturating_sub(1);
@@ -613,7 +629,6 @@ impl Editor {
 						let wrapped = format!("{}{}{}", open, text, close);
 						self.buffer_mut().insert_str(start, &wrapped);
 
-						// Maintain highlight selection bounding directly across the structurally wrapped characters
 						let new_end = start + wrapped.len();
 						let end_line = self.buffer().text.char_to_line(new_end);
 						let end_col = new_end - self.buffer().text.line_to_char(end_line);
@@ -682,11 +697,8 @@ impl Editor {
 			Command::InsertString(ref s) => {
 				self.delete_selection_if_active();
 				if !s.is_empty() {
-					let clean = Self::sanitize_paste(s);
 					let pos = self.cursor_char_pos();
-					let char_count = clean.chars().count();
-					self.buffer_mut().insert_str(pos, &clean);
-					// Move cursor to end of inserted text
+					let char_count = self.buffer_mut().insert_paste(pos, s);
 					let new_pos = pos + char_count;
 					let new_line = self.buffer().text.char_to_line(new_pos);
 					let new_col = new_pos - self.buffer().text.line_to_char(new_line);
@@ -813,7 +825,8 @@ impl Editor {
 				}
 				self.buffer_mut().commit_edits();
 
-				// Safely adjust selection boundary tracking dynamically
+				// Adjust the selection's anchor/head columns to compensate
+				// for the chars we just removed from each line.
 				let p = self.cursors.primary_mut();
 				for (line_idx, remove) in removals {
 					if p.anchor.line == line_idx {
@@ -846,7 +859,7 @@ impl Editor {
 									_ => false,
 								};
 								if is_pair {
-									// Delete the trailing character too explicitly natively mapping frictionless IDE deletion
+									// Auto-close pair: delete the closing char too.
 									self.buffer_mut().delete_char(pos);
 								}
 							}
@@ -1003,10 +1016,7 @@ impl Editor {
 
 				if !text.is_empty() {
 					let pos = self.cursor_char_pos();
-					let clean = Self::sanitize_paste(&text);
-					let char_count = clean.chars().count();
-					self.buffer_mut().insert_str(pos, &clean);
-					// Move cursor to end of pasted text
+					let char_count = self.buffer_mut().insert_paste(pos, &text);
 					let new_pos = pos + char_count;
 					let new_line = self.buffer().text.char_to_line(new_pos);
 					let new_col = new_pos - self.buffer().text.line_to_char(new_line);
@@ -1023,12 +1033,11 @@ impl Editor {
 				}
 			}
 			Command::ReplaceDeleteChar => {
-				if self.mode == Mode::ReplacingWith {
-					if self.prompt_cursor > 0 {
+				if self.mode == Mode::ReplacingWith
+					&& self.prompt_cursor > 0 {
 						self.prompt_cursor -= 1;
 						self.replace_with.remove(self.prompt_cursor);
 					}
-				}
 			}
 			Command::ReplaceWithConfirm => {
 				if self.search_matches.is_empty() {
@@ -1079,8 +1088,9 @@ impl Editor {
 				self.buffer_mut().commit_edits(); // Explicit history block grouping
 				let replacement = self.replace_with.clone();
 
-				// Execute backwards to trivially retain string indexing locations dynamically
-				// Slicing from current index ensures we never retro-actively mangle skipped `(n)o` instances
+				// Iterate end-to-start so each replace leaves earlier match
+				// offsets intact. Start from search_match_idx so already-skipped
+				// (`n`-answered) matches stay untouched.
 				let pending_matches = self.search_matches[self.search_match_idx..].to_vec();
 				for &(start, end) in pending_matches.iter().rev() {
 					self.buffer_mut().delete_range(start, end);
@@ -1131,10 +1141,7 @@ impl Editor {
 				}
 			}
 			Command::SearchInsertChar(ch) => {
-				// We assume ASCII/simple UTF-8 char indexing for simple inputs.
-				// A true robust implementation tracks char indices, but dan currently uses byte-level `.insert` or `.remove` 
-				// when handling simple characters or we can convert to chars and back.
-				// Let's use `chars()` to guarantee UTF-8 mapping limits accurately natively gracefully:
+				// Insert by char index (not byte index) so multibyte input works.
 				let mut chars: Vec<char> = self.search_query.chars().collect();
 				chars.insert(self.prompt_cursor, ch);
 				self.search_query = chars.into_iter().collect();
@@ -1422,6 +1429,7 @@ impl Editor {
 				crate::editor::formatter::spawn_formatter(ext_str, content, tx);
 
 				self.fmt_rx = Some(rx);
+				self.fmt_baseline_version = Some(self.buffer().version);
 				self.is_formatting = true;
 				self.set_status("Formatting...");
 			}
@@ -1431,7 +1439,7 @@ impl Editor {
 						let len = self.buffer().text.len_chars();
 						self.buffer_mut().delete_range(0, len);
 						self.buffer_mut().insert_str(0, &payload);
-						self.buffer_mut().dirty = true;
+						self.buffer_mut().mark_mutated();
 					}
 					crate::recovery::cleanup_swap(&swp);
 				}

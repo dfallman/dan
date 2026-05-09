@@ -217,7 +217,7 @@ impl Editor {
 				}
 			}
 
-			// Phase 2: skip trailing whitespace to land cleanly on the next token
+			// Phase 2: skip trailing whitespace to land on the next token.
 			while pos < total_chars {
 				let ch = text.char_at(pos);
 				if char_class(ch) != 0 {

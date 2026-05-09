@@ -2,7 +2,9 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// Get the robust, hidden `.swp` target filepath structurally evaluated across native permissions.
+/// Path of the `.swp` crash-recovery file for `original_path`. Prefers a
+/// hidden sibling (`.foo.txt.swp`); falls back to a name-flattened entry in
+/// `$TMPDIR/dan_swaps/` when the original directory isn't writable.
 pub fn get_swap_path(original_path: &Path) -> PathBuf {
 	if let Some(file_name) = original_path.file_name() {
 		let mut swp_name = std::ffi::OsString::from(".");
@@ -22,15 +24,14 @@ pub fn get_swap_path(original_path: &Path) -> PathBuf {
 			}
 		}
 
-		// Fallback natively to OS Temp directory
+		// Fall back to $TMPDIR/dan_swaps/.
 		let mut temp_dir = env::temp_dir();
 		temp_dir.push("dan_swaps");
 		let _ = fs::create_dir_all(&temp_dir);
 
 		let flat_name = original_path
 			.to_string_lossy()
-			.replace('/', "_")
-			.replace('\\', "_");
+			.replace(['/', '\\'], "_");
 		temp_dir.push(format!("{}.swp", flat_name));
 		return temp_dir;
 	}
@@ -38,7 +39,9 @@ pub fn get_swap_path(original_path: &Path) -> PathBuf {
 	PathBuf::from(".dan.swp")
 }
 
-/// Executes a native `to_string_full()` shadow thread aggressively rendering an atomic Temp-Rename sequence preventing UI layout destruction natively.
+/// Write `content` to `swap_path` via temp + rename. Best-effort: errors
+/// are silently dropped because swap-file failures must never interrupt the
+/// user's editing session.
 pub fn write_swap_atomic(swap_path: &Path, content: &str) {
 	let mut tmp_path = swap_path.to_path_buf();
 	let tmp_ext = tmp_path
@@ -54,14 +57,14 @@ pub fn write_swap_atomic(swap_path: &Path, content: &str) {
 	}
 }
 
-/// Aggressively handles `.swp` purge hooks automatically natively whenever `Buffer` writes properly.
+/// Remove the swap file. Called after a successful save.
 pub fn cleanup_swap(swap_path: &Path) {
 	if swap_path.exists() {
 		let _ = fs::remove_file(swap_path);
 	}
 }
 
-/// Detects if a recovery payload structurally bounds the loaded schema cleanly.
+/// Returns the swap-file content if a recovery candidate exists, else None.
 pub fn check_recovery(swap_path: &Path) -> Option<String> {
 	if swap_path.exists() {
 		fs::read_to_string(swap_path).ok()

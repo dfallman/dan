@@ -7,6 +7,8 @@ use std::path::{Path, PathBuf};
 use self::history::History;
 use self::rope::TextRope;
 
+use crate::sanitize::sanitize_paste;
+
 /// A text buffer representing a file or scratch document.
 pub struct Buffer {
 	/// The text content.
@@ -17,9 +19,13 @@ pub struct Buffer {
 	pub file_path: Option<PathBuf>,
 	/// Whether the buffer has unsaved changes.
 	pub dirty: bool,
+	/// Monotonic counter incremented on every mutation. Lets async tasks
+	/// (e.g. the formatter) detect that the buffer changed underneath them
+	/// while they were running.
+	pub version: u64,
 	/// The detected byte stream character encoding of the document.
 	pub encoding: &'static encoding_rs::Encoding,
-	/// Dynamic `.swp` crash-recovery tracking pipeline securely checking OS permissions.
+	/// Path of the `.swp` crash-recovery file for this buffer, if any.
 	pub swp_path: Option<PathBuf>,
 }
 
@@ -31,6 +37,7 @@ impl Buffer {
 			history: History::new(),
 			file_path: None,
 			dirty: false,
+			version: 0,
 			encoding: encoding_rs::UTF_8,
 			swp_path: None,
 		}
@@ -47,7 +54,7 @@ impl Buffer {
 
 		let bytes = std::fs::read(path)?;
 
-		// If the file explicitly contains null bytes globally, it is functionally a binary file.
+		// Treat any file containing a NUL byte as binary; refuse to open.
 		if bytes.contains(&0) {
 			return Err(io::Error::new(
 				io::ErrorKind::InvalidData,
@@ -109,6 +116,7 @@ impl Buffer {
 			history: History::new(),
 			file_path: Some(path.to_path_buf()),
 			dirty: false,
+			version: 0,
 			encoding,
 			swp_path: None,
 		};
@@ -116,7 +124,8 @@ impl Buffer {
 		Ok((buffer, expand_tab, tab_width))
 	}
 
-	/// Prepares the output buffer recursively enforcing active configuration boundaries natively.
+	/// Materialise the buffer text and apply on-save transforms
+	/// (trim trailing whitespace, line-ending conversion).
 	pub fn prepare_save_text(&self, config: &crate::config::Config) -> String {
 		let mut text = self.text.to_string_full();
 
@@ -132,7 +141,7 @@ impl Buffer {
 						&line[..line.len() - 1]
 					};
 				}
-				processed.push_str(line.trim_end_matches(|c| c == ' ' || c == '\t'));
+				processed.push_str(line.trim_end_matches([' ', '\t']));
 				if has_cr {
 					processed.push_str("\r\n");
 				} else if has_nl {
@@ -153,12 +162,14 @@ impl Buffer {
 		text
 	}
 
-	/// Save the buffer natively enforcing active configurations structurally.
+	/// Save the buffer to its current file path. Uses temp-file + rename so
+	/// a partial write (disk-full, crash, kill mid-write) cannot corrupt the
+	/// on-disk file.
 	pub fn save(&mut self, config: &crate::config::Config) -> io::Result<()> {
 		if let Some(ref path) = self.file_path {
 			let text = self.prepare_save_text(config);
 			let (encoded_bytes, _, _) = self.encoding.encode(&text);
-			std::fs::write(path, encoded_bytes.as_ref())?;
+			crate::atomic_io::write(path, encoded_bytes.as_ref())?;
 
 			if let Some(ref swp) = self.swp_path {
 				crate::recovery::cleanup_swap(swp);
@@ -167,18 +178,18 @@ impl Buffer {
 			self.dirty = false;
 			Ok(())
 		} else {
-			Err(io::Error::new(
-				io::ErrorKind::Other,
+			Err(io::Error::other(
 				"No file path set for this buffer",
 			))
 		}
 	}
 
-	/// Save the buffer natively targeting specific path constraints implicitly rendering dependencies dynamically.
+	/// Save the buffer to a specific path (Save As). Uses the same atomic
+	/// temp+rename strategy as `save`.
 	pub fn save_to(&mut self, path: &Path, config: &crate::config::Config) -> io::Result<()> {
 		let text = self.prepare_save_text(config);
 		let (encoded_bytes, _, _) = self.encoding.encode(&text);
-		std::fs::write(path, encoded_bytes.as_ref())?;
+		crate::atomic_io::write(path, encoded_bytes.as_ref())?;
 		self.file_path = Some(path.to_path_buf());
 
 		if let Some(ref swp) = self.swp_path {
@@ -217,14 +228,30 @@ impl Buffer {
 	pub fn insert_char(&mut self, pos: usize, ch: char) {
 		self.history.start_group(&self.text);
 		self.text.insert_char(pos, ch);
-		self.dirty = true;
+		self.mark_mutated();
 	}
 
-	/// Insert a string at a char position.
+	/// Insert a string at a char position. The bytes are stored verbatim;
+	/// terminal-injection sanitization is a render-layer concern (see
+	/// `crate::sanitize` and `ScreenBuffer::put_char`). Callers handling
+	/// untrusted external content (paste, drop) must use `insert_paste` instead.
 	pub fn insert_str(&mut self, pos: usize, s: &str) {
 		self.history.start_group(&self.text);
 		self.text.insert_str(pos, s);
-		self.dirty = true;
+		self.mark_mutated();
+	}
+
+	/// Insert externally-sourced text at a char position, sanitizing
+	/// terminal-injection vectors before storage. Use this only at paste/drop
+	/// entry points; never for buffer-internal text movement. Returns the
+	/// number of chars actually inserted (after sanitization).
+	pub fn insert_paste(&mut self, pos: usize, s: &str) -> usize {
+		let clean = sanitize_paste(s);
+		let char_count = clean.chars().count();
+		self.history.start_group(&self.text);
+		self.text.insert_str(pos, &clean);
+		self.mark_mutated();
+		char_count
 	}
 
 	/// Delete a single character at a char position.
@@ -232,7 +259,7 @@ impl Buffer {
 		if pos < self.text.len_chars() {
 			self.history.start_group(&self.text);
 			self.text.remove(pos..pos + 1);
-			self.dirty = true;
+			self.mark_mutated();
 		}
 	}
 
@@ -241,7 +268,7 @@ impl Buffer {
 		if start < end && end <= self.text.len_chars() {
 			self.history.start_group(&self.text);
 			self.text.remove(start..end);
-			self.dirty = true;
+			self.mark_mutated();
 		}
 	}
 
@@ -250,25 +277,107 @@ impl Buffer {
 		self.history.commit();
 	}
 
-	/// Undo the last edit group natively locking variables securely copying bounds O(1).
+	/// Undo the last edit group.
 	pub fn undo(&mut self) {
 		if let Some(restored) = self.history.undo(self.text.clone()) {
 			self.text = restored;
-			self.dirty = true;
+			self.mark_mutated();
 		}
 	}
 
-	/// Redo the last undone edit group wrapping snapshot bounds natively securely.
+	/// Redo the last undone edit group.
 	pub fn redo(&mut self) {
 		if let Some(restored) = self.history.redo(self.text.clone()) {
 			self.text = restored;
-			self.dirty = true;
+			self.mark_mutated();
 		}
+	}
+
+	/// Mark a content mutation: bumps the dirty flag and the version
+	/// counter. Centralised so async tasks can detect "buffer changed
+	/// underneath me" via `Buffer::version`. Crate-public for call sites
+	/// that mutate `self.text` directly (e.g. line-swap in `editing.rs`).
+	#[inline]
+	pub(crate) fn mark_mutated(&mut self) {
+		self.dirty = true;
+		self.version = self.version.wrapping_add(1);
 	}
 }
 
 impl Default for Buffer {
 	fn default() -> Self {
 		Self::new()
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn insert_str_preserves_c0_bytes() {
+		// D4.8 regression: storage layer must not silently sanitize.
+		// `insert_str` is the literal-insert API and must round-trip every byte.
+		let mut b = Buffer::new();
+		b.insert_str(0, "before\x01after");
+		assert_eq!(b.text.to_string_full(), "before\x01after");
+	}
+
+	#[test]
+	fn insert_str_preserves_esc_byte() {
+		let mut b = Buffer::new();
+		b.insert_str(0, "x\x1by");
+		assert_eq!(b.text.to_string_full(), "x\x1by");
+	}
+
+	#[test]
+	fn insert_paste_sanitizes_esc() {
+		// `insert_paste` is the only API that mutates external content.
+		let mut b = Buffer::new();
+		let n = b.insert_paste(0, "x\x1by");
+		assert_eq!(n, 3);
+		// ESC becomes '^' per sanitize.rs; the contract is "no ESC in storage".
+		assert!(!b.text.to_string_full().contains('\x1b'));
+	}
+
+	#[test]
+	fn version_increments_on_each_mutation() {
+		// R3.3 regression: the formatter race detector relies on every
+		// mutation bumping `Buffer::version`.
+		let mut b = Buffer::new();
+		assert_eq!(b.version, 0);
+
+		b.insert_str(0, "hello");
+		assert_eq!(b.version, 1);
+
+		b.insert_char(5, '!');
+		assert_eq!(b.version, 2);
+
+		b.insert_paste(0, "x");
+		assert_eq!(b.version, 3);
+
+		b.delete_char(0);
+		assert_eq!(b.version, 4);
+
+		b.delete_range(0, 1);
+		assert_eq!(b.version, 5);
+	}
+
+	#[test]
+	fn version_unchanged_by_non_mutating_calls() {
+		let mut b = Buffer::new();
+		b.insert_str(0, "abc");
+		let v = b.version;
+
+		// Reading text should not bump version.
+		let _ = b.text.to_string_full();
+		let _ = b.line_count();
+		let _ = b.display_name();
+		assert_eq!(b.version, v);
+
+		// Out-of-range deletes are silent no-ops; version must not bump.
+		b.delete_char(999);
+		b.delete_range(50, 60);
+		assert_eq!(b.version, v);
 	}
 }

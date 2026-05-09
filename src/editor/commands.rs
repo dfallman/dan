@@ -110,7 +110,8 @@ pub enum Command {
 	Noop,
 }
 
-/// Natively maps bounded states corresponding to independent undo/redo footprints securely.
+/// Categorises edits for undo grouping: consecutive same-kind edits collapse
+/// into one undo step, kind-changes commit a snapshot.
 #[derive(PartialEq, Clone, Copy, Debug)]
 pub enum EditAction {
     Insert,

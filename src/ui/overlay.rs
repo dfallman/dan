@@ -171,7 +171,7 @@ impl OverlayBuilder {
             final_frags.push(UiFragment {
                 text: String::new(),
                 fg: bg,
-                bg: bg,
+                bg,
                 is_flex: true, is_bold: false,
             });
         }

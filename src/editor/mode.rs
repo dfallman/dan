@@ -15,20 +15,16 @@ pub enum Mode {
 	ConfirmQuit,
 	/// Confirming overwrite of existing file.
 	ConfirmOverwrite,
-	/// Capturing global replacement macro string.
+	/// Replace prompt: entering the replacement string.
 	ReplacingWith,
-	/// Interactive Replace confirmation step.
+	/// Replace prompt: confirming each match (y/n/a/q).
 	ReplacingStep,
-	/// Interactive `.swp` recovery lock structurally trapping users natively!
+	/// Recover-from-swap prompt: choose recover / keep-mine / discard.
 	RecoverSwap,
 }
 
 impl Mode {
-	/// Label shown in the status bar.
-
-
-
-	/// Status bar background color mapping visually cleanly to the explicit active theme contexts globally natively.
+	/// Background color used for this mode's status-bar segment.
 	pub fn color(self, theme: &crate::ui::theme::Theme) -> Color {
 		match self {
 			Mode::Editing => theme.mode_edit,

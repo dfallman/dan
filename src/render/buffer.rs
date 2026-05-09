@@ -5,6 +5,8 @@ use crossterm::{
 };
 use std::io::{self, Write};
 
+use crate::sanitize::sanitize_char;
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Cell {
 	pub ch: char,
@@ -13,6 +15,8 @@ pub struct Cell {
 	pub underline: bool,
 	pub bold: bool,
 	pub italic: bool,
+	/// True if this cell contains a sanitized control character
+	pub sanitized: bool,
 }
 
 impl Default for Cell {
@@ -24,6 +28,7 @@ impl Default for Cell {
 			underline: false,
 			bold: false,
 			italic: false,
+			sanitized: false,
 		}
 	}
 }
@@ -91,16 +96,18 @@ impl ScreenBuffer {
 	}
 
 	pub fn put_char(&mut self, ch: char) {
+		let (sanitized_ch, was_sanitized) = sanitize_char(ch);
 		if self.cursor_y < self.height && self.cursor_x < self.width {
 			let idx = (self.cursor_y as usize) * (self.width as usize) + (self.cursor_x as usize);
 			if idx < self.grid.len() {
 				self.grid[idx] = Cell {
-					ch,
+					ch: sanitized_ch,
 					fg: self.fg,
 					bg: self.bg,
 					underline: self.underline,
 					bold: self.bold,
 					italic: self.italic,
+					sanitized: was_sanitized,
 				};
 			}
 		}
@@ -189,6 +196,20 @@ impl ScreenBuffer {
 					last_italic = new_cell.italic;
 				}
 
+				// Highlight sanitized (control char) cells differently
+				if new_cell.sanitized {
+					// Use purple foreground to indicate sanitized content
+					if last_fg != Color::Magenta {
+						w.queue(SetForegroundColor(Color::Magenta))?;
+						last_fg = Color::Magenta;
+					}
+					// Also bold to make it more visible
+					if !new_cell.bold {
+						w.queue(SetAttribute(Attribute::Bold))?;
+						last_bold = true;
+					}
+				}
+
 				w.queue(style::Print(new_cell.ch))?;
 				current_x = Some(x.saturating_add(1));
 			}
@@ -198,7 +219,7 @@ impl ScreenBuffer {
 			w.queue(cursor::Hide)?;
 		} else {
 			w.queue(cursor::MoveTo(self.term_cursor_x, self.term_cursor_y))?;
-			w.queue(self.cursor_style.clone())?;
+			w.queue(self.cursor_style)?;
 			w.queue(cursor::Show)?;
 		}
 
