@@ -1,6 +1,6 @@
 [package]
 name = "dan"
-version = "0.2.61"
+version = "0.2.62"
 edition = "2021"
 authors = ["Daniel Fallman <dfallman@gmail.com>"]
 description = "Dan is a fast, friendly, and zero-fuss terminal text editor written in Rust"
@@ -31,3 +31,6 @@ editorconfig = "1.0.0"
 terminal-light = "1.8.0"
 terminal-colorsaurus = "1.0.3"
 syntect-assets = "0.23.6"
+
+[target.'cfg(unix)'.dependencies]
+signal-hook = "0.3"

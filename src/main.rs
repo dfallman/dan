@@ -37,6 +37,8 @@ use crossterm::ExecutableCommand;
 use std::env;
 use std::io::{self, BufWriter};
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
 use crate::editor::Editor;
@@ -46,6 +48,24 @@ pub const VERSION: &str = include_str!("../VERSION");
 
 /// Short git hash (embedded at compile time by build.rs).
 pub const GIT_HASH: &str = env!("GIT_HASH");
+
+/// Register handlers for SIGTERM, SIGHUP, SIGQUIT that flip the returned
+/// flag. The main loop polls this flag and triggers a graceful shutdown,
+/// ensuring the terminal is restored from raw mode + alt screen instead of
+/// being stranded after `kill` / SSH drop / parent-process exit. SIGINT is
+/// not registered here — crossterm's raw mode delivers Ctrl-C as a normal
+/// `KeyEvent` instead. On non-Unix the returned flag is never flipped.
+fn install_signal_shutdown_flag() -> io::Result<Arc<AtomicBool>> {
+	let flag = Arc::new(AtomicBool::new(false));
+	#[cfg(unix)]
+	{
+		use signal_hook::consts::{SIGHUP, SIGQUIT, SIGTERM};
+		signal_hook::flag::register(SIGTERM, Arc::clone(&flag))?;
+		signal_hook::flag::register(SIGHUP, Arc::clone(&flag))?;
+		signal_hook::flag::register(SIGQUIT, Arc::clone(&flag))?;
+	}
+	Ok(flag)
+}
 
 fn main() -> io::Result<()> {
 	let args: Vec<String> = env::args().collect();
@@ -78,6 +98,10 @@ fn main() -> io::Result<()> {
 	} else {
 		editor.set_status("dan's text editor | ^Q to quit");
 	}
+
+	// Install signal handlers BEFORE entering raw mode so a signal arriving
+	// during the next few statements still trips the cleanup path.
+	let shutdown_signal = install_signal_shutdown_flag()?;
 
 	// Set up terminal
 	let stdout = io::stdout();
@@ -118,7 +142,7 @@ fn main() -> io::Result<()> {
 		.execute(crossterm::event::EnableBracketedPaste)?;
 
 	// Main loop
-	let result = run_loop(&mut editor, &mut writer);
+	let result = run_loop(&mut editor, &mut writer, &shutdown_signal);
 
 	// Restore terminal
 	writer
@@ -138,8 +162,19 @@ fn main() -> io::Result<()> {
 	result
 }
 
-fn run_loop(editor: &mut Editor, writer: &mut BufWriter<io::Stdout>) -> io::Result<()> {
+fn run_loop(
+	editor: &mut Editor,
+	writer: &mut BufWriter<io::Stdout>,
+	shutdown_signal: &Arc<AtomicBool>,
+) -> io::Result<()> {
 	loop {
+		// A SIGTERM/SIGHUP/SIGQUIT triggers graceful shutdown via the
+		// existing terminal-restoration path in `main`. The most-recent
+		// state should already be in the autosave swap-file (5s cadence).
+		if shutdown_signal.load(Ordering::Relaxed) {
+			editor.should_quit = true;
+		}
+
 		render::render(editor, writer)?;
 
 		if editor.should_quit {
@@ -148,6 +183,10 @@ fn run_loop(editor: &mut Editor, writer: &mut BufWriter<io::Stdout>) -> io::Resu
 
 		// Wait for an event, polling async tasks continuously.
 		let evt = loop {
+			if shutdown_signal.load(Ordering::Relaxed) {
+				editor.should_quit = true;
+				return Ok(());
+			}
 			let did_work = editor.poll_async_tasks();
 			if did_work {
 				render::render(editor, writer)?;
