@@ -1,10 +1,10 @@
 use crossterm::style::Color;
 
-use syntect::easy::HighlightLines;
 use syntect::highlighting::FontStyle;
 
 use super::Viewport;
 use crate::editor::Editor;
+use crate::syntax::LineHighlighter;
 use crate::utils::char_width;
 
 /// Convert a syntect RGBA color to a crossterm Color.
@@ -22,15 +22,13 @@ fn syntect_to_crossterm(c: syntect::highlighting::Color) -> Color {
 /// trailing newlines). If highlighting is disabled, returns an empty Vec.
 fn syntax_colors_for_line(
 	editor: &Editor,
-	hi: &mut HighlightLines<'_>,
+	hi: &mut LineHighlighter<'_>,
 	line_text: &str,
 ) -> Vec<(Color, bool, bool, bool)> {
 	if !editor.config.syntax_highlight {
 		return Vec::new();
 	}
-	let ranges = hi
-		.highlight_line(line_text, &editor.highlighter.syntax_set)
-		.unwrap_or_default();
+	let ranges = hi.highlight_line(line_text, &editor.highlighter.syntax_set);
 
 	let mut colors: Vec<(Color, bool, bool, bool)> = Vec::with_capacity(line_text.len());
 	for (style, fragment) in &ranges {
@@ -77,12 +75,14 @@ pub fn render_wrap(
 	let syntax = editor
 		.highlighter
 		.detect_syntax(editor.buffer().file_path.as_deref());
-	let mut hi = HighlightLines::new(syntax, &editor.highlighter.theme);
-
-	for pre_line in 0..editor.scroll_y.min(line_count) {
-		let pre_text = editor.buffer().text.line(pre_line);
-		let _ = hi.highlight_line(&pre_text, &editor.highlighter.syntax_set);
-	}
+	let buffer_version = editor.buffer().version;
+	let mut hi = editor.highlighter.primed(
+		&editor.highlight_cache,
+		syntax,
+		editor.scroll_y.min(line_count),
+		buffer_version,
+		|line_idx| editor.buffer().text.line(line_idx),
+	);
 
 	while screen_row < text_height && buf_line < line_count {
 		let is_active = highlight_active && buf_line == cursor_line;
@@ -279,12 +279,14 @@ pub fn render_nowrap(
 	let syntax = editor
 		.highlighter
 		.detect_syntax(editor.buffer().file_path.as_deref());
-	let mut hi = HighlightLines::new(syntax, &editor.highlighter.theme);
-
-	for pre_line in 0..editor.scroll_y.min(line_count) {
-		let pre_text = editor.buffer().text.line(pre_line);
-		let _ = hi.highlight_line(&pre_text, &editor.highlighter.syntax_set);
-	}
+	let buffer_version = editor.buffer().version;
+	let mut hi = editor.highlighter.primed(
+		&editor.highlight_cache,
+		syntax,
+		editor.scroll_y.min(line_count),
+		buffer_version,
+		|line_idx| editor.buffer().text.line(line_idx),
+	);
 
 	for row in 0..text_height {
 		let line_idx = editor.scroll_y + row;

@@ -72,6 +72,10 @@ pub struct Editor {
 	last_search_query: String,
 	/// Syntax highlighter (shared across buffers).
 	pub highlighter: Highlighter,
+	/// Per-frame parse-state snapshot cache. Lives on `Editor` (not
+	/// `Highlighter`) because `ParseState` is not `Send` and `Highlighter`
+	/// is constructed in a spawned thread.
+	pub highlight_cache: std::cell::RefCell<crate::syntax::HighlightCache>,
 	/// Current input text in the go-to-line prompt.
 	pub goto_line_input: String,
 	/// Current input text in the save-as prompt.
@@ -199,6 +203,7 @@ impl Editor {
 			search_saved_cursor: None,
 			last_search_query: String::new(),
 			highlighter,
+			highlight_cache: std::cell::RefCell::new(crate::syntax::HighlightCache::new()),
 			goto_line_input: String::new(),
 			save_as_input: String::new(),
 			prompt_cursor: 0,
