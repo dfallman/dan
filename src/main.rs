@@ -103,13 +103,11 @@ fn main() -> io::Result<()> {
 	// during the next few statements still trips the cleanup path.
 	let shutdown_signal = install_signal_shutdown_flag()?;
 
-	// Set up terminal
-	let stdout = io::stdout();
-	let mut writer = BufWriter::with_capacity(64 * 1024, stdout);
-	terminal::enable_raw_mode()?;
-	writer.get_mut().execute(EnterAlternateScreen)?;
-
-	// Ensure terminal state is gracefully recovered during fatal panics
+	// Install the panic hook BEFORE enable_raw_mode so a panic between
+	// raw-mode-on and the first hook installation can no longer strand
+	// the terminal. The hook's disable_raw_mode / LeaveAlternateScreen
+	// calls are wrapped in `let _ =` and are no-ops if those modes were
+	// never entered, so installing early is safe.
 	let default_panic_hook = std::panic::take_hook();
 	std::panic::set_hook(Box::new(move |panic_info| {
 		let mut stdout = io::stdout();
@@ -134,6 +132,12 @@ fn main() -> io::Result<()> {
 		let _ = crossterm::terminal::disable_raw_mode();
 		default_panic_hook(panic_info);
 	}));
+
+	// Set up terminal
+	let stdout = io::stdout();
+	let mut writer = BufWriter::with_capacity(64 * 1024, stdout);
+	terminal::enable_raw_mode()?;
+	writer.get_mut().execute(EnterAlternateScreen)?;
 
 	// Enable bracketed paste so the terminal sends paste as a
 	// single Event::Paste(String) instead of individual key events.
@@ -182,6 +186,11 @@ fn run_loop(
 		}
 
 		// Wait for an event, polling async tasks continuously.
+		// Tight 25 ms poll while a formatter task is in flight (we want its
+		// result rendered as soon as it lands); otherwise relax to 500 ms so
+		// an idle editor isn't waking the CPU 40×/sec. Autosave (5 s cadence)
+		// is unaffected; keystrokes are delivered immediately because
+		// `event::poll` returns as soon as stdin is readable.
 		let evt = loop {
 			if shutdown_signal.load(Ordering::Relaxed) {
 				editor.should_quit = true;
@@ -192,7 +201,12 @@ fn run_loop(
 				render::render(editor, writer)?;
 			}
 
-			if event::poll(Duration::from_millis(25))? {
+			let poll_timeout = if editor.is_formatting {
+				Duration::from_millis(25)
+			} else {
+				Duration::from_millis(500)
+			};
+			if event::poll(poll_timeout)? {
 				break event::read()?;
 			}
 		};
