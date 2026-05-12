@@ -25,35 +25,35 @@ For more installation options, see [Installation](#installation).
 
 Dan uses familiar shortcuts out of the box — `Ctrl-C`/`V` to copy/paste, `Ctrl-S` to save, `Ctrl-Z`/`Y` to undo/redo, `Ctrl-Q` to quit. Press `Ctrl-H` to toggle the built-in help bar at any time.
 
-**Command palette** (`Ctrl-P`): A searchable overlay covering every editor action, all open buffers, and project files. Switch buffers, open files, or trigger any command without leaving the keyboard.
+- **Command palette** (`Ctrl-P`): A searchable overlay covering every editor action, all open buffers, and project files. Switch buffers, open files, or trigger any command without leaving the keyboard.
 
-**Multiple buffers**: Dan supports multiple open buffers simultaneously, manageable through the command palette.
+- **Multiple buffers**: Dan supports multiple open buffers simultaneously, manageable through the command palette.
 
-**Rendering**: Differential rendering — only changed cells are written to the terminal. A syntax snapshot cache (taken every 200 lines) means scrolling deep into long files stays smooth, including over slow SSH links.
+- **Rendering**: Differential rendering — only changed cells are written to the terminal. A syntax snapshot cache (taken every 200 lines) means scrolling deep into long files stays smooth, including over slow SSH links.
 
-**Text buffer**: Rope-backed, so inserts and deletes are O(log N) and memory use scales with edits rather than file size. Dan handles very large files without loading them into a flat string.
+- **Text buffer**: Rope-backed, so inserts and deletes are O(log N) and memory use scales with edits rather than file size. Dan handles very large files without loading them into a flat string.
 
-**Syntax highlighting**: Powered by [syntect](https://github.com/trishume/syntect/), with broad language support. Dan queries your terminal's background color at startup and picks a sensible default theme. Override via config or toggle with `Ctrl-T`.
+- **Syntax highlighting**: Powered by [syntect](https://github.com/trishume/syntect/), with broad language support. Dan queries your terminal's background color at startup and picks a sensible default theme. Override via config or toggle with `Ctrl-T`.
 
-**Auto-formatter** (`Ctrl-L`): Pipes the buffer through an external formatter (Prettier, Rustfmt, or Ruff) in a background thread. The result is applied only if the buffer hasn't been edited during formatting. See [Formatter](#formatter).
+- **Auto-formatter** (`Ctrl-L`): Pipes the buffer through an external formatter (Prettier, Rustfmt, or Ruff) in a background thread. The result is applied only if the buffer hasn't been edited during formatting. See [Formatter](#formatter).
 
-**Search & replace**: `Ctrl-F` to search; press `Ctrl-R` while searching to promote to find-and-replace.
+- **Search & replace**: `Ctrl-F` to search; press `Ctrl-R` while searching to promote to find-and-replace.
 
-**Atomic saves**: Saves go through a sibling temp file → fsync → rename. A crash or full disk mid-write leaves the file in its prior state rather than truncated. Original permissions and symlink targets are preserved.
+- **Atomic saves**: Saves go through a sibling temp file → fsync → rename. A crash or full disk mid-write leaves the file in its prior state rather than truncated. Original permissions and symlink targets are preserved.
 
-**Crash recovery**: Every 5 seconds, Dan writes the buffer to a hidden `.swp` file using the same safe write pattern. If the terminal crashes or SSH drops, reopening the file prompts for recovery.
+- **Crash recovery**: Every 5 seconds, Dan writes the buffer to a hidden `.swp` file using the same safe write pattern. If the terminal crashes or SSH drops, reopening the file prompts for recovery.
 
-**Unicode & CJK support**: Correct visual alignment for double-width characters and emojis.
+- **Unicode & CJK support**: Correct visual alignment for double-width characters and emojis.
 
-**OS clipboard**: Cross-platform via [arboard](https://docs.rs/arboard/latest/arboard/), with an in-memory fallback when no display server is available (e.g. headless SSH).
+- **Native OS clipboard support**: Cross-platform via [arboard](https://docs.rs/arboard/latest/arboard/), with an in-memory fallback when no display server is available (e.g. headless SSH).
 
-**Auto-pairs**: Closing brackets and quotes auto-insert on typing; typing a bracket around an active selection wraps it.
+- **Auto-pairs**: Closing brackets and quotes auto-insert on typing; typing a bracket around an active selection wraps it.
 
-**Encoding detection**: Detects legacy encodings (Shift-JIS, Windows-1252, etc.) on open, works in UTF-8, and round-trips back to the original encoding on save.
+- **File encoding detection**: Detects legacy encodings (Shift-JIS, Windows-1252, etc.) on open, works in UTF-8, and round-trips back to the original encoding on save.
 
-**Content safety**: Terminal escape sequences embedded in file content are sanitized at render time, so opening a hostile file can't write over the editor chrome or exfiltrate clipboard state.
+- **Content safety**: Terminal escape sequences embedded in file content are sanitized at render time, so opening a hostile file can't write over the editor chrome or exfiltrate clipboard state.
 
-**Layered config**: Internal defaults → `~/.config/dan/config.toml` → `.editorconfig` in the project tree. See [Configuration](#configuration).
+- **Layered config**: Internal defaults → `~/.config/dan/config.toml` → `.editorconfig` in the project tree. See [Configuration](#configuration).
 
 ## Keyboard shortcuts
 
