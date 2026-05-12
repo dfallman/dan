@@ -5,40 +5,43 @@ use crate::editor::Editor;
 impl Editor {
 	/// Move cursor horizontally by `delta` chars (-1 = left, 1 = right).
 	pub(crate) fn move_cursor_horizontal(&mut self, delta: i32) {
-		let c = self.cursors.cursor();
+		let c = self.buffer().cursors.cursor();
 		let tab_w = self.tab_width();
 		if delta < 0 {
 			if c.col > 0 {
 				let new_col = c.col - 1;
-				self.cursors.primary_mut().head.set_col(new_col);
-				self.cursors.primary_mut().head.desired_vcol = visual_col_at(
+				let vcol = visual_col_at(
 					self.buffer().text.line_slice(c.line).chars(),
 					new_col,
 					tab_w,
 				);
+				self.buffer_mut().cursors.primary_mut().head.set_col(new_col);
+				self.buffer_mut().cursors.primary_mut().head.desired_vcol = vcol;
 			} else if c.line > 0 {
 				let prev_len = self.line_len_no_newline(c.line - 1);
-				self.cursors.primary_mut().head.line = c.line - 1;
-				self.cursors.primary_mut().head.set_col(prev_len);
-				self.cursors.primary_mut().head.desired_vcol = visual_col_at(
+				let vcol = visual_col_at(
 					self.buffer().text.line_slice(c.line - 1).chars(),
 					prev_len,
 					tab_w,
 				);
+				self.buffer_mut().cursors.primary_mut().head.line = c.line - 1;
+				self.buffer_mut().cursors.primary_mut().head.set_col(prev_len);
+				self.buffer_mut().cursors.primary_mut().head.desired_vcol = vcol;
 			}
 		} else {
 			let line_len = self.line_len_no_newline(c.line);
 			if c.col < line_len {
 				let new_col = c.col + 1;
-				self.cursors.primary_mut().head.set_col(new_col);
-				self.cursors.primary_mut().head.desired_vcol = visual_col_at(
+				let vcol = visual_col_at(
 					self.buffer().text.line_slice(c.line).chars(),
 					new_col,
 					tab_w,
 				);
+				self.buffer_mut().cursors.primary_mut().head.set_col(new_col);
+				self.buffer_mut().cursors.primary_mut().head.desired_vcol = vcol;
 			} else if c.line + 1 < self.buffer().line_count() {
-				self.cursors.primary_mut().head.line = c.line + 1;
-				self.cursors.primary_mut().head.set_col(0);
+				self.buffer_mut().cursors.primary_mut().head.line = c.line + 1;
+				self.buffer_mut().cursors.primary_mut().head.set_col(0);
 				// vcol 0 is correct for col 0
 			}
 		}
@@ -48,7 +51,7 @@ impl Editor {
 	pub(crate) fn move_cursor_vertical(&mut self, delta: i32) {
 		if !self.config.wrap_lines {
 			// No-wrap mode: move by buffer lines, using visual column for sticky behaviour.
-			let c = self.cursors.cursor();
+			let c = self.buffer().cursors.cursor();
 			let new_line = if delta < 0 {
 				c.line.saturating_sub((-delta) as usize)
 			} else {
@@ -67,8 +70,8 @@ impl Editor {
 					self.tab_width(),
 					true,
 				);
-				self.cursors.primary_mut().head.line = new_line;
-				self.cursors.primary_mut().head.set_col_keep_vcol(new_col);
+				self.buffer_mut().cursors.primary_mut().head.line = new_line;
+				self.buffer_mut().cursors.primary_mut().head.set_col_keep_vcol(new_col);
 			}
 			return;
 		}
@@ -79,7 +82,7 @@ impl Editor {
 			return;
 		}
 		let tab_w = self.tab_width();
-		let c = self.cursors.cursor();
+		let c = self.buffer().cursors.cursor();
 		let line_count = self.buffer().line_count();
 
 		let cur_line_len = self.line_len_no_newline(c.line);
@@ -114,7 +117,7 @@ impl Editor {
 					tab_w,
 					next_idx == rows.len() - 1,
 				);
-				self.cursors.primary_mut().head.set_col_keep_vcol(new_col);
+				self.buffer_mut().cursors.primary_mut().head.set_col_keep_vcol(new_col);
 			} else {
 				// Move to next buffer line (first visual row).
 				let next_line = c.line + 1;
@@ -135,8 +138,8 @@ impl Editor {
 						tab_w,
 						next_rows.len() == 1,
 					);
-					self.cursors.primary_mut().head.line = next_line;
-					self.cursors.primary_mut().head.set_col_keep_vcol(new_col);
+					self.buffer_mut().cursors.primary_mut().head.line = next_line;
+					self.buffer_mut().cursors.primary_mut().head.set_col_keep_vcol(new_col);
 				}
 			}
 		} else {
@@ -154,7 +157,7 @@ impl Editor {
 					tab_w,
 					prev_idx == rows.len() - 1,
 				);
-				self.cursors.primary_mut().head.set_col_keep_vcol(new_col);
+				self.buffer_mut().cursors.primary_mut().head.set_col_keep_vcol(new_col);
 			} else {
 				// Move to previous buffer line (last visual row).
 				if c.line > 0 {
@@ -175,8 +178,8 @@ impl Editor {
 						tab_w,
 						true,
 					);
-					self.cursors.primary_mut().head.line = prev_line;
-					self.cursors.primary_mut().head.set_col_keep_vcol(new_col);
+					self.buffer_mut().cursors.primary_mut().head.line = prev_line;
+					self.buffer_mut().cursors.primary_mut().head.set_col_keep_vcol(new_col);
 				}
 			}
 		}
@@ -187,7 +190,7 @@ impl Editor {
 		let (line, col) = {
 			let text = &self.buffer().text;
 			let total_chars = text.len_chars();
-			let c = self.cursors.cursor();
+			let c = self.buffer().cursors.cursor();
 			let mut pos = text.line_to_char(c.line) + c.col;
 
 			if pos >= total_chars {
@@ -231,17 +234,17 @@ impl Editor {
 			(line, pos - line_start)
 		};
 		let tab_w = self.tab_width();
-		self.cursors.primary_mut().head.line = line;
-		self.cursors.primary_mut().head.set_col(col);
-		self.cursors.primary_mut().head.desired_vcol =
-			visual_col_at(self.buffer().text.line_slice(line).chars(), col, tab_w);
+		let vcol = visual_col_at(self.buffer().text.line_slice(line).chars(), col, tab_w);
+		self.buffer_mut().cursors.primary_mut().head.line = line;
+		self.buffer_mut().cursors.primary_mut().head.set_col(col);
+		self.buffer_mut().cursors.primary_mut().head.desired_vcol = vcol;
 	}
 
 	/// Move cursor backward one word, skipping spaces to land on the start of the previous word.
 	pub(crate) fn move_word_backward(&mut self) {
 		let (line, col) = {
 			let text = &self.buffer().text;
-			let c = self.cursors.cursor();
+			let c = self.buffer().cursors.cursor();
 			let mut pos = text.line_to_char(c.line) + c.col;
 
 			if pos == 0 {
@@ -284,9 +287,9 @@ impl Editor {
 			(line, pos - line_start)
 		};
 		let tab_w = self.tab_width();
-		self.cursors.primary_mut().head.line = line;
-		self.cursors.primary_mut().head.set_col(col);
-		self.cursors.primary_mut().head.desired_vcol =
-			visual_col_at(self.buffer().text.line_slice(line).chars(), col, tab_w);
+		let vcol = visual_col_at(self.buffer().text.line_slice(line).chars(), col, tab_w);
+		self.buffer_mut().cursors.primary_mut().head.line = line;
+		self.buffer_mut().cursors.primary_mut().head.set_col(col);
+		self.buffer_mut().cursors.primary_mut().head.desired_vcol = vcol;
 	}
 }

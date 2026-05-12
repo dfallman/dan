@@ -27,6 +27,36 @@ pub struct Buffer {
 	pub encoding: &'static encoding_rs::Encoding,
 	/// Path of the `.swp` crash-recovery file for this buffer, if any.
 	pub swp_path: Option<PathBuf>,
+	/// Cursors / selections for this buffer.
+	pub cursors: crate::editor::cursor::CursorSet,
+	/// Viewport scroll offset (top visible line) for this buffer.
+	pub scroll_y: usize,
+	/// Viewport visual row scroll offset (for wrap mode sub-line scrolling).
+	pub scroll_vrow: usize,
+	/// All current matches as (start_char, end_char) pairs.
+	pub search_matches: Vec<(usize, usize)>,
+	/// Index of the currently-highlighted match.
+	pub search_match_idx: usize,
+	/// Saved cursor position before entering search (so Esc can restore).
+	pub search_saved_cursor: Option<(usize, usize)>,
+	/// Last completed search query (persists across search sessions).
+	pub last_search_query: String,
+	/// Receiver for the result of an in-flight async formatter run for this buffer.
+	pub fmt_rx: Option<std::sync::mpsc::Receiver<Result<String, String>>>,
+	/// `Buffer::version` captured when the formatter was spawned. On result
+	/// arrival, if the buffer's current version differs the result is
+	/// discarded — the user typed during the format and the diff would
+	/// otherwise misattribute their keystrokes (R3.3).
+	pub fmt_baseline_version: Option<u64>,
+	/// True while a formatter run is in flight for this buffer.
+	pub is_formatting: bool,
+	/// For unpathed buffers, an editor-assigned monotonic sequence number.
+	/// `None` (or `Some(1)` if unset) renders as `[Untitled]`; `Some(n)` for
+	/// `n > 1` renders as `[Untitled n]`. Loaded-from-file buffers leave this
+	/// `None` since they have a real path. The editor assigns the seq when
+	/// it constructs the buffer (Editor::new for the startup scratch,
+	/// Editor::push_new_untitled for Command::NewBuffer).
+	pub untitled_seq: Option<usize>,
 }
 
 impl Buffer {
@@ -40,6 +70,17 @@ impl Buffer {
 			version: 0,
 			encoding: encoding_rs::UTF_8,
 			swp_path: None,
+			cursors: crate::editor::cursor::CursorSet::new(),
+			scroll_y: 0,
+			scroll_vrow: 0,
+			search_matches: Vec::new(),
+			search_match_idx: 0,
+			search_saved_cursor: None,
+			last_search_query: String::new(),
+			fmt_rx: None,
+			fmt_baseline_version: None,
+			is_formatting: false,
+			untitled_seq: None,
 		}
 	}
 
@@ -119,6 +160,17 @@ impl Buffer {
 			version: 0,
 			encoding,
 			swp_path: None,
+			cursors: crate::editor::cursor::CursorSet::new(),
+			scroll_y: 0,
+			scroll_vrow: 0,
+			search_matches: Vec::new(),
+			search_match_idx: 0,
+			search_saved_cursor: None,
+			last_search_query: String::new(),
+			fmt_rx: None,
+			fmt_baseline_version: None,
+			is_formatting: false,
+			untitled_seq: None,
 		};
 
 		Ok((buffer, expand_tab, tab_width))
@@ -224,21 +276,32 @@ impl Buffer {
 		self.text.len_lines()
 	}
 
-	/// Get the display name for this buffer.
+	/// Get the display name for this buffer. Pathed buffers return the file
+	/// basename; unpathed buffers return `[Untitled]` (or `[Untitled n]` when
+	/// `untitled_seq` is `Some(n)` with `n > 1`) so multiple new buffers can
+	/// be told apart.
 	pub fn display_name(&self) -> String {
 		self.file_path
 			.as_ref()
 			.and_then(|p| p.file_name())
 			.map(|n| n.to_string_lossy().to_string())
-			.unwrap_or_else(|| "[Scratch]".to_string())
+			.unwrap_or_else(|| self.untitled_label())
 	}
 
-	/// Get the full path representation for this buffer.
+	/// Get the full path representation for this buffer. Same suffix rule as
+	/// `display_name` for unpathed buffers.
 	pub fn full_path_display(&self) -> String {
 		self.file_path
 			.as_ref()
 			.map(|p| p.display().to_string())
-			.unwrap_or_else(|| "[Scratch]".to_string())
+			.unwrap_or_else(|| self.untitled_label())
+	}
+
+	fn untitled_label(&self) -> String {
+		match self.untitled_seq {
+			Some(n) if n > 1 => format!("[Untitled {}]", n),
+			_ => "[Untitled]".to_string(),
+		}
 	}
 
 	// -- Edit operations with history tracking --

@@ -54,6 +54,8 @@ For more installation options, see Install below.
 
 - **Smart comment toggling**: Use `Ctrl-E` to toggle language-specific comments across multi-line selections. Dan understands the syntax logic of your file and will comment out a single line or your selected section.
 
+- **Command palette**: Hit `Ctrl-P` to open a searchable palette that covers every editor action, all open buffers, and project files — so you can do almost anything without leaving the keyboard or memorizing every shortcut.
+
 - **Automatic pair insertion**: Save keystrokes with auto-closing brackets. If you highlight a block of code and type a bracket, Dan will wrap the selection for you.
 
 
@@ -104,6 +106,7 @@ For macOS users who simply can't get used to using `Ctrl` over `⌘`, note that 
 | `Ctrl` + `A`                    | **Save As**: Write buffer to a new path (file).          |
 | `Ctrl` + `Q`                    | **Quit**: Safe exit (prompts if there are unsaved changes).|
 | `Ctrl` + `H`                    | **Help**: Toggle the built-in reference cheat sheet.      |
+| `Ctrl` + `P`                    | **Command palette**: Search across actions, buffers, and project files. |
 
 
 ### Text editing
@@ -116,6 +119,7 @@ For macOS users who simply can't get used to using `Ctrl` over `⌘`, note that 
 | `Ctrl` + `E` (or `Ctrl` + `/`)  | **Toggle comment**: Activate/remove comment (syntax-aware). |
 | `Ctrl` + `T`                    | **Toggle syntax highlight**: Turn on and off syntax highlighting. |
 | `Ctrl` + `W`                    | **Word wrap**: Hot-toggle between soft-wrapping and horizontal scroll.|
+| `Ctrl` + `R`                    | **Whitespace markers**: Toggle visible whitespace markers (·, →, ↵).  |
 | `Ctrl` + `L`                    | **Lint/Format**: Auto-format the document using an external linter.    |
 | `Alt` + `↑` / `↓`               | **Swap line**: Swap current line/block upward or downward. |
 | `Tab` / `Shift` + `Tab`         | **Indent / Dedent**: Indent or dedent current line/selection. |
@@ -140,7 +144,7 @@ For macOS users who simply can't get used to using `Ctrl` over `⌘`, note that 
 | **Key**                         | **Action**                                               |
 | ------------------------------- | -------------------------------------------------------- |
 | `Ctrl` + `F`                    | **Search**: Search for phrases.  |
-| `Ctrl` + `R`                    | **Replace**: While searching, replace phrase.  |
+| `Ctrl` + `R` *(while searching)* | **Replace**: Promote the current search into a find-and-replace loop. |
 
 
 # Installation

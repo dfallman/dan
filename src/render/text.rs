@@ -7,6 +7,20 @@ use crate::editor::Editor;
 use crate::syntax::LineHighlighter;
 use crate::utils::char_width;
 
+/// When show_whitespace is on, replace whitespace chars with visible markers.
+/// Returns (char_to_display, is_whitespace_marker). The marker bool is used
+/// to override the foreground color with a dim marker color.
+fn whitespace_marker(ch: char, show: bool) -> (char, bool) {
+	if !show {
+		return (ch, false);
+	}
+	match ch {
+		' ' => ('·', true),
+		'\t' => ('→', true),
+		_ => (ch, false),
+	}
+}
+
 /// Convert a syntect RGBA color to a crossterm Color.
 fn syntect_to_crossterm(c: syntect::highlighting::Color) -> Color {
 	Color::Rgb {
@@ -70,7 +84,7 @@ pub fn render_wrap(
 ) {
 	let line_count = editor.buffer().line_count();
 	let mut screen_row: usize = 0;
-	let mut buf_line = editor.scroll_y;
+	let mut buf_line = editor.buffer().scroll_y;
 
 	let syntax = editor
 		.highlighter
@@ -79,7 +93,7 @@ pub fn render_wrap(
 	let mut hi = editor.highlighter.primed(
 		&editor.highlight_cache,
 		syntax,
-		editor.scroll_y.min(line_count),
+		editor.buffer().scroll_y.min(line_count),
 		buffer_version,
 		|line_idx| editor.buffer().text.line(line_idx),
 	);
@@ -91,8 +105,8 @@ pub fn render_wrap(
 		} else {
 			Color::Reset
 		};
-		let skip_lines = if buf_line == editor.scroll_y {
-			editor.scroll_vrow
+		let skip_lines = if buf_line == editor.buffer().scroll_y {
+			editor.buffer().scroll_vrow
 		} else {
 			0
 		};
@@ -173,17 +187,21 @@ pub fn render_wrap(
 					false
 				};
 				let search_hit = editor
+					.buffer()
 					.search_matches
 					.iter()
 					.enumerate()
 					.find(|(_i, &(ms, me))| char_pos >= ms && char_pos < me);
 				let is_current_match = search_hit
 					.as_ref()
-					.map(|(i, _)| *i == editor.search_match_idx)
+					.map(|(i, _)| *i == editor.buffer().search_match_idx)
 					.unwrap_or(false);
 				let in_search = search_hit.is_some();
 				let (cur_syn_fg, cur_syn_bold, cur_syn_italic, cur_syn_underline) =
 					syntax_fg(&syn_colors, char_idx);
+
+				let (display_ch, is_ws_marker) =
+					whitespace_marker(ch, editor.config.show_whitespace);
 
 				if want_sel {
 					screen.set_bg(editor.theme.selection_bg);
@@ -205,18 +223,27 @@ pub fn render_wrap(
 					screen.underline = cur_syn_underline;
 				} else {
 					screen.set_bg(base_bg);
-					screen.set_fg(cur_syn_fg);
+					let effective_fg = if is_ws_marker {
+						editor.theme.line_nr
+					} else {
+						cur_syn_fg
+					};
+					screen.set_fg(effective_fg);
 					screen.bold = cur_syn_bold;
 					screen.italic = cur_syn_italic;
 					screen.underline = cur_syn_underline;
 				}
 
 				if ch == '\t' {
-					for _ in 0..ch_w {
-						screen.put_char(' ');
+					// First cell: render the tab marker (→ or space).
+					screen.put_char(display_ch);
+					// Remaining cells: pad with · or space.
+					let pad_ch = if editor.config.show_whitespace { '·' } else { ' ' };
+					for _ in 1..ch_w {
+						screen.put_char(pad_ch);
 					}
 				} else {
-					screen.put_char(ch);
+					screen.put_char(display_ch);
 				}
 			}
 
@@ -230,7 +257,18 @@ pub fn render_wrap(
 			let remaining = (vp.width as usize).saturating_sub(cols_used);
 			if remaining > 0 {
 				screen.set_bg(base_bg);
-				for _ in 0..remaining {
+				// EOL marker: emit ↵ before padding when show_whitespace is on.
+				if editor.config.show_whitespace {
+					screen.set_fg(editor.theme.line_nr);
+					screen.put_char('↵');
+				}
+				screen.set_fg(Color::Reset);
+				let pad_remaining = if editor.config.show_whitespace {
+					remaining.saturating_sub(1)
+				} else {
+					remaining
+				};
+				for _ in 0..pad_remaining {
 					screen.put_char(' ');
 				}
 			}
@@ -283,13 +321,13 @@ pub fn render_nowrap(
 	let mut hi = editor.highlighter.primed(
 		&editor.highlight_cache,
 		syntax,
-		editor.scroll_y.min(line_count),
+		editor.buffer().scroll_y.min(line_count),
 		buffer_version,
 		|line_idx| editor.buffer().text.line(line_idx),
 	);
 
 	for row in 0..text_height {
-		let line_idx = editor.scroll_y + row;
+		let line_idx = editor.buffer().scroll_y + row;
 		let is_active = highlight_active && line_idx == cursor_line;
 		let base_bg = if is_active {
 			editor.theme.active_row_bg
@@ -350,17 +388,21 @@ pub fn render_nowrap(
 					false
 				};
 				let search_hit = editor
+					.buffer()
 					.search_matches
 					.iter()
 					.enumerate()
 					.find(|(_i, &(ms, me))| char_pos >= ms && char_pos < me);
 				let is_current_match = search_hit
 					.as_ref()
-					.map(|(i, _)| *i == editor.search_match_idx)
+					.map(|(i, _)| *i == editor.buffer().search_match_idx)
 					.unwrap_or(false);
 				let in_search = search_hit.is_some();
 				let (cur_syn_fg, cur_syn_bold, cur_syn_italic, cur_syn_underline) =
 					syntax_fg(&syn_colors, char_idx);
+
+				let (display_ch, is_ws_marker) =
+					whitespace_marker(ch, editor.config.show_whitespace);
 
 				if want_sel {
 					screen.set_bg(editor.theme.selection_bg);
@@ -382,7 +424,12 @@ pub fn render_nowrap(
 					screen.underline = cur_syn_underline;
 				} else {
 					screen.set_bg(base_bg);
-					screen.set_fg(cur_syn_fg);
+					let effective_fg = if is_ws_marker {
+						editor.theme.line_nr
+					} else {
+						cur_syn_fg
+					};
+					screen.set_fg(effective_fg);
 					screen.bold = cur_syn_bold;
 					screen.italic = cur_syn_italic;
 					screen.underline = cur_syn_underline;
@@ -390,15 +437,23 @@ pub fn render_nowrap(
 
 				if ch == '\t' {
 					let start = if vcol < sx { sx } else { vcol };
-					let vis_spaces = vcol_end
+					let vis_count = vcol_end
 						.saturating_sub(start)
 						.min(text_area_width - visible_written);
-					for _ in 0..vis_spaces {
-						screen.put_char(' ');
+					// First visible cell: tab marker (→ or space).
+					let mut emitted = 0usize;
+					if vis_count > 0 {
+						screen.put_char(display_ch);
+						emitted += 1;
 					}
-					visible_written += vis_spaces;
+					// Remaining cells: pad with · or space.
+					let pad_ch = if editor.config.show_whitespace { '·' } else { ' ' };
+					for _ in emitted..vis_count {
+						screen.put_char(pad_ch);
+					}
+					visible_written += vis_count;
 				} else {
-					screen.put_char(ch);
+					screen.put_char(display_ch);
 					visible_written += ch_w;
 				}
 				vcol = vcol_end;
@@ -418,9 +473,20 @@ pub fn render_nowrap(
 
 		let remaining = (vp.width as usize).saturating_sub(cols_written);
 		if remaining > 0 {
-			screen.set_fg(Color::Reset);
 			screen.set_bg(base_bg);
-			for _ in 0..remaining {
+			// EOL marker: emit ↵ before padding for real lines when show_whitespace is on.
+			let is_real_line = line_idx < line_count;
+			if editor.config.show_whitespace && is_real_line {
+				screen.set_fg(editor.theme.line_nr);
+				screen.put_char('↵');
+			}
+			screen.set_fg(Color::Reset);
+			let pad_remaining = if editor.config.show_whitespace && is_real_line {
+				remaining.saturating_sub(1)
+			} else {
+				remaining
+			};
+			for _ in 0..pad_remaining {
 				screen.put_char(' ');
 			}
 		}

@@ -23,6 +23,7 @@ mod config;
 mod atomic_io;
 mod editor;
 mod input;
+mod palette;
 pub mod recovery;
 mod render;
 mod sanitize;
@@ -96,7 +97,13 @@ fn main() -> io::Result<()> {
 			editor.set_status(format!("[New File] {}", args[1]));
 		}
 	} else {
+		// No file argument: greet the user with the palette open. The startup
+		// scratch [Untitled] is still there as a placeholder, but it's hidden
+		// behind the palette and gets auto-disposed as soon as the user picks
+		// a file or "New buffer" — so they never see a stray buffer they
+		// didn't ask for.
 		editor.set_status("dan's text editor | ^Q to quit");
+		editor.execute(crate::editor::commands::Command::PaletteOpen);
 	}
 
 	// Install signal handlers BEFORE entering raw mode so a signal arriving
@@ -147,6 +154,13 @@ fn main() -> io::Result<()> {
 
 	// Main loop
 	let result = run_loop(&mut editor, &mut writer, &shutdown_signal);
+
+	// Flush recent-files to disk on shutdown — synchronous so the write
+	// definitely completes before the process exits.
+	if editor.recent_files_dirty {
+		let snap: Vec<_> = editor.recent_files.iter().cloned().collect();
+		crate::palette::index::save_recent_files(&snap);
+	}
 
 	// Restore terminal
 	writer
@@ -201,7 +215,9 @@ fn run_loop(
 				render::render(editor, writer)?;
 			}
 
-			let poll_timeout = if editor.is_formatting {
+			let any_formatting = editor.buffers.iter().any(|b| b.is_formatting);
+			let has_pending_async = any_formatting || editor.project_index_rx.is_some();
+			let poll_timeout = if has_pending_async {
 				Duration::from_millis(25)
 			} else {
 				Duration::from_millis(500)
@@ -215,6 +231,7 @@ fn run_loop(
 			&& editor.mode != crate::editor::mode::Mode::Searching
 			&& editor.mode != crate::editor::mode::Mode::ConfirmQuit
 			&& editor.mode != crate::editor::mode::Mode::SaveAs
+			&& editor.mode != crate::editor::mode::Mode::Palette
 		{
 			editor.clear_status();
 		}
@@ -236,6 +253,7 @@ fn run_loop(
 				&& editor.mode != crate::editor::mode::Mode::Searching
 				&& editor.mode != crate::editor::mode::Mode::ConfirmQuit
 				&& editor.mode != crate::editor::mode::Mode::SaveAs
+				&& editor.mode != crate::editor::mode::Mode::Palette
 			{
 				editor.clear_status();
 			}

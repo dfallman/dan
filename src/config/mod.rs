@@ -38,6 +38,8 @@ pub struct Config {
 	pub auto_close: bool,
 	/// Render comment scopes in italics.
 	pub comments_are_italics: bool,
+	/// Render whitespace characters (spaces, tabs, line endings) visually.
+	pub show_whitespace: bool,
 	/// Strip trailing whitespace from each line on save (None = leave as-is).
 	#[serde(skip)]
 	pub trim_trailing_whitespace: Option<bool>,
@@ -65,6 +67,7 @@ impl Default for Config {
 			fast_scroll_steps: 10,
 			auto_close: true,
 			comments_are_italics: false,
+			show_whitespace: false,
 			trim_trailing_whitespace: None,
 			end_of_line: None,
 		}

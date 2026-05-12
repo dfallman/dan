@@ -2,6 +2,7 @@
 test-files/
 test.txt
 test-file.rs
+test-file.txt
 .DS_Store
 /scripts
 /.env

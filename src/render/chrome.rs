@@ -53,7 +53,7 @@ fn truncate_path(path: &str, max_len: usize) -> String {
 pub fn build_status_bar(editor: &Editor, vp: &Viewport) -> Window {
 	let mut fragments = Vec::new();
 
-	let c = editor.cursors.cursor();
+	let c = editor.buffer().cursors.cursor();
 	let mut right_parts = Vec::new();
 
 	if editor.config.show_help {
@@ -207,11 +207,354 @@ fn help_shortcuts(editor: &Editor) -> Vec<(String, String)> {
 		("^L".to_string(), editor.locale.translate(Message::HelpShortcutLint)),
 		("^E".to_string(), editor.locale.translate(Message::HelpShortcutComment)),
 		("^T".to_string(), editor.locale.translate(Message::HelpShortcutSyntax)),
+		("^R".to_string(), editor.locale.translate(Message::HelpShortcutWhitespace)),
 		("^H".to_string(), editor.locale.translate(Message::HelpShortcutHelp)),
 	]
 }
 
 
+
+/// Build a centered modal window for the command palette.
+///
+/// Returns one `Window` per row (top border, query bar, separator, result rows,
+/// footer separator, status, bottom border). All rows share the same
+/// `rect.width` and `rect.height` so `Gravity::Center` positions them as a
+/// single bounding box; `rect.y` is treated as an additive offset within that
+/// box by the render loop.
+///
+/// Returns an empty vec if the viewport is too small to render the modal.
+pub fn build_palette_window(editor: &Editor, vw: u16, vh: u16) -> Vec<Window> {
+	use crate::palette::PaletteItem;
+
+	let mut windows: Vec<Window> = Vec::new();
+
+	let width = vw.saturating_sub(4).min(80);
+	let max_height = vh.saturating_sub(4).min(20);
+	if width < 30 || max_height < 6 {
+		return windows; // too small — caller treats as no-op
+	}
+
+	// Layout (rows): top border | query | separator | results... | footer-sep | status | bottom
+	// Fixed chrome rows = 6; remaining rows are for results.
+	let palette_h = max_height;
+	let palette_w = width;
+	let visible_rows = (palette_h as usize).saturating_sub(6);
+	let total = editor.palette.filtered.len();
+
+	let theme = &editor.theme;
+	let bg = theme.prompt_bg;
+	let fg = theme.prompt_fg;
+	let line = theme.toolbar_fg_dim; // box-drawing border colour (dark grey)
+	let dim = theme.prompt_info;
+	let accent = theme.accent;        // ▌ left tab + selected marker + "> " prompt
+	let input_fg = theme.warning;     // query text — the eye-magnet
+	let hint_fg = theme.hotkey;       // ⌃-keystroke hints
+	let dirty_fg = theme.dirty_flag;  // post-name "●" on dirty buffers
+
+	fn frag(text: String, fg: crossterm::style::Color, bg: crossterm::style::Color) -> UiFragment {
+		UiFragment { text, fg, bg, is_flex: false, is_bold: false }
+	}
+
+	// Pad/truncate `s` so it occupies exactly `n` display columns (1 col per char).
+	fn fit(s: &str, n: usize) -> String {
+		let count = s.chars().count();
+		if count == n {
+			s.to_string()
+		} else if count > n {
+			s.chars().take(n).collect()
+		} else {
+			let mut out = s.to_string();
+			for _ in 0..(n - count) {
+				out.push(' ');
+			}
+			out
+		}
+	}
+
+	// Left-truncate `s` to `n` display columns with a leading "…", preserving
+	// the trailing portion (so the filename stays visible on long paths).
+	// Pads with spaces if `s` is shorter than `n`.
+	fn fit_left(s: &str, n: usize) -> String {
+		let count = s.chars().count();
+		if count <= n {
+			let mut out = s.to_string();
+			for _ in 0..(n - count) { out.push(' '); }
+			out
+		} else if n == 0 {
+			String::new()
+		} else {
+			// Keep the rightmost (n-1) chars and prepend "…".
+			let kept: String = s.chars().rev().take(n - 1).collect::<Vec<_>>()
+				.into_iter().rev().collect();
+			format!("…{}", kept)
+		}
+	}
+
+	let make_row = |y: u16, frags: Vec<UiFragment>| -> Window {
+		Window {
+			rect: Rect { x: 0, y, width: palette_w, height: palette_h },
+			gravity: Gravity::Center,
+			z_index: 250,
+			cursor_bounds: None,
+			fragments: frags,
+		}
+	};
+
+	let inner = palette_w as usize - 2; // chars between the side borders
+
+	// Row 0: top border — left edge is the toolbar-style "▌" accent
+	let top = format!("{}┐", "─".repeat(inner));
+	windows.push(make_row(0, vec![
+		frag("▌".to_string(), accent, bg),
+		frag(top, line, bg),
+	]));
+
+	// Row 1: query bar:  ▌ > <query>           │
+	// "▌ > " and trailing "│" total 4 chars; inner content area = inner - 3.
+	let query_inner = inner.saturating_sub(3);
+	let (query_str, query_color) = if editor.palette.query.is_empty() {
+		("Search buffers, files, and commands…".to_string(), dim)
+	} else {
+		(editor.palette.query.clone(), input_fg)
+	};
+	let query_text = fit(&query_str, query_inner);
+	// Place the visible terminal cursor inside the query field. cx is the
+	// column index within this row; "▌ > " is 4 cells, then count display
+	// columns of the query up to the byte cursor position (chars == cells
+	// for the typical printable input).
+	let cursor_col = editor.palette.query
+		.get(..editor.palette.query_cursor)
+		.map(|s| s.chars().count())
+		.unwrap_or(0);
+	let cursor_cx = (4u16 + cursor_col as u16).min(palette_w.saturating_sub(2));
+	windows.push(Window {
+		rect: Rect { x: 0, y: 1, width: palette_w, height: palette_h },
+		gravity: Gravity::Center,
+		z_index: 250,
+		cursor_bounds: Some((cursor_cx, 0)),
+		fragments: vec![
+			frag("▌".to_string(), accent, bg),
+			frag(" > ".to_string(), accent, bg),
+			frag(query_text, query_color, bg),
+			frag("│".to_string(), line, bg),
+		],
+	});
+
+	// Row 2: separator
+	let sep = format!("{}┤", "─".repeat(inner));
+	windows.push(make_row(2, vec![
+		frag("▌".to_string(), accent, bg),
+		frag(sep, line, bg),
+	]));
+
+	// Result rows — or the dirty-buffer close prompt when close_prompt_idx is set.
+	if editor.palette.close_prompt_idx.is_some() {
+		// Prompt lines (up to visible_rows; we emit at most 5 meaningful lines
+		// and fill the rest with blank rows to maintain the border height).
+		let prompt_lines: [&str; 5] = [
+			"  Buffer has unsaved changes:",
+			"",
+			"  \u{2303}S  Save and close",
+			"  \u{2303}D  Discard and close",
+			"  Esc  Cancel",
+		];
+		for screen_idx in 0..visible_rows as u16 {
+			let row_y = 3 + screen_idx;
+			let prompt_line = prompt_lines.get(screen_idx as usize).copied().unwrap_or("");
+			let line_fg = if screen_idx == 0 { theme.dirty_flag } else { fg };
+			windows.push(make_row(row_y, vec![
+				frag("▌".to_string(), accent, bg),
+				frag(fit(prompt_line, inner), line_fg, bg),
+				frag("│".to_string(), line, bg),
+			]));
+		}
+	} else {
+		// "No matches" row: shown when the query filtered out everything.
+		// Sits at screen_idx 0; subsequent rows are blank fillers.
+		let no_matches = total == 0 && !editor.palette.query.is_empty();
+		let mut screen_idx: u16 = 0;
+		let mut filtered_idx = editor.palette.scroll;
+		let mut rendered_any_buffer = false;
+		let mut divider_shown = false;
+		while screen_idx < visible_rows as u16 {
+			let row_y = 3 + screen_idx;
+			if filtered_idx >= total {
+				if no_matches && screen_idx == 0 {
+					// "    No matches               " — same indentation as items
+					// (leading pad + marker slot + sep = 3 cells), in dim grey.
+					let label = "No matches";
+					let body_inner = inner.saturating_sub(4);
+					let pad = body_inner.saturating_sub(label.chars().count());
+					windows.push(make_row(row_y, vec![
+						frag("▌".to_string(), accent, bg),
+						frag("   ".to_string(), fg, bg),  // pad + marker slot + sep
+						frag(label.to_string(), dim, bg),
+						frag(" ".repeat(pad), fg, bg),
+						frag(" ".to_string(), fg, bg),
+						frag("│".to_string(), line, bg),
+					]));
+				} else {
+					// Empty filler row inside the box
+					windows.push(make_row(row_y, vec![
+						frag("▌".to_string(), accent, bg),
+						frag(fit("", inner), fg, bg),
+						frag("│".to_string(), line, bg),
+					]));
+				}
+				screen_idx += 1;
+				continue;
+			}
+			let (item_index_in_all, _score) = editor.palette.filtered[filtered_idx];
+			let item = &editor.palette.all_items[item_index_in_all];
+			let is_selected = filtered_idx == editor.palette.selection;
+			let is_buffer_row = matches!(item, PaletteItem::Buffer { .. });
+			// "New buffer" is an Action but lives at the bottom of the buffer
+			// section, so the divider should fire AFTER it, not before it.
+			let is_buffer_section_row = is_buffer_row
+				|| matches!(item, PaletteItem::Action { id: crate::palette::ActionId::NewBuffer, .. });
+
+			// Inject a divider on the first row that's no longer in the buffer
+			// section, but only if at least one buffer-section row was actually
+			// rendered above in this view.
+			if !is_buffer_section_row && rendered_any_buffer && !divider_shown {
+				let div = format!("{}┤", "─".repeat(inner));
+				windows.push(make_row(row_y, vec![
+					frag("▌".to_string(), accent, bg),
+					frag(div, line, bg),
+				]));
+				divider_shown = true;
+				screen_idx += 1;
+				continue;     // re-evaluate the same item on the next screen row
+			}
+
+			let row_bg = if is_selected { theme.selection_bg } else { bg };
+			// Inner row layout: leading pad(1) + marker(1) + sep(1) + body + trailing pad(1) = inner
+			let body_inner = inner.saturating_sub(4);
+
+			// On the cyan selection band, every fg snaps to selection_fg
+			// (black) so the semantic colours (hotkey blue, dirty blue)
+			// don't disappear into the background.
+			let body_fg = if is_selected { theme.selection_fg } else { fg };
+			let row_hint_fg = if is_selected { theme.selection_fg } else { hint_fg };
+			let row_dirty_fg = if is_selected { Color::White } else { dirty_fg };
+
+			// Per-row body content fragments. Each (text, fg) pair becomes one
+			// fragment with `row_bg` as background. The chars must sum to
+			// AT MOST `body_inner`; remaining cells are padded after.
+			let body: Vec<(String, Color)> = match item {
+				PaletteItem::Action { label, hint, .. } => {
+					let hint_str = hint.as_deref().unwrap_or("");
+					if hint_str.is_empty() {
+						vec![(fit(label, body_inner), body_fg)]
+					} else {
+						let lcount = label.chars().count();
+						let hcount = hint_str.chars().count();
+						if lcount + 2 + hcount <= body_inner {
+							let pad = body_inner - lcount - hcount;
+							vec![
+								(label.clone(), body_fg),
+								(" ".repeat(pad), body_fg),
+								(hint_str.to_string(), row_hint_fg),
+							]
+						} else {
+							vec![(fit(label, body_inner), body_fg)]
+						}
+					}
+				}
+				PaletteItem::Buffer { path_display, dirty, .. } => {
+					// Right-aligned type label (like an action's hint slot).
+					let kind_label = "Buffer";
+					let kind_w = kind_label.chars().count();
+					let dirty_w = if *dirty { 2 } else { 0 }; // " ●"
+					// Path takes the left side, then " ●" (if dirty), then enough
+					// padding to push "Buffer" to the right edge.
+					let path_room = body_inner.saturating_sub(dirty_w + kind_w + 2);
+					let path_chars: Vec<char> = path_display.chars().collect();
+					let path_str: String = if path_chars.len() <= path_room {
+						path_display.to_string()
+					} else if path_room == 0 {
+						String::new()
+					} else {
+						let kept: String = path_chars.iter().rev().take(path_room - 1)
+							.copied().collect::<Vec<_>>().into_iter().rev().collect();
+						format!("…{}", kept)
+					};
+					let mut v: Vec<(String, Color)> = vec![(path_str.clone(), body_fg)];
+					if *dirty {
+						v.push((" ".to_string(), body_fg));
+						v.push(("●".to_string(), row_dirty_fg));
+					}
+					let used = path_str.chars().count() + dirty_w;
+					let pad = body_inner.saturating_sub(used + kind_w);
+					if pad > 0 {
+						v.push((" ".repeat(pad), body_fg));
+					}
+					// "Buffer" — dim grey when unselected, snaps to selection_fg
+					// (black) on the cyan band so it stays readable.
+					let kind_fg = if is_selected { theme.selection_fg } else { dim };
+					v.push((kind_label.to_string(), kind_fg));
+					v
+				}
+				PaletteItem::File { display, .. } => {
+					vec![(fit_left(display, body_inner), body_fg)]
+				}
+			};
+
+			let body_chars: usize = body.iter().map(|(s, _)| s.chars().count()).sum();
+			let body_pad = body_inner.saturating_sub(body_chars);
+
+			let marker_str = if is_selected { "→" } else { " " };
+			let marker_fg = if is_selected { theme.selection_fg } else { fg };
+
+			let mut row_frags: Vec<UiFragment> = Vec::with_capacity(7 + body.len());
+			row_frags.push(frag("▌".to_string(), accent, bg));
+			row_frags.push(frag(" ".to_string(), fg, row_bg));            // leading pad inside row_bg
+			row_frags.push(frag(marker_str.to_string(), marker_fg, row_bg));
+			row_frags.push(frag(" ".to_string(), fg, row_bg));            // sep
+			for (s, color) in body {
+				row_frags.push(frag(s, color, row_bg));
+			}
+			if body_pad > 0 {
+				row_frags.push(frag(" ".repeat(body_pad), fg, row_bg));
+			}
+			row_frags.push(frag(" ".to_string(), fg, row_bg));            // trailing pad inside row_bg
+			row_frags.push(frag("│".to_string(), line, bg));
+
+			windows.push(make_row(row_y, row_frags));
+			if is_buffer_section_row { rendered_any_buffer = true; }
+			screen_idx += 1;
+			filtered_idx += 1;
+		}
+	}
+
+	// Footer separator
+	let footer_y = 3 + visible_rows as u16;
+	let footer_sep = format!("{}┤", "─".repeat(inner));
+	windows.push(make_row(footer_y, vec![
+		frag("▌".to_string(), accent, bg),
+		frag(footer_sep, line, bg),
+	]));
+
+	// Status row
+	let total_all = editor.palette.all_items.len();
+	let indexing = if editor.project_index_rx.is_some() { " · indexing…" } else { "" };
+	let status_left = format!(" {} of {}{}", total, total_all, indexing);
+	let status_inner = fit(&status_left, inner);
+	windows.push(make_row(footer_y + 1, vec![
+		frag("▌".to_string(), accent, bg),
+		frag(status_inner, dim, bg),
+		frag("│".to_string(), line, bg),
+	]));
+
+	// Bottom border
+	let bot = format!("{}┘", "─".repeat(inner));
+	windows.push(make_row(footer_y + 2, vec![
+		frag("▌".to_string(), accent, bg),
+		frag(bot, line, bg),
+	]));
+
+	windows
+}
 
 pub fn build_help_bar(editor: &Editor, width: u16, h: u16) -> Vec<Window> {
 	let shortcuts = help_shortcuts(editor);
@@ -328,8 +671,8 @@ pub fn build_prompt(editor: &Editor, width: u16, h: u16) -> Option<Vec<Window>> 
 			query_text = editor.replace_with.clone();
 			text_cursor = editor.prompt_cursor;
 
-			if !editor.search_matches.is_empty() {
-				info_prefix = editor.locale.translate(Message::MatchFraction(editor.search_match_idx + 1, editor.search_matches.len()));
+			if !editor.buffer().search_matches.is_empty() {
+				info_prefix = editor.locale.translate(Message::MatchFraction(editor.buffer().search_match_idx + 1, editor.buffer().search_matches.len()));
 			}
 			info_suffix = editor.locale.translate(Message::ReplaceShortcuts);
 		}
@@ -359,7 +702,7 @@ pub fn build_prompt(editor: &Editor, width: u16, h: u16) -> Option<Vec<Window>> 
 			query_text = editor.search_query.clone();
 			text_cursor = editor.prompt_cursor;
 			
-			if editor.search_matches.is_empty() {
+			if editor.buffer().search_matches.is_empty() {
 				if editor.search_query.is_empty() {
 					info_suffix = format!(" {} ", editor.locale.translate(Message::EscToClose));
 				} else {
@@ -367,7 +710,7 @@ pub fn build_prompt(editor: &Editor, width: u16, h: u16) -> Option<Vec<Window>> 
 					info_suffix = editor.locale.translate(Message::SearchShortcuts);
 				}
 			} else {
-				info_prefix = editor.locale.translate(Message::MatchFraction(editor.search_match_idx + 1, editor.search_matches.len()));
+				info_prefix = editor.locale.translate(Message::MatchFraction(editor.buffer().search_match_idx + 1, editor.buffer().search_matches.len()));
 				info_suffix = editor.locale.translate(Message::SearchReplaceShortcuts);
 			}
 		}
@@ -484,12 +827,16 @@ pub fn render_ui(
 
 	let prompt = build_prompt(editor, vp.width, vp.height);
 
-	if prompt.is_none() && editor.show_help {
+	if prompt.is_none() && editor.show_help && !editor.palette.open {
 		windows.extend(build_help_bar(editor, vp.width, vp.height));
 	}
 
 	if let Some(p) = prompt {
 		windows.extend(p);
+	}
+
+	if editor.palette.open {
+		windows.extend(build_palette_window(editor, vp.width, vp.height));
 	}
 
 	windows.sort_by_key(|w| w.z_index);
@@ -508,6 +855,12 @@ pub fn render_ui(
 		// Direct translation applying stacked overrides
 		if window.rect.y > 0 && window.gravity == Gravity::BottomLeft {
 			start_y = window.rect.y;
+		}
+		// For Center gravity, treat rect.y as an additive offset from the
+		// centered origin so callers can stack multiple 1-row windows
+		// (e.g. the command palette modal) within a centered bounding box.
+		if window.gravity == Gravity::Center {
+			start_y = start_y.saturating_add(window.rect.y);
 		}
 
 		let start_x = match window.gravity {

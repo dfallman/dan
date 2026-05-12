@@ -21,6 +21,9 @@ pub enum Mode {
 	ReplacingStep,
 	/// Recover-from-swap prompt: choose recover / keep-mine / discard.
 	RecoverSwap,
+	/// Command palette open — typing filters items, arrows navigate,
+	/// Enter activates, Esc closes.
+	Palette,
 }
 
 impl Mode {
@@ -36,6 +39,7 @@ impl Mode {
 			Mode::ReplacingWith => theme.mode_replace,
 			Mode::ReplacingStep => theme.mode_replace,
 			Mode::RecoverSwap => theme.mode_danger,
+			Mode::Palette => theme.mode_search,
 		}
 	}
 }

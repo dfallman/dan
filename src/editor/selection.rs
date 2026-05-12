@@ -3,25 +3,25 @@ use crate::editor::Editor;
 impl Editor {
 	/// Returns true if there is an active selection.
 	pub fn has_selection(&self) -> bool {
-		self.cursors.has_selection()
+		self.buffer().cursors.has_selection()
 	}
 
 	/// Begin tracking a selection from the current cursor position.
 	pub(crate) fn begin_selection_if_needed(&mut self) {
-		self.cursors.begin_selection();
+		self.buffer_mut().cursors.begin_selection();
 	}
 
 	/// Clear the active selection (collapses anchor to head).
 	pub(crate) fn clear_selection(&mut self) {
-		self.cursors.collapse_selection();
+		self.buffer_mut().cursors.collapse_selection();
 	}
 
 	/// Get the selected text range as (start_pos, end_pos) char offsets.
 	pub fn selection_range(&self) -> Option<(usize, usize)> {
-		if !self.cursors.has_selection() {
+		if !self.buffer().cursors.has_selection() {
 			return None;
 		}
-		let sel = self.cursors.primary();
+		let sel = self.buffer().cursors.primary();
 		let (start_c, end_c) = sel.ordered();
 		let start = self.buffer().text.line_to_char(start_c.line) + start_c.col;
 		let end = self.buffer().text.line_to_char(end_c.line) + end_c.col;
@@ -44,7 +44,7 @@ impl Editor {
 				self.buffer_mut().delete_range(start, end);
 				let new_line = self.buffer().text.char_to_line(start);
 				let new_col = start - self.buffer().text.line_to_char(new_line);
-				self.cursors.set_cursor(new_line, new_col);
+				self.buffer_mut().cursors.set_cursor(new_line, new_col);
 			}
 		}
 		self.clear_selection();

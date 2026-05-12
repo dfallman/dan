@@ -95,18 +95,78 @@ pub enum Command {
 	// -- File --
 	Save,
 	Quit,
+	/// Discard the active buffer's dirty state and advance to the next dirty
+	/// buffer in the quit cycle. Used by Ctrl-F in ConfirmQuit mode.
 	ForceQuit,
+	/// Unconditional immediate exit — the panic-button shortcut (Ctrl-Shift-C)
+	/// and the recover-swap "give up" keys (Esc, Ctrl-Q).
+	ForceQuitAll,
 	SaveAndQuit,
 	CancelQuit,
+	OpenFilePicker,
+	NewBuffer,
+	ReloadBuffer,
+	CloseBuffer,
+	CloseOthers,
+	CloseAll,
+	SaveAll,
 
 	RecoverSwapAccept,
 	RecoverSwapDecline,
 
+	// -- Palette --
+	PaletteOpen,
+	PaletteInsertChar(char),
+	PaletteDeleteChar,
+	PaletteUp,
+	PaletteDown,
+	PalettePageUp,
+	PalettePageDown,
+	PaletteConfirm,
+	PaletteCancel,
+	PaletteCloseBuffer,
+	PaletteClosePromptSave,
+	#[allow(dead_code)]
+	PaletteClosePromptDiscard,
+	#[allow(dead_code)]
+	PaletteClosePromptCancel,
+
+	// -- Path / Metadata --
+	CopyPathAbs,
+	CopyPathRel,
+	RevealInFinder,
+	OpenContainingFolder,
+	ShowBufferInfo,
+
+	// -- Format / Encoding --
+	IndentSpaces,
+	IndentTabs,
+	TabWidth(usize),
+	LineEndingsLF,
+	LineEndingsCRLF,
+	TrimTrailingWhitespaceNow,
+	ConvertTabsToSpaces,
+	ConvertSpacesToTabs,
+
+	// -- Text Transforms --
+	SortLinesAsc,
+	SortLinesDesc,
+	DedupAdjacent,
+	ConvertUpper,
+	ConvertLower,
+	ConvertTitle,
+	ReverseSelection,
+
 	// -- Misc --
 	ToggleWrap,
+	ToggleWhitespace,
 	ToggleHelp,
 	ToggleSyntax,
 	ToggleComment,
+	ToggleLineNumbers,
+	ReloadConfiguration,
+	ShowRecentFiles,
+	ShowVersion,
 	Noop,
 }
 

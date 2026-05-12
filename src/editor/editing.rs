@@ -3,7 +3,7 @@ use crate::editor::Editor;
 impl Editor {
 	/// Get the char position in the buffer for the current cursor.
 	pub(crate) fn cursor_char_pos(&self) -> usize {
-		let c = self.cursors.cursor();
+		let c = self.buffer().cursors.cursor();
 		let line_start = self.buffer().text.line_to_char(c.line);
 		let line_len = self.buffer().text.line_len_chars(c.line);
 		line_start + c.col.min(line_len)
@@ -32,33 +32,33 @@ impl Editor {
 		let max_line = self.buffer().line_count().saturating_sub(1);
 
 		// Clamp Head
-		if self.cursors.primary().head.line > max_line {
-			self.cursors.primary_mut().head.line = max_line;
+		if self.buffer().cursors.primary().head.line > max_line {
+			self.buffer_mut().cursors.primary_mut().head.line = max_line;
 		}
-		let head_line = self.cursors.primary().head.line;
+		let head_line = self.buffer().cursors.primary().head.line;
 		let head_len = self.line_len_no_newline(head_line);
-		if self.cursors.primary().head.col > head_len {
-			self.cursors.primary_mut().head.set_col(head_len);
+		if self.buffer().cursors.primary().head.col > head_len {
+			self.buffer_mut().cursors.primary_mut().head.set_col(head_len);
 		}
 
 		// Clamp Anchor
-		if self.cursors.primary().anchor.line > max_line {
-			self.cursors.primary_mut().anchor.line = max_line;
+		if self.buffer().cursors.primary().anchor.line > max_line {
+			self.buffer_mut().cursors.primary_mut().anchor.line = max_line;
 		}
-		let anchor_line = self.cursors.primary().anchor.line;
+		let anchor_line = self.buffer().cursors.primary().anchor.line;
 		let anchor_len = self.line_len_no_newline(anchor_line);
-		if self.cursors.primary().anchor.col > anchor_len {
-			self.cursors.primary_mut().anchor.set_col(anchor_len);
+		if self.buffer().cursors.primary().anchor.col > anchor_len {
+			self.buffer_mut().cursors.primary_mut().anchor.set_col(anchor_len);
 		}
 	}
 
 	/// Swap the current line with the line above it. Cursor follows.
 	pub(crate) fn swap_line_up(&mut self) {
-		let line = self.cursors.cursor().line;
+		let line = self.buffer().cursors.cursor().line;
 		if line == 0 {
 			return;
 		}
-		let col = self.cursors.cursor().col;
+		let col = self.buffer().cursors.cursor().col;
 		let total = self.buffer().line_count();
 
 		let cur_start = self.buffer().text.line_to_char(line);
@@ -92,17 +92,17 @@ impl Editor {
 		self.buffer_mut().text.insert_str(above_start, &new_text);
 		self.buffer_mut().mark_mutated();
 
-		self.cursors.set_cursor(line - 1, col);
+		self.buffer_mut().cursors.set_cursor(line - 1, col);
 	}
 
 	/// Swap the current line with the line below it. Cursor follows.
 	pub(crate) fn swap_line_down(&mut self) {
-		let line = self.cursors.cursor().line;
+		let line = self.buffer().cursors.cursor().line;
 		let total = self.buffer().line_count();
 		if line + 1 >= total {
 			return;
 		}
-		let col = self.cursors.cursor().col;
+		let col = self.buffer().cursors.cursor().col;
 
 		let cur_start = self.buffer().text.line_to_char(line);
 		let cur_end = self.buffer().text.line_to_char(line + 1);
@@ -133,13 +133,13 @@ impl Editor {
 		self.buffer_mut().text.insert_str(cur_start, &new_text);
 		self.buffer_mut().mark_mutated();
 
-		self.cursors.set_cursor(line + 1, col);
+		self.buffer_mut().cursors.set_cursor(line + 1, col);
 	}
 
 	/// Move all lines covered by the current selection up by one line.
 	/// The selection (anchor + head) follows the moved block.
 	pub(crate) fn move_lines_up(&mut self) {
-		let (start, end) = self.cursors.primary().ordered();
+		let (start, end) = self.buffer().cursors.primary().ordered();
 		let first_line = start.line;
 		// Include the line the end cursor is on, but if end is at col 0
 		// of the next line we don't drag that empty line along.
@@ -184,7 +184,7 @@ impl Editor {
 		self.buffer_mut().mark_mutated();
 
 		// Shift both anchor and head up by one line to follow the block.
-		let sel = self.cursors.primary_mut();
+		let sel = self.buffer_mut().cursors.primary_mut();
 		sel.anchor.line = sel.anchor.line.saturating_sub(1);
 		sel.head.line = sel.head.line.saturating_sub(1);
 	}
@@ -192,7 +192,7 @@ impl Editor {
 	/// Move all lines covered by the current selection down by one line.
 	/// The selection (anchor + head) follows the moved block.
 	pub(crate) fn move_lines_down(&mut self) {
-		let (start, end) = self.cursors.primary().ordered();
+		let (start, end) = self.buffer().cursors.primary().ordered();
 		let first_line = start.line;
 		let last_line = if end.col == 0 && end.line > first_line {
 			end.line - 1
@@ -234,7 +234,7 @@ impl Editor {
 		self.buffer_mut().mark_mutated();
 
 		// Shift both anchor and head down by one line to follow the block.
-		let sel = self.cursors.primary_mut();
+		let sel = self.buffer_mut().cursors.primary_mut();
 		sel.anchor.line += 1;
 		sel.head.line += 1;
 	}

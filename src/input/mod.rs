@@ -23,6 +23,9 @@ pub fn map_event(event: &Event, mode: Mode) -> Command {
 			if mode == Mode::ConfirmOverwrite {
 				return map_confirm_overwrite_key(key);
 			}
+			if mode == Mode::Palette {
+				return map_palette_key(key);
+			}
 			match mode {
 
 				Mode::ReplacingWith => map_replace_with_key(key),
@@ -110,8 +113,8 @@ fn map_recover_swap_key(key: &KeyEvent) -> Command {
 	match key.code {
 		KeyCode::Char('y') | KeyCode::Char('Y') if ctrl => Command::RecoverSwapAccept,
 		KeyCode::Char('n') | KeyCode::Char('N') if ctrl => Command::RecoverSwapDecline,
-		KeyCode::Char('q') | KeyCode::Char('Q') if ctrl => Command::ForceQuit,
-		KeyCode::Esc => Command::ForceQuit,
+		KeyCode::Char('q') | KeyCode::Char('Q') if ctrl => Command::ForceQuitAll,
+		KeyCode::Esc => Command::ForceQuitAll,
 		_ => Command::Noop,
 	}
 }
@@ -124,7 +127,7 @@ fn map_key(key: &KeyEvent) -> Command {
 	// -- Ctrl+Shift shortcuts --
 	if ctrl && shift {
 		return match key.code {
-			KeyCode::Char('c') | KeyCode::Char('C') => Command::ForceQuit,
+			KeyCode::Char('c') | KeyCode::Char('C') => Command::ForceQuitAll,
 			KeyCode::Char('\\') | KeyCode::Char('|') => Command::SelectAll,
 			KeyCode::Left => Command::SelectWordBackward,
 			KeyCode::Right => Command::SelectWordForward,
@@ -177,10 +180,13 @@ fn map_key(key: &KeyEvent) -> Command {
 			KeyCode::End => Command::MoveBufferBottom,
 			KeyCode::Char('k') => Command::DeleteLine,
 			KeyCode::Char('d') => Command::DuplicateLineOrSelection,
+			KeyCode::Char('r') => Command::ToggleWhitespace,
 			KeyCode::Char('w') => Command::ToggleWrap,
 			KeyCode::Char('h') => Command::ToggleHelp,
 			KeyCode::Char('l') => Command::FormatDocument,
 			KeyCode::Char('t') => Command::ToggleSyntax,
+			KeyCode::Char('p') => Command::PaletteOpen,
+			KeyCode::Char('n') => Command::NewBuffer,
 			_ => Command::Noop,
 		};
 	}
@@ -280,5 +286,23 @@ fn map_confirm_overwrite_key(key: &KeyEvent) -> Command {
 		KeyCode::Char('o') if ctrl => Command::ConfirmOverwrite,
 		// Anything else cancels back to Save As
 		_ => Command::CancelOverwrite,
+	}
+}
+
+/// Key mapping while the command palette is open.
+fn map_palette_key(key: &KeyEvent) -> Command {
+	let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+	match key.code {
+		KeyCode::Esc => Command::PaletteCancel,
+		KeyCode::Enter => Command::PaletteConfirm,
+		KeyCode::Up => Command::PaletteUp,
+		KeyCode::Down => Command::PaletteDown,
+		KeyCode::PageUp => Command::PalettePageUp,
+		KeyCode::PageDown => Command::PalettePageDown,
+		KeyCode::Backspace => Command::PaletteDeleteChar,
+		KeyCode::Char('s') | KeyCode::Char('S') if ctrl => Command::PaletteClosePromptSave,
+		KeyCode::Char('d') | KeyCode::Char('D') if ctrl => Command::PaletteCloseBuffer,
+		KeyCode::Char(ch) if !ctrl => Command::PaletteInsertChar(ch),
+		_ => Command::Noop,
 	}
 }

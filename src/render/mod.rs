@@ -36,7 +36,7 @@ impl Viewport {
 
 		if let Some(prompt_windows) = chrome::build_prompt(&*editor, w, h) {
 			overlay += prompt_windows.len() as u16;
-		} else if editor.show_help {
+		} else if editor.show_help && !editor.palette.open {
 			overlay += chrome::build_help_bar(&*editor, w, h).len() as u16;
 		}
 		Self {
@@ -75,7 +75,7 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 	let text_height = vp.text_height() as usize;
 
 	// Adjust scroll to keep cursor visible (with scroll_off padding)
-	let cursor_line = editor.cursors.cursor().line;
+	let cursor_line = editor.buffer().cursors.cursor().line;
 	let scroll_off = if vp.height <= 20 {
 		0
 	} else {
@@ -99,7 +99,7 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 				tab_w,
 				taw_tmp,
 			);
-			let cursor_col = editor.cursors.cursor().col;
+			let cursor_col = editor.buffer().cursors.cursor().col;
 			let mut cur_vrow_idx = cur_vrows.len().saturating_sub(1);
 			for (i, &(start, end)) in cur_vrows.iter().enumerate() {
 				if cursor_col >= start && (cursor_col < end || i == cur_vrows.len() - 1) {
@@ -110,28 +110,29 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 
 			// --- Scroll UP: ensure scroll_off visual rows above the cursor ---
 			// Clamp both scroll_y and scroll_vrow so the viewport never starts below the cursor.
-			if editor.scroll_y > cursor_line {
-				editor.scroll_y = cursor_line;
-				editor.scroll_vrow = cur_vrow_idx;
-			} else if editor.scroll_y == cursor_line && editor.scroll_vrow > cur_vrow_idx {
-				editor.scroll_vrow = cur_vrow_idx;
+			if editor.buffer().scroll_y > cursor_line {
+				editor.buffer_mut().scroll_y = cursor_line;
+				editor.buffer_mut().scroll_vrow = cur_vrow_idx;
+			} else if editor.buffer().scroll_y == cursor_line && editor.buffer().scroll_vrow > cur_vrow_idx {
+				editor.buffer_mut().scroll_vrow = cur_vrow_idx;
 			}
 
 			// Calculate rows strictly between (scroll_y, scroll_vrow) and (cursor_line, cur_vrow_idx).
 			loop {
 				let mut rows_above: usize = 0;
-				if editor.scroll_y == cursor_line {
-					rows_above = cur_vrow_idx.saturating_sub(editor.scroll_vrow);
+				if editor.buffer().scroll_y == cursor_line {
+					rows_above = cur_vrow_idx.saturating_sub(editor.buffer().scroll_vrow);
 				} else {
+					let scroll_y = editor.buffer().scroll_y;
 					let vrows_in_top = visual_rows_for(
-						editor.buffer().text.line_slice(editor.scroll_y).chars(),
+						editor.buffer().text.line_slice(scroll_y).chars(),
 						tab_w,
 						taw_tmp,
 					)
 					.len();
-					rows_above += vrows_in_top.saturating_sub(editor.scroll_vrow);
+					rows_above += vrows_in_top.saturating_sub(editor.buffer().scroll_vrow);
 
-					for bl in (editor.scroll_y + 1)..cursor_line {
+					for bl in (editor.buffer().scroll_y + 1)..cursor_line {
 						rows_above += visual_rows_for(
 							editor.buffer().text.line_slice(bl).chars(),
 							tab_w,
@@ -145,22 +146,23 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 				if rows_above >= scroll_off {
 					break;
 				}
-				if editor.scroll_y == 0 && editor.scroll_vrow == 0 {
+				if editor.buffer().scroll_y == 0 && editor.buffer().scroll_vrow == 0 {
 					break;
 				}
 
 				// Scroll UP one visual row
-				if editor.scroll_vrow > 0 {
-					editor.scroll_vrow -= 1;
+				if editor.buffer().scroll_vrow > 0 {
+					editor.buffer_mut().scroll_vrow -= 1;
 				} else {
-					editor.scroll_y -= 1;
+					editor.buffer_mut().scroll_y -= 1;
+					let scroll_y = editor.buffer().scroll_y;
 					let count = visual_rows_for(
-						editor.buffer().text.line_slice(editor.scroll_y).chars(),
+						editor.buffer().text.line_slice(scroll_y).chars(),
 						tab_w,
 						taw_tmp,
 					)
 					.len();
-					editor.scroll_vrow = count.saturating_sub(1);
+					editor.buffer_mut().scroll_vrow = count.saturating_sub(1);
 				}
 			}
 
@@ -169,18 +171,19 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 			let max_row = visible_height.saturating_sub(1 + scroll_off);
 			loop {
 				let mut vrow_from_top: usize = 0;
-				if editor.scroll_y == cursor_line {
-					vrow_from_top = cur_vrow_idx.saturating_sub(editor.scroll_vrow);
+				if editor.buffer().scroll_y == cursor_line {
+					vrow_from_top = cur_vrow_idx.saturating_sub(editor.buffer().scroll_vrow);
 				} else {
+					let scroll_y = editor.buffer().scroll_y;
 					let vrows_in_top = visual_rows_for(
-						editor.buffer().text.line_slice(editor.scroll_y).chars(),
+						editor.buffer().text.line_slice(scroll_y).chars(),
 						tab_w,
 						taw_tmp,
 					)
 					.len();
-					vrow_from_top += vrows_in_top.saturating_sub(editor.scroll_vrow);
+					vrow_from_top += vrows_in_top.saturating_sub(editor.buffer().scroll_vrow);
 
-					for bl in (editor.scroll_y + 1)..cursor_line {
+					for bl in (editor.buffer().scroll_y + 1)..cursor_line {
 						vrow_from_top += visual_rows_for(
 							editor.buffer().text.line_slice(bl).chars(),
 							tab_w,
@@ -196,27 +199,28 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 				}
 
 				// Scroll DOWN one visual row
+				let scroll_y = editor.buffer().scroll_y;
 				let count = visual_rows_for(
-					editor.buffer().text.line_slice(editor.scroll_y).chars(),
+					editor.buffer().text.line_slice(scroll_y).chars(),
 					tab_w,
 					taw_tmp,
 				)
 				.len();
-				if editor.scroll_vrow + 1 < count {
-					editor.scroll_vrow += 1;
+				if editor.buffer().scroll_vrow + 1 < count {
+					editor.buffer_mut().scroll_vrow += 1;
 				} else {
-					editor.scroll_y += 1;
-					editor.scroll_vrow = 0;
+					editor.buffer_mut().scroll_y += 1;
+					editor.buffer_mut().scroll_vrow = 0;
 				}
 			}
 		}
 	} else {
 		let visible_height = vp.visible_text_height() as usize;
-		if cursor_line < editor.scroll_y + scroll_off {
-			editor.scroll_y = cursor_line.saturating_sub(scroll_off);
+		if cursor_line < editor.buffer().scroll_y + scroll_off {
+			editor.buffer_mut().scroll_y = cursor_line.saturating_sub(scroll_off);
 		}
-		if cursor_line + scroll_off >= editor.scroll_y + visible_height {
-			editor.scroll_y = (cursor_line + scroll_off).saturating_sub(visible_height) + 1;
+		if cursor_line + scroll_off >= editor.buffer().scroll_y + visible_height {
+			editor.buffer_mut().scroll_y = (cursor_line + scroll_off).saturating_sub(visible_height) + 1;
 		}
 	}
 
@@ -232,7 +236,7 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 
 	if !editor.config.wrap_lines {
 		// Compute the cursor's visual column so we can center scroll_x on it.
-		let cursor_pos = editor.cursors.cursor();
+		let cursor_pos = editor.buffer().cursors.cursor();
 		let tab_w = editor.tab_width();
 		let cursor_vcol = if cursor_pos.line < line_count {
 			let lsl = editor.buffer().text.line_slice(cursor_pos.line);
@@ -308,9 +312,9 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 		Mode::Searching | Mode::ReplacingWith
 	) {
 		// During search, draw an outline cursor in the document at the saved position.
-		if let Some((saved_line, saved_col)) = editor.search_saved_cursor {
-			if saved_line >= editor.scroll_y && saved_line < editor.scroll_y + text_height {
-				let saved_screen_y = (saved_line - editor.scroll_y) as u16;
+		if let Some((saved_line, saved_col)) = editor.buffer().search_saved_cursor {
+			if saved_line >= editor.buffer().scroll_y && saved_line < editor.buffer().scroll_y + text_height {
+				let saved_screen_y = (saved_line - editor.buffer().scroll_y) as u16;
 				let tab_w = editor.tab_width();
 				let saved_visual_col = if saved_line < line_count {
 					let line_slice = editor.buffer().text.line_slice(saved_line);
@@ -373,14 +377,14 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 		screen.hide_cursor = true;
 	} else {
 		// Normal mode — position cursor in the document.
-		let cursor_pos = editor.cursors.cursor();
+		let cursor_pos = editor.buffer().cursors.cursor();
 		let tab_w = editor.tab_width();
 
 		let (screen_y, visual_col) = if editor.config.wrap_lines && text_area_width > 0 {
 			// Wrap mode: screen_y must count visual rows, visual_col is
 			// relative to the start of the cursor's visual row.
 			let mut sy: usize = 0;
-			for bl in editor.scroll_y..cursor_pos.line.min(line_count) {
+			for bl in editor.buffer().scroll_y..cursor_pos.line.min(line_count) {
 				sy += visual_rows_for(
 					editor.buffer().text.line_slice(bl).chars(),
 					tab_w,
@@ -407,7 +411,7 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 				(0, 0)
 			};
 			sy += vrow_idx;
-			sy = sy.saturating_sub(editor.scroll_vrow);
+			sy = sy.saturating_sub(editor.buffer().scroll_vrow);
 
 			// Compute visual column from the visual row's start char.
 			let vc = if cursor_pos.line < line_count {
@@ -433,7 +437,7 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 			(sy, vc)
 		} else {
 			// No-wrap mode: 1 buffer line = 1 screen row.
-			let sy = cursor_pos.line.saturating_sub(editor.scroll_y);
+			let sy = cursor_pos.line.saturating_sub(editor.buffer().scroll_y);
 			let vc = if cursor_pos.line < line_count {
 				let line_slice = editor.buffer().text.line_slice(cursor_pos.line);
 				let mut v: usize = 0;
