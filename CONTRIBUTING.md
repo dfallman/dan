@@ -17,7 +17,7 @@ Even though the codebase is currently "read-only" for the public, your input is 
 If you find a bug, a crash, or a strange rendering artifact, please let us know! 
 * **Check existing issues** to see if it has already been reported.
 * **Open a new Issue** with clear steps to reproduce the bug.
-* Please include your terminal emulator (e.g., Alacritty, iTerm2, Windows Terminal) and your OS, as terminal escape sequences can behave differently across environments.
+* Please include your terminal emulator (e.g., Alacritty, iTerm2, Windows Terminal, etc.) and your OS, as terminal escape sequences can behave differently across environments. note that macOS's Terminal app has many known issues.
 
 ### 2. Sharing Ideas (Discussions)
 Have a thought on a better shortcut for "Select All"? Or an idea for a plugin interface?
