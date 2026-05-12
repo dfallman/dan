@@ -1,10 +1,10 @@
 use crossterm::style::Color;
 
-use syntect::easy::HighlightLines;
 use syntect::highlighting::FontStyle;
 
 use super::Viewport;
 use crate::editor::Editor;
+use crate::syntax::LineHighlighter;
 use crate::utils::char_width;
 
 /// Convert a syntect RGBA color to a crossterm Color.
@@ -22,23 +22,22 @@ fn syntect_to_crossterm(c: syntect::highlighting::Color) -> Color {
 /// trailing newlines). If highlighting is disabled, returns an empty Vec.
 fn syntax_colors_for_line(
 	editor: &Editor,
-	hi: &mut HighlightLines<'_>,
+	hi: &mut LineHighlighter<'_>,
 	line_text: &str,
-) -> Vec<(Color, bool, bool)> {
+) -> Vec<(Color, bool, bool, bool)> {
 	if !editor.config.syntax_highlight {
 		return Vec::new();
 	}
-	let ranges = hi
-		.highlight_line(line_text, &editor.highlighter.syntax_set)
-		.unwrap_or_default();
+	let ranges = hi.highlight_line(line_text, &editor.highlighter.syntax_set);
 
-	let mut colors: Vec<(Color, bool, bool)> = Vec::with_capacity(line_text.len());
+	let mut colors: Vec<(Color, bool, bool, bool)> = Vec::with_capacity(line_text.len());
 	for (style, fragment) in &ranges {
 		let fg = syntect_to_crossterm(style.foreground);
 		let bold = style.font_style.contains(FontStyle::BOLD);
 		let italic = style.font_style.contains(FontStyle::ITALIC);
+		let underline = style.font_style.contains(FontStyle::UNDERLINE);
 		for _ in fragment.chars() {
-			colors.push((fg, bold, italic));
+			colors.push((fg, bold, italic, underline));
 		}
 	}
 	colors
@@ -47,20 +46,16 @@ fn syntax_colors_for_line(
 /// Look up the syntax color for a character at `char_idx`.
 /// Falls back to `Color::Reset` if the index is out of range or the map is empty.
 #[inline]
-fn syntax_fg(colors: &[(Color, bool, bool)], char_idx: usize) -> (Color, bool, bool) {
+fn syntax_fg(colors: &[(Color, bool, bool, bool)], char_idx: usize) -> (Color, bool, bool, bool) {
 	colors
 		.get(char_idx)
 		.copied()
-		.unwrap_or((Color::Reset, false, false))
+		.unwrap_or((Color::Reset, false, false, false))
 }
 
-/// Calculate a subtle active line highlight background dynamically derived from
-/// the theme's default background luminance. This safely avoids garish active
-/// line colors defined by eccentric theme authors.
-
-/// Render text lines in wrap mode (soft-wrap).
-///
-/// Each buffer line may occupy multiple screen rows.
+/// Render text lines in wrap mode (soft-wrap). Each buffer line may occupy
+/// multiple screen rows.
+#[allow(clippy::too_many_arguments)]
 pub fn render_wrap(
 	editor: &Editor,
 	screen: &mut super::buffer::ScreenBuffer,
@@ -80,12 +75,14 @@ pub fn render_wrap(
 	let syntax = editor
 		.highlighter
 		.detect_syntax(editor.buffer().file_path.as_deref());
-	let mut hi = HighlightLines::new(syntax, &editor.highlighter.theme);
-
-	for pre_line in 0..editor.scroll_y.min(line_count) {
-		let pre_text = editor.buffer().text.line(pre_line);
-		let _ = hi.highlight_line(&pre_text, &editor.highlighter.syntax_set);
-	}
+	let buffer_version = editor.buffer().version;
+	let mut hi = editor.highlighter.primed(
+		&editor.highlight_cache,
+		syntax,
+		editor.scroll_y.min(line_count),
+		buffer_version,
+		|line_idx| editor.buffer().text.line(line_idx),
+	);
 
 	while screen_row < text_height && buf_line < line_count {
 		let is_active = highlight_active && buf_line == cursor_line;
@@ -185,28 +182,33 @@ pub fn render_wrap(
 					.map(|(i, _)| *i == editor.search_match_idx)
 					.unwrap_or(false);
 				let in_search = search_hit.is_some();
-				let (cur_syn_fg, cur_syn_bold, cur_syn_italic) = syntax_fg(&syn_colors, char_idx);
+				let (cur_syn_fg, cur_syn_bold, cur_syn_italic, cur_syn_underline) =
+					syntax_fg(&syn_colors, char_idx);
 
 				if want_sel {
 					screen.set_bg(editor.theme.selection_bg);
 					screen.set_fg(editor.theme.selection_fg);
 					screen.bold = cur_syn_bold;
 					screen.italic = cur_syn_italic;
+					screen.underline = cur_syn_underline;
 				} else if is_current_match {
 					screen.set_bg(editor.theme.active_match_bg);
 					screen.set_fg(editor.theme.active_match_fg);
 					screen.bold = cur_syn_bold;
 					screen.italic = cur_syn_italic;
+					screen.underline = cur_syn_underline;
 				} else if in_search {
 					screen.set_bg(editor.theme.match_bg);
 					screen.set_fg(editor.theme.match_fg);
 					screen.bold = cur_syn_bold;
 					screen.italic = cur_syn_italic;
+					screen.underline = cur_syn_underline;
 				} else {
 					screen.set_bg(base_bg);
 					screen.set_fg(cur_syn_fg);
 					screen.bold = cur_syn_bold;
 					screen.italic = cur_syn_italic;
+					screen.underline = cur_syn_underline;
 				}
 
 				if ch == '\t' {
@@ -258,6 +260,7 @@ pub fn render_wrap(
 }
 
 /// Render text lines in no-wrap mode (horizontal scroll).
+#[allow(clippy::too_many_arguments)]
 pub fn render_nowrap(
 	editor: &Editor,
 	screen: &mut super::buffer::ScreenBuffer,
@@ -276,12 +279,14 @@ pub fn render_nowrap(
 	let syntax = editor
 		.highlighter
 		.detect_syntax(editor.buffer().file_path.as_deref());
-	let mut hi = HighlightLines::new(syntax, &editor.highlighter.theme);
-
-	for pre_line in 0..editor.scroll_y.min(line_count) {
-		let pre_text = editor.buffer().text.line(pre_line);
-		let _ = hi.highlight_line(&pre_text, &editor.highlighter.syntax_set);
-	}
+	let buffer_version = editor.buffer().version;
+	let mut hi = editor.highlighter.primed(
+		&editor.highlight_cache,
+		syntax,
+		editor.scroll_y.min(line_count),
+		buffer_version,
+		|line_idx| editor.buffer().text.line(line_idx),
+	);
 
 	for row in 0..text_height {
 		let line_idx = editor.scroll_y + row;
@@ -354,28 +359,33 @@ pub fn render_nowrap(
 					.map(|(i, _)| *i == editor.search_match_idx)
 					.unwrap_or(false);
 				let in_search = search_hit.is_some();
-				let (cur_syn_fg, cur_syn_bold, cur_syn_italic) = syntax_fg(&syn_colors, char_idx);
+				let (cur_syn_fg, cur_syn_bold, cur_syn_italic, cur_syn_underline) =
+					syntax_fg(&syn_colors, char_idx);
 
 				if want_sel {
 					screen.set_bg(editor.theme.selection_bg);
 					screen.set_fg(editor.theme.selection_fg);
 					screen.bold = cur_syn_bold;
 					screen.italic = cur_syn_italic;
+					screen.underline = cur_syn_underline;
 				} else if is_current_match {
 					screen.set_bg(editor.theme.active_match_bg);
 					screen.set_fg(editor.theme.active_match_fg);
 					screen.bold = cur_syn_bold;
 					screen.italic = cur_syn_italic;
+					screen.underline = cur_syn_underline;
 				} else if in_search {
 					screen.set_bg(editor.theme.match_bg);
 					screen.set_fg(editor.theme.match_fg);
 					screen.bold = cur_syn_bold;
 					screen.italic = cur_syn_italic;
+					screen.underline = cur_syn_underline;
 				} else {
 					screen.set_bg(base_bg);
 					screen.set_fg(cur_syn_fg);
 					screen.bold = cur_syn_bold;
 					screen.italic = cur_syn_italic;
+					screen.underline = cur_syn_underline;
 				}
 
 				if ch == '\t' {

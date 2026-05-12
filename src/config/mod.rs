@@ -36,9 +36,9 @@ pub struct Config {
 	pub show_full_path: bool,
 	/// Automatically insert closing brackets and quotes
 	pub auto_close: bool,
-	/// Show comments in italics natively.
+	/// Render comment scopes in italics.
 	pub comments_are_italics: bool,
-	/// Formats all excess spaces terminating lines globally during save commits.
+	/// Strip trailing whitespace from each line on save (None = leave as-is).
 	#[serde(skip)]
 	pub trim_trailing_whitespace: Option<bool>,
 	/// Line termination style requested statically (LF / CRLF).
@@ -99,7 +99,7 @@ impl Config {
 		config
 	}
 
-	/// Dynamically overrides the Active formatting parameters natively tracking `.editorconfig` components.
+	/// Overlay any matching `.editorconfig` settings onto the current config.
 	pub fn apply_editorconfig(&mut self, path: &std::path::Path) {
 		let query_path = if path.is_absolute() {
 			path.to_path_buf()

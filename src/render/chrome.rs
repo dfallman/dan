@@ -534,7 +534,7 @@ pub fn render_ui(
 		}
 
 		let remaining_width = window.rect.width.saturating_sub(static_width);
-		let flex_width = if flex_spaces > 0 { remaining_width / flex_spaces } else { 0 };
+		let flex_width = remaining_width.checked_div(flex_spaces).unwrap_or(0);
 
 		let mut current_x = start_x;
 		let mut current_y = start_y;
@@ -574,8 +574,9 @@ pub fn render_ui(
 	interactive_cursor
 }
 
-/// Parses strings containing hotkey markers (`^X`, `Esc`, `⏎`) isolating them dynamically
-/// structurally tracking distinct explicit foreground values natively separating interactive bounds seamlessly.
+/// Split a help-line into fragments: hotkey tokens (`^X`, `Esc`, `⏎`) get
+/// `hotkey_color`; surrounding text gets `instruction_color` before the
+/// first hotkey and `text_color` after. Used to colorize the help bar.
 fn parse_hotkeys(text: &str, bg: Color, text_color: Color, instruction_color: Option<Color>, hotkey_color: Color) -> Vec<UiFragment> {
 	let mut fragments = Vec::new();
 	let mut current_text = String::new();
@@ -584,7 +585,6 @@ fn parse_hotkeys(text: &str, bg: Color, text_color: Color, instruction_color: Op
 	let mut hit_first_hotkey = false;
 
 	while i < chars.len() {
-		// Match "^X" hotkey identifiers gracefully
 		if chars[i] == '^' && i + 1 < chars.len() && chars[i+1].is_uppercase() {
 			if !current_text.is_empty() {
 				fragments.push(UiFragment { bg, fg: if hit_first_hotkey { text_color } else { instruction_color.unwrap_or(text_color) }, text: current_text, is_flex: false, is_bold: false });
@@ -596,7 +596,6 @@ fn parse_hotkeys(text: &str, bg: Color, text_color: Color, instruction_color: Op
 			continue;
 		}
 
-		// Match "Esc" conditionally dynamically natively
 		if i + 2 < chars.len() && chars[i] == 'E' && chars[i+1] == 's' && chars[i+2] == 'c' {
 			if !current_text.is_empty() {
 				fragments.push(UiFragment { bg, fg: if hit_first_hotkey { text_color } else { instruction_color.unwrap_or(text_color) }, text: current_text, is_flex: false, is_bold: false });
@@ -608,7 +607,6 @@ fn parse_hotkeys(text: &str, bg: Color, text_color: Color, instruction_color: Op
 			continue;
 		}
 
-		// Match "⏎" implicitly dynamically mapping targets gracefully
 		if chars[i] == '⏎' {
 			if !current_text.is_empty() {
 				fragments.push(UiFragment { bg, fg: if hit_first_hotkey { text_color } else { instruction_color.unwrap_or(text_color) }, text: current_text, is_flex: false, is_bold: false });

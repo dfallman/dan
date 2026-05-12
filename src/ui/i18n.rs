@@ -64,7 +64,7 @@ impl Locale for EnglishLocale {
             Message::ModeLabelEditing => "Edit".to_string(),
             Message::FilenameLabel(name) => name,
             Message::LineCol(ln, col) => format!("Ln {:2}, Col {:2}", ln, col),
-            Message::Version(ver, hash) => format!("version: Dan v{} ({})", ver, hash),
+            Message::Version(ver, hash) => format!("· Dan v{} ({})", ver, hash),
             Message::HelpTitle => "Help".to_string(),
             Message::HelpShortcutSave => "Save".to_string(),
             Message::HelpShortcutSaveAs => "Save as".to_string(),

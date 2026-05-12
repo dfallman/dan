@@ -334,7 +334,6 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 					+ 1 + saved_visual_col.saturating_sub(editor.scroll_x))
 				.min(max_w) as u16;
 				// Draw the character (or space) at that position with an underline-style outline.
-				// Draw the character (or space) at that position with an underline-style outline.
 				screen.mov_to(outline_x, saved_screen_y);
 				screen.set_bg(Color::DarkGrey);
 				screen.set_fg(Color::White);
@@ -470,7 +469,7 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 	if let Some(ref old_screen) = editor.last_screen {
 		screen.diff(old_screen, w)?;
 	} else {
-		// No bounds to diff against globally (initial load mapping completely rendering bounds)
+		// No bounds to diff against (initial load)
 		let empty = buffer::ScreenBuffer::new(0, 0);
 		screen.diff(&empty, w)?;
 	}

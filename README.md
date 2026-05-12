@@ -33,9 +33,9 @@ For more installation options, see Install below.
 
 - **Sensible defaults**: Dan uses familiar shortcuts and keybindings, so you don't need a cheat sheet. Use `Ctrl-C` and `Ctrl-V` for copy and paste, `Ctrl-S` to save, `Ctrl-Z` and `Ctrl-Y` for undo and redo, `Ctrl-F` to search and replace, and `Ctrl-Q` to quit. If you're lost, just press `Ctrl-H` for help and it's all there.
 
-- **Smart rendering engine**: Dan uses a differential rendering system. By computing exactly what has changed on your screen, it only sends the necessary updates to your terminal. This makes scrolling 100MB files over SSH feel as smooth as local editing.
+- **Smart rendering engine**: Differential rendering only writes cells that changed. Combined with a 200-line syntect snapshot cache, scrolling deep into long files stays smooth — including over slow SSH links.
 
-- **Reliability and performance**: Using a so-called Rope data structure, Dan handles _massive_ files with a constant memory footprint. It's built entirely in Rust, so it's fast, memory efficient, and reliable. We've built Dan to favor speed and reliability over bells and whistles. Did we say it's _fast_?
+- **Reliability and performance**: Rope-backed buffer (constant in-memory footprint, even on huge files). Atomic saves so a disk-full or crash mid-write can't corrupt your file. Built entirely in safe Rust — zero `unsafe` blocks across the codebase.
 
 - **Full Unicode & CJK support**: Dan handles Chinese, Japanese, and Korean characters perfectly (or, at least, that's the plan), maintaining correct visual alignment even with double-width characters and emojis.
 
@@ -59,23 +59,31 @@ For more installation options, see Install below.
 
 ### Under the hood
 
-- **Differential screen rendering**: The rendering pipeline utilizes an aggressive delta-computation system. Dan only flushes the exact structural text differences directly to standard output frame-by-frame, drastically minimizing I/O and entirely eliminating scroll tearing over network connections.
+- **Differential screen rendering**: Dan compares the new frame against the previous one and writes only the changed cells. ANSI volume stays low, scrolling stays smooth even over slow SSH links.
 
-- **Rope data structure architecture**: The text buffer is internally powered by a Rope graph designed to withstand punishing mutation intervals. This guarantees O(log N) insertion and deletion complexities, maintaining constant memory footprints, and instantaneous mutations regardless of file scale.
+- **Rope-backed text buffer**: Inserts and deletes are O(log N) and the in-memory footprint scales with the change, not the file size. Dan opens hundred-MB files without slurping them into a single string.
 
-- **Fault-tolerant recovery**: All unsaved changes are asynchronously serialized to a `.swp` recovery file every 5 seconds. If your SSH connection drops, your terminal crashes, or you experience a power cycle, Dan will immediately prompt to recover your atomic state identically upon reopening.
+- **Cached syntax highlighting**: A parse-state snapshot is taken every 200 lines, so jumping deep into a long file no longer replays from line 0. Highlighting also stays correct across multi-line grammars (Markdown fences, raw strings, etc.) regardless of where you scroll.
 
-- **Layered deterministic configuration**: Reads from Internal Defaults -> `~/.config/dan/config.toml` -> local `.editorconfig` matrices dynamically. It fully respects project-level stylistic constraints (tab widths, CRLF vs LF line endings, trailing whitespace trims) instantly.
+- **Atomic save**: Saves go through a sibling temp file (mode 0o600) → fsync → rename, so a disk-full or kill mid-write leaves your file in its prior state instead of truncated. Symlinks are preserved (the link's target is updated, the link itself isn't replaced) and original file permissions are kept.
 
-- **Asynchronous auto-formatter**: Never block the main thread while formatting. Dan securely pipes the active buffer to external industry-standard binaries (like Prettier, Rustfmt, or Ruff) in a background thread, effortlessly hot-swapping the buffer when execution confirms success without interrupting your cursor sequence.
+- **Crash-recovery `.swp` files**: Every 5 seconds Dan writes the current buffer to a hidden swap file via the same temp+rename pattern. If SSH drops or the terminal crashes, reopening the file prompts to recover.
 
-- **True syntax and encoding awareness**: Beyond just stripping simple file extensions, Dan intelligently parses complex hidden targets (like `Cargo.lock`, `Makefile`, and `.bashrc`). It reliably digests raw Unicode, Shift-JIS, and legacy formats locally, converting correctly to pristine UTF-8.
+- **Clean shutdown on signals**: SIGTERM, SIGHUP, and SIGQUIT all restore the terminal cleanly — no more stranded raw-mode shell after `kill <pid>` or an SSH drop.
 
-- **Automatic environment introspection**: Dan fires native OSC 11 ANSI sequences sequentially on boot to ascertain your shell's true background luminance dynamically—auto-selecting optimal high-contrast (`OneHalfDark`/`OneHalfLight`) rendering without manual intervention, while still bundling 20+ specialized syntax themes.
+- **Untrusted-content safety**: Terminal escape sequences embedded in file content (clear-screen, hyperlinks, OSC 52 clipboard writes, Trojan Source bidi overrides) are sanitized at render time so opening a hostile file can't paint over the chrome or exfiltrate state.
 
-- **Automatic pair insertion**: Writing structural code is accelerated by automatic bracket and quote closures (`()`, `[]`, `{}`), including the ability to wrap existing active select regions simultaneously
+- **Layered configuration**: Internal defaults → `~/.config/dan/config.toml` → in-tree `.editorconfig`. Tab widths, CRLF/LF, trailing-whitespace trim, and others all overlay correctly per file.
 
-- **OS clipboard integration**: Dan leverages the [arboard crate](https://docs.rs/arboard/latest/arboard/) for cross-platform OS clipboard integration, gracefully falling back to an in-memory clipboard if system access is unavailable. This hybrid architecture ensures that copy-paste operations remain functional within the editor even in restricted environments or over remote connections where a display server is missing.
+- **Async auto-formatter**: `Ctrl-L` pipes the buffer through Prettier, Rustfmt, or Ruff in a background thread. The result only applies if the buffer wasn't edited during the format — your keystrokes during a long format aren't silently discarded.
+
+- **Encoding detection**: Dan sniffs Shift-JIS, Windows-1252, and other legacy encodings on open, transcodes to UTF-8 in memory, and round-trips back to the original encoding on save. If a save would drop characters not representable in the file's encoding, it aborts with a status message instead of silently writing `?`.
+
+- **Theme-aware**: Queries terminal background luminance via OSC 11 at startup and picks `OneHalfDark` / `OneHalfLight`. Bundles 20+ themes; override in config.
+
+- **Automatic pair insertion**: Closing brackets and quotes (`()`, `[]`, `{}`, `""`) auto-insert; wraps an active selection if there is one.
+
+- **OS clipboard integration**: Cross-platform via [arboard](https://docs.rs/arboard/latest/arboard/), with an in-memory fallback when no display server is available (SSH, restricted environments).
 
 
 # Keyboard shortcuts (keybindings)

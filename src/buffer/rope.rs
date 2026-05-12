@@ -103,42 +103,53 @@ impl TextRope {
 		self.rope.to_string()
 	}
 
-	/// Find all case-insensitive occurrences of `needle` in the rope.
-	/// Returns `(start_char, end_char)` pairs.
+	/// Find all non-overlapping case-insensitive occurrences of `needle` in
+	/// the rope. Returns `(start_char, end_char)` pairs in char-offset units.
+	///
+	/// Uses a streaming sliding-window matcher over `rope.chars()` so chunk
+	/// boundaries are transparent and Unicode needles are byte-safe.
+	/// Case folding is the legacy single-char approximation
+	/// (`ch.to_lowercase().next()`) — consistent with the rest of the editor.
 	pub fn find_all(&self, needle: &str) -> Vec<(usize, usize)> {
 		if needle.is_empty() {
 			return Vec::new();
 		}
-		let needle_lower: String = needle.to_lowercase();
-		let needle_chars: Vec<char> = needle_lower.chars().collect();
-		let needle_len = needle_chars.len();
-		let total = self.rope.len_chars();
+		let needle_lower: Vec<char> = needle
+			.chars()
+			.map(|c| c.to_lowercase().next().unwrap_or(c))
+			.collect();
+		let needle_len = needle_lower.len();
+		if needle_len > self.rope.len_chars() {
+			return Vec::new();
+		}
 
+		// Sliding window of the last `needle_len` lowercased chars seen.
+		let mut window: std::collections::VecDeque<char> =
+			std::collections::VecDeque::with_capacity(needle_len);
 		let mut results = Vec::new();
-		let mut i: usize = 0;
+		let mut pos = 0usize;
 
-		while i + needle_len <= total {
-			let mut matched = true;
-			for j in 0..needle_len {
-				let ch = self.rope.char(i + j);
-				// Compare lowercased (handles basic case folding)
-				let lower_ch = ch.to_lowercase().next().unwrap_or(ch);
-				if lower_ch != needle_chars[j] {
-					matched = false;
-					break;
-				}
+		for raw_ch in self.rope.chars() {
+			let ch = raw_ch.to_lowercase().next().unwrap_or(raw_ch);
+			if window.len() == needle_len {
+				window.pop_front();
 			}
-			if matched {
-				results.push((i, i + needle_len));
-				i += needle_len; // skip past this match
-			} else {
-				i += 1;
+			window.push_back(ch);
+			pos += 1;
+
+			if window.len() == needle_len
+				&& window.iter().zip(needle_lower.iter()).all(|(a, b)| a == b)
+			{
+				let start = pos - needle_len;
+				results.push((start, start + needle_len));
+				// Non-overlapping: skip past this match before resuming.
+				window.clear();
 			}
 		}
+
 		results
 	}
 }
-
 impl Default for TextRope {
 	fn default() -> Self {
 		Self::new()
@@ -217,5 +228,62 @@ mod tests {
 		assert_eq!(r.char_at(0), 'a');
 		assert_eq!(r.char_at(1), 'b');
 		assert_eq!(r.char_at(2), 'c');
+	}
+
+	#[test]
+	fn find_all_empty_needle() {
+		let r = TextRope::from_str("hello");
+		assert!(r.find_all("").is_empty());
+	}
+
+	#[test]
+	fn find_all_basic() {
+		let r = TextRope::from_str("hello world hello");
+		assert_eq!(r.find_all("hello"), vec![(0, 5), (12, 17)]);
+	}
+
+	#[test]
+	fn find_all_case_insensitive() {
+		let r = TextRope::from_str("Hello HELLO hello");
+		assert_eq!(r.find_all("hello"), vec![(0, 5), (6, 11), (12, 17)]);
+	}
+
+	#[test]
+	fn find_all_multiple_matches_in_one_chunk() {
+		// P1.3 regression: the memmem-based v0.2.60 implementation found at
+		// most one match per rope chunk. A short string is a single chunk.
+		let r = TextRope::from_str("foo foo foo");
+		assert_eq!(r.find_all("foo"), vec![(0, 3), (4, 7), (8, 11)]);
+	}
+
+	#[test]
+	fn find_all_non_ascii_needle_correct_offsets() {
+		// P1.3 regression: end_char was needle_bytes.len() (a byte count),
+		// breaking selection ranges and replace targets for any multi-byte needle.
+		// "weiß" is 4 chars; "ß" is 1 char (2 UTF-8 bytes).
+		let r = TextRope::from_str("weiß weiß");
+		let hits = r.find_all("ß");
+		assert_eq!(hits.len(), 2);
+		assert_eq!(hits[0].1 - hits[0].0, 1, "match span should be 1 char, not 2 bytes");
+		assert_eq!(hits[1].1 - hits[1].0, 1);
+	}
+
+	#[test]
+	fn find_all_cross_chunk_match() {
+		// P1.3 regression: a needle straddling a chunk boundary was missed entirely.
+		// Build a rope big enough to span multiple internal chunks (>1KB),
+		// arrange a needle near the boundary by inserting the needle at a
+		// large offset.
+		let mut r = TextRope::from_str(&"a".repeat(2048));
+		r.insert_str(1000, "needle");
+		let hits = r.find_all("needle");
+		assert_eq!(hits, vec![(1000, 1006)]);
+	}
+
+	#[test]
+	fn find_all_no_overlap_self_repeating() {
+		// "aa" in "aaaa" yields non-overlapping matches at 0 and 2.
+		let r = TextRope::from_str("aaaa");
+		assert_eq!(r.find_all("aa"), vec![(0, 2), (2, 4)]);
 	}
 }

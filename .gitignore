@@ -6,3 +6,5 @@ test-file.rs
 /scripts
 /.env
 rustfmt.toml
+/doc
+*.bak
