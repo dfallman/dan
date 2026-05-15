@@ -231,6 +231,11 @@ theme = "DarkNeon"
 
 Formatter output and errors are shown in the status bar.
 
+## Note on AI use
+The author of this application has been writing code for over 30 years. Lately, LLM agent-enhanced coding practices have rekindled my sense of awe at what's possible. This project has been built using a range of tools, Anthropic's Claude Code (using Opus 4.7) are among them.
+
+Unlike some who dismiss anything touched by a coding agent as "slop," I don't see it that way. To me, these tools are a way to move much faster, explore many more ideas, and test those ideas and implementations more rigorously than I ever could on my own.
+
 ---
 
 **License**: GNU General Public License v3.0 (GPLv3)
