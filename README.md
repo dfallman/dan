@@ -1,6 +1,6 @@
 # dan
 
-A fast, friendly, and _very fast_ terminal text editor written in Rust. Dan is modeless, requires no configuration to get started, and stays fast even over slow or unstable SSH connections.
+A fast, friendly, lightweight yet highly capable terminal text editor written in Rust. Dan is modeless, requires no configuration to get started, and stays fast even over slow or unstable SSH connections and while working with very large files.
 
 <img width="2080" height="1610" alt="CleanShot 2026-04-16 at 15 19 44@2x" src="https://github.com/user-attachments/assets/f356397d-e24c-40fc-86fd-932ab7c45017" />
 
@@ -27,13 +27,13 @@ Dan uses familiar shortcuts out of the box — `Ctrl-C`/`V` to copy/paste, `Ctrl
 
 - **Command palette** (`Ctrl-P`): A searchable overlay covering every editor action, all open buffers, and project files. Switch buffers, open files, or trigger any command without leaving the keyboard.
 
-- **Multiple buffers**: Dan supports multiple open buffers simultaneously, manageable through the command palette.
+- **Multiple buffers**: Dan supports multiple open buffers simultaneously, managed through the command palette.
 
 - **Rendering**: Differential rendering — only changed cells are written to the terminal. A syntax snapshot cache (taken every 200 lines) means scrolling deep into long files stays smooth, including over slow SSH links.
 
 - **Text buffer**: Rope-backed, so inserts and deletes are O(log N) and memory use scales with edits rather than file size. Dan handles very large files without loading them into a flat string.
 
-- **Syntax highlighting**: Powered by [syntect](https://github.com/trishume/syntect/), with broad language support. Dan queries your terminal's background color at startup and picks a sensible default theme. Override via config or toggle with `Ctrl-T`.
+- **Syntax highlighting**: Powered by [syntect](https://github.com/trishume/syntect/), with broad language support. Dan queries your terminal's background color at startup and picks a sensible default theme. Override the theme via config, or toggle syntax highlighting on/off with `Ctrl-T`.
 
 - **Auto-formatter** (`Ctrl-L`): Pipes the buffer through an external formatter (Prettier, Rustfmt, or Ruff) in a background thread. The result is applied only if the buffer hasn't been edited during formatting. See [Formatter](#formatter).
 
@@ -45,7 +45,7 @@ Dan uses familiar shortcuts out of the box — `Ctrl-C`/`V` to copy/paste, `Ctrl
 
 - **Unicode & CJK support**: Correct visual alignment for double-width characters and emojis.
 
-- **Native OS clipboard support**: Cross-platform via [arboard](https://docs.rs/arboard/latest/arboard/), with an in-memory fallback when no display server is available (e.g. headless SSH).
+- **Native OS clipboard support**: Cross-platform via [arboard](https://docs.rs/arboard/latest/arboard/), with an in-memory fallback when no display server is available (e.g., headless SSH).
 
 - **Auto-pairs**: Closing brackets and quotes auto-insert on typing; typing a bracket around an active selection wraps it.
 
@@ -134,7 +134,7 @@ cargo install --path .
 
 ### Windows
 
-Note: If you're running Dan inside WSL, follow the Linux instructions above instead.
+> **Note**: If you're running Dan inside WSL, follow the Linux instructions above instead.
 
 ```
 git clone https://github.com/dfallman/dan.git
@@ -232,7 +232,8 @@ theme = "DarkNeon"
 Formatter output and errors are shown in the status bar.
 
 ## Note on AI use
-The author of this application has been writing code for over 30 years. Lately, LLM agent-enhanced coding practices have rekindled my sense of awe at what's possible. This project has been built using a range of tools, Anthropic's Claude Code (using Opus 4.7) are among them.
+
+I've been writing code for over 30 years. Lately, LLM agent-enhanced coding practices have rekindled my sense of awe at what's possible. This project has been built using a range of tools, including Anthropic's Claude Code (with Opus 4.7).
 
 Unlike some who dismiss anything touched by a coding agent as "slop," I don't see it that way. To me, these tools are a way to move much faster, explore many more ideas, and test those ideas and implementations more rigorously than I ever could on my own.
 
