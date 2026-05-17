@@ -10,8 +10,18 @@ use crate::utils::char_width;
 /// When show_whitespace is on, replace whitespace chars with visible markers.
 /// Returns (char_to_display, is_whitespace_marker). The marker bool is used
 /// to override the foreground color with a dim marker color.
+///
+/// Tabs are *always* replaced — even with show_whitespace off — because a
+/// literal '\t' in a grid cell becomes a `Print('\t')` in the diff, and the
+/// terminal interprets that byte as the C0 TAB control character (jump to
+/// next tab stop), bypassing our cell-by-cell cursor positioning. The result
+/// is shifted/ghosted cells on every tab-indented line. Substituting ' ' here
+/// lets the tab-expansion loop in `render_*` fill the run with plain spaces.
 fn whitespace_marker(ch: char, show: bool) -> (char, bool) {
 	if !show {
+		if ch == '\t' {
+			return (' ', false);
+		}
 		return (ch, false);
 	}
 	match ch {

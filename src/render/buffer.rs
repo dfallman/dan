@@ -137,6 +137,24 @@ impl ScreenBuffer {
 		);
 		let frame = &mut buf;
 
+		// Diagnostic dump. When DAN_RENDER_LOG is set, every frame is
+		// appended to that file as a delimited record: header, grid dump,
+		// raw ANSI bytes. Lets the user share a reproduction.
+		let log_path = std::env::var("DAN_RENDER_LOG").ok();
+		let mut grid_dump = String::new();
+		if log_path.is_some() {
+			use std::fmt::Write as _;
+			let _ = writeln!(grid_dump, "--- FRAME {}x{} ---", self.width, self.height);
+			for y in 0..self.height {
+				let mut row = String::new();
+				for x in 0..self.width {
+					let idx = (y as usize) * (self.width as usize) + (x as usize);
+					row.push(self.grid[idx].ch);
+				}
+				let _ = writeln!(grid_dump, "{:3}|{}|", y, row);
+			}
+		}
+
 		let mut last_fg = Color::Reset;
 		let mut last_bg = Color::Reset;
 		let mut last_bold = false;
@@ -245,6 +263,34 @@ impl ScreenBuffer {
 		// atomically.
 		w.write_all(&buf)?;
 		w.flush()?;
+
+		if let Some(path) = log_path {
+			use std::io::Write as _;
+			if let Ok(mut f) = std::fs::OpenOptions::new()
+				.create(true).append(true).open(&path)
+			{
+				let _ = f.write_all(grid_dump.as_bytes());
+				let _ = writeln!(f, "--- BYTES ({} bytes) ---", buf.len());
+				// Escape the raw ANSI for readability: ESC → "\\e", other
+				// control chars → "\\xNN", printable chars verbatim.
+				let mut escaped = String::with_capacity(buf.len() * 2);
+				for &b in &buf {
+					match b {
+						0x1b => escaped.push_str("\\e"),
+						b'\n' => escaped.push_str("\\n\n"),
+						0x20..=0x7e => escaped.push(b as char),
+						_ => {
+							use std::fmt::Write as _;
+							let _ = write!(escaped, "\\x{:02x}", b);
+						}
+					}
+				}
+				let _ = f.write_all(escaped.as_bytes());
+				let _ = writeln!(f);
+				let _ = writeln!(f, "--- END FRAME ---\n");
+			}
+		}
+
 		Ok(())
 	}
 }
