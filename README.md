@@ -28,7 +28,7 @@ Dan uses familiar shortcuts out of the box — `Ctrl-C`/`V` to copy/paste, `Ctrl
 
 - **Command palette** (`Ctrl-P`): A searchable overlay covering every editor action, all open buffers, and project files. Switch buffers, open files, or trigger any command without leaving the keyboard.
 
-<p aling="center">
+<p align="center">
   <img width="800" alt="CleanShot 2026-05-17 at 14 10 01@2x" src="https://github.com/user-attachments/assets/4c3ca372-42cd-46f5-934a-26bcae4babcd" />
   <br>
   <em>Dan's command palette, invoke with `ctrl+p`</em>
