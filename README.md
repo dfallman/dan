@@ -192,8 +192,6 @@ comments_are_italics = true # Render comments in italics (default: true)
 
 Dan automatically picks up `.editorconfig` files in the project tree. Tab width, line endings, and trailing-whitespace rules defined there take precedence over your global config, so Dan adapts to each project's style without manual adjustment.
 
-<img width="2080" height="1610" alt="CleanShot 2026-04-16 at 15 19 24@2x" src="https://github.com/user-attachments/assets/81620335-6df2-494c-ad9c-dca863df526e" />
-
 ## Themes
 
 When `theme = "default"`, Dan queries your terminal's background color at startup and picks `OneHalfDark` for dark terminals or `OneHalfLight` for light terminals. Toggle syntax highlighting on/off at any time with `Ctrl-T`.
