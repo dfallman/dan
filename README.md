@@ -29,9 +29,9 @@ Dan uses familiar shortcuts out of the box — `Ctrl-C`/`V` to copy/paste, `Ctrl
 - **Command palette** (`Ctrl-P`): A searchable overlay covering every editor action, all open buffers, and project files. Switch buffers, open files, or trigger any command without leaving the keyboard.
 
 <p align="center">
-  <img width="800" alt="CleanShot 2026-05-17 at 14 10 01@2x" src="https://github.com/user-attachments/assets/4c3ca372-42cd-46f5-934a-26bcae4babcd" />
+  <img width="800" alt="Command palette" src="https://github.com/user-attachments/assets/4c3ca372-42cd-46f5-934a-26bcae4babcd" />
   <br>
-  <em>Dan's command palette, invoke with `ctrl+p`</em>
+  <em>Dan's command palette</em>
 </p>
 
 - **Multiple buffers**: Dan supports multiple open buffers simultaneously, managed through the command palette.
@@ -118,7 +118,7 @@ Dan uses familiar shortcuts out of the box — `Ctrl-C`/`V` to copy/paste, `Ctrl
 | `Ctrl` + `F` | Search |
 | `Ctrl` + `R` *(while searching)* | Promote to find-and-replace |
 
-## Installation
+# Installation
 
 Dan requires Rust v1.94 or later. We recommend installing via [rustup](https://rustup.rs/) rather than your system package manager, which often provides an older version:
 
@@ -150,13 +150,17 @@ cargo build --release
 Copy-Item target\release\dan.exe ~/.cargo/bin/
 ```
 
-## Configuration
+# Configuration
 
 Dan works without any configuration file. To customize it, create `~/.config/dan/config.toml` (on Windows: `C:\Users\<username>\AppData\Roaming\dan\config.toml`) and add the options you want to change. Full defaults are shown below for reference.
 
 ```
 dan ~/.config/dan/config.toml
 ```
+
+<p align="center">
+  <img width="800" alt="Settings" src="https://github.com/user-attachments/assets/6c6515dc-ba43-4944-ab96-ee634bf26f0a" />
+</p>
 
 ```toml
 # Display
