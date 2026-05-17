@@ -17,7 +17,6 @@ Clone, build, and install Dan:
 ```
 git clone https://github.com/dfallman/dan.git
 cd dan
-cargo build --release
 cargo install --path .
 ```
 
@@ -28,6 +27,12 @@ For more installation options, see [Installation](#installation).
 Dan uses familiar shortcuts out of the box — `Ctrl-C`/`V` to copy/paste, `Ctrl-S` to save, `Ctrl-Z`/`Y` to undo/redo, `Ctrl-Q` to quit. Press `Ctrl-H` to toggle the built-in help bar at any time.
 
 - **Command palette** (`Ctrl-P`): A searchable overlay covering every editor action, all open buffers, and project files. Switch buffers, open files, or trigger any command without leaving the keyboard.
+
+<p aling="center">
+  <img width="800" alt="CleanShot 2026-05-17 at 14 10 01@2x" src="https://github.com/user-attachments/assets/4c3ca372-42cd-46f5-934a-26bcae4babcd" />
+  <br>
+  <em>Dan's command palette, invoke with `ctrl+p`</em>
+</p>
 
 - **Multiple buffers**: Dan supports multiple open buffers simultaneously, managed through the command palette.
 
