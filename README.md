@@ -64,8 +64,6 @@ Dan uses familiar shortcuts out of the box — `Ctrl-C`/`V` to copy/paste, `Ctrl
 
 ## Keyboard shortcuts
 
-> **Note for macOS users**: Terminal emulators use escape sequences, which means some key combinations available in GUI editors can't be distinguished in a terminal. Most notably, Dan uses `Ctrl` where you might expect `⌘`. Many terminal emulators (including [iTerm2](https://iterm2.com/)) let you remap `⌘` to `Ctrl` if you prefer. The built-in Terminal.app is not recommended — a third-party emulator like [iTerm2](https://iterm2.com/), [Kitty](https://sw.kovidgoyal.net/kitty/), [Ghostty](https://ghostty.dev/), or [WezTerm](https://wez.dev/) will give better results.
-
 ### Basic operation
 
 | Key | Action |
@@ -117,6 +115,8 @@ Dan uses familiar shortcuts out of the box — `Ctrl-C`/`V` to copy/paste, `Ctrl
 |-----|--------|
 | `Ctrl` + `F` | Search |
 | `Ctrl` + `R` *(while searching)* | Promote to find-and-replace |
+
+**Note for macOS users**: Terminal emulators use escape sequences dating back to the late 70s and some at the time highly influential video display terminals such as VT100. Long story short, this means some "modern" key combinations available in GUI editors can't be distinguished in a terminal. Most notably, Dan (and other terminal apps) uses `Ctrl` where a Mac user might expect `⌘`. Many terminal emulators (including [iTerm2](https://iterm2.com/)) let you remap `⌘` to `Ctrl` if you prefer, although it can create side-issues. Additionally, the built-in Terminal.app is not recommended: a third-party emulator such as [iTerm2](https://iterm2.com/), [Kitty](https://sw.kovidgoyal.net/kitty/), [Ghostty](https://ghostty.dev/), or [WezTerm](https://wez.dev/) will give better results.
 
 # Installation
 
