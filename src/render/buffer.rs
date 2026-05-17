@@ -122,6 +122,21 @@ impl ScreenBuffer {
 
 	#[allow(unused_assignments)]
 	pub fn diff<W: Write>(&self, old: &ScreenBuffer, w: &mut W) -> io::Result<()> {
+		// Assemble the entire frame into a local Vec before writing to `w`.
+		// A worst-case repaint on a typical terminal (e.g. 100x30 with RGB
+		// colours and per-cell style changes) is ~190 KB — well past the
+		// 64 KB capacity of the outer BufWriter. Queueing directly to `w`
+		// would trigger mid-frame auto-flushes, sending a partial frame to
+		// the terminal and showing the user incomplete renders. In release
+		// builds the main loop drives renders many times per second, so the
+		// partial-frame windows pile up into visible corruption ("rendering
+		// broken when editing"). Assembling the frame in a Vec and writing
+		// it once with `write_all` makes each frame an atomic transfer.
+		let mut buf: Vec<u8> = Vec::with_capacity(
+			(self.width as usize) * (self.height as usize) * 8 + 256,
+		);
+		let frame = &mut buf;
+
 		let mut last_fg = Color::Reset;
 		let mut last_bg = Color::Reset;
 		let mut last_bold = false;
@@ -132,9 +147,9 @@ impl ScreenBuffer {
 		let mut current_y: Option<u16> = None;
 
 		// Force reset style at the start just in case terminal state is dirty
-		w.queue(SetForegroundColor(Color::Reset))?;
-		w.queue(SetBackgroundColor(Color::Reset))?;
-		w.queue(SetAttribute(Attribute::Reset))?;
+		frame.queue(SetForegroundColor(Color::Reset))?;
+		frame.queue(SetBackgroundColor(Color::Reset))?;
+		frame.queue(SetAttribute(Attribute::Reset))?;
 
 		for y in 0..self.height {
 			let mut changed_run = false;
@@ -155,43 +170,43 @@ impl ScreenBuffer {
 				}
 
 				if !changed_run || current_x != Some(x) || current_y != Some(y) {
-					w.queue(cursor::MoveTo(x, y))?;
+					frame.queue(cursor::MoveTo(x, y))?;
 					current_x = Some(x);
 					current_y = Some(y);
 					changed_run = true;
 				}
 
 				if new_cell.fg != last_fg {
-					w.queue(SetForegroundColor(new_cell.fg))?;
+					frame.queue(SetForegroundColor(new_cell.fg))?;
 					last_fg = new_cell.fg;
 				}
 				if new_cell.bg != last_bg {
-					w.queue(SetBackgroundColor(new_cell.bg))?;
+					frame.queue(SetBackgroundColor(new_cell.bg))?;
 					last_bg = new_cell.bg;
 				}
 
 				if new_cell.bold != last_bold {
 					if new_cell.bold {
-						w.queue(SetAttribute(Attribute::Bold))?;
+						frame.queue(SetAttribute(Attribute::Bold))?;
 					} else {
-						w.queue(SetAttribute(Attribute::NormalIntensity))?;
+						frame.queue(SetAttribute(Attribute::NormalIntensity))?;
 					}
 					last_bold = new_cell.bold;
 				}
 				if new_cell.underline != last_underline {
 					if new_cell.underline {
-						w.queue(SetAttribute(Attribute::Underlined))?;
+						frame.queue(SetAttribute(Attribute::Underlined))?;
 					} else {
-						w.queue(SetAttribute(Attribute::NoUnderline))?;
+						frame.queue(SetAttribute(Attribute::NoUnderline))?;
 					}
 					last_underline = new_cell.underline;
 				}
 
 				if new_cell.italic != last_italic {
 					if new_cell.italic {
-						w.queue(SetAttribute(Attribute::Italic))?;
+						frame.queue(SetAttribute(Attribute::Italic))?;
 					} else {
-						w.queue(SetAttribute(Attribute::NoItalic))?;
+						frame.queue(SetAttribute(Attribute::NoItalic))?;
 					}
 					last_italic = new_cell.italic;
 				}
@@ -200,29 +215,35 @@ impl ScreenBuffer {
 				if new_cell.sanitized {
 					// Use purple foreground to indicate sanitized content
 					if last_fg != Color::Magenta {
-						w.queue(SetForegroundColor(Color::Magenta))?;
+						frame.queue(SetForegroundColor(Color::Magenta))?;
 						last_fg = Color::Magenta;
 					}
 					// Also bold to make it more visible
 					if !new_cell.bold {
-						w.queue(SetAttribute(Attribute::Bold))?;
+						frame.queue(SetAttribute(Attribute::Bold))?;
 						last_bold = true;
 					}
 				}
 
-				w.queue(style::Print(new_cell.ch))?;
+				frame.queue(style::Print(new_cell.ch))?;
 				current_x = Some(x.saturating_add(1));
 			}
 		}
 
 		if self.hide_cursor {
-			w.queue(cursor::Hide)?;
+			frame.queue(cursor::Hide)?;
 		} else {
-			w.queue(cursor::MoveTo(self.term_cursor_x, self.term_cursor_y))?;
-			w.queue(self.cursor_style)?;
-			w.queue(cursor::Show)?;
+			frame.queue(cursor::MoveTo(self.term_cursor_x, self.term_cursor_y))?;
+			frame.queue(self.cursor_style)?;
+			frame.queue(cursor::Show)?;
 		}
 
+		// Single write — outer BufWriter still sees one slice, and even if
+		// that slice exceeds its capacity, `BufWriter::write_all` bypasses
+		// the buffer and writes the full payload to the underlying stdout
+		// in one syscall. Either way the terminal receives the frame
+		// atomically.
+		w.write_all(&buf)?;
 		w.flush()?;
 		Ok(())
 	}
