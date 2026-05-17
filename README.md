@@ -2,7 +2,9 @@
 
 A fast, friendly, lightweight yet highly capable terminal text editor written in Rust. Dan is modeless, requires no configuration to get started, and stays fast even over slow or unstable SSH connections and while working with very large files.
 
-<img width="2080" height="1610" alt="CleanShot 2026-04-16 at 15 19 44@2x" src="https://github.com/user-attachments/assets/f356397d-e24c-40fc-86fd-932ab7c45017" />
+<p align="center">
+  <img width="800" alt="screenshot of dan" src="https://github.com/user-attachments/assets/dba6a295-93fa-4da5-a109-b389e84e0bbb" />
+</p>
 
 ## Quick install
 
