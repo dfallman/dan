@@ -56,8 +56,16 @@ pub fn spawn_formatter(ext_str: String, content: String, tx: mpsc::Sender<Result
 
 		match child {
 			Ok(mut c) => {
+				// Write stdin on a dedicated thread so wait_with_output can drain
+				// stdout/stderr concurrently. Writing the whole input before
+				// reading any output deadlocks once the child fills its
+				// stdout/stderr pipe (~64 KB) on a large file (P2-E).
 				if let Some(mut stdin) = c.stdin.take() {
-					let _ = stdin.write_all(content.as_bytes());
+					let bytes = content.into_bytes();
+					thread::spawn(move || {
+						let _ = stdin.write_all(&bytes);
+						// stdin dropped here → EOF for the child.
+					});
 				}
 				match c.wait_with_output() {
 					Ok(output) => {

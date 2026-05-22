@@ -20,6 +20,12 @@ use crate::syntax::Highlighter;
 use crossterm::terminal;
 use std::io;
 
+/// Cap on the background-walked project file index. A huge monorepo would
+/// otherwise grow `project_index` without bound and never free it (P3-G). Once
+/// reached, draining stops and the walker's receiver is dropped (which makes the
+/// walker thread exit on its next `send`).
+const MAX_PROJECT_INDEX: usize = 50_000;
+
 /// Core editor state — pico-style modeless editor.
 pub struct Editor {
 	/// Loaded configuration.
@@ -178,6 +184,9 @@ impl Editor {
 		// Startup scratch: untitled_seq = 1 (renders as plain "[Untitled]").
 		let mut scratch = Buffer::new();
 		scratch.untitled_seq = Some(1);
+		// Give it a swap path so autosave / the panic hook cover unsaved work
+		// even in a never-saved buffer (P0-1).
+		scratch.swp_path = Some(crate::recovery::untitled_swap_path(1));
 
 		Self {
 			config,
@@ -226,6 +235,8 @@ impl Editor {
 	pub fn push_new_untitled(&mut self) {
 		let mut buf = Buffer::new();
 		buf.untitled_seq = Some(self.next_untitled_seq);
+		// Swap path so autosave / the panic hook cover this buffer (P0-1).
+		buf.swp_path = Some(crate::recovery::untitled_swap_path(self.next_untitled_seq));
 		self.next_untitled_seq += 1;
 		self.buffers.push(buf);
 		self.active_buffer = self.buffers.len() - 1;
@@ -280,8 +291,15 @@ impl Editor {
 		// idle 500ms poll cadence (otherwise `has_pending_async` stays true
 		// forever and we tight-poll at 25ms).
 		if self.project_index_rx.is_some() {
-			let mut disconnected = false;
+			let mut drop_rx = false;
 			loop {
+				if self.project_index.len() >= MAX_PROJECT_INDEX {
+					// Cap reached: stop draining and drop the receiver so the
+					// walker thread exits on its next send (P3-G).
+					drop_rx = true;
+					did_work = true;
+					break;
+				}
 				match self.project_index_rx.as_ref().unwrap().try_recv() {
 					Ok(p) => {
 						self.project_index.push(p);
@@ -289,13 +307,13 @@ impl Editor {
 					}
 					Err(std::sync::mpsc::TryRecvError::Empty) => break,
 					Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-						disconnected = true;
+						drop_rx = true;
 						did_work = true;
 						break;
 					}
 				}
 			}
-			if disconnected {
+			if drop_rx {
 				self.project_index_rx = None;
 			}
 		}
@@ -333,11 +351,22 @@ impl Editor {
 		// from via indexed access, NOT through buffer_mut().
 		let n = self.buffers.len();
 		for i in 0..n {
-			let fmt_result = self.buffers[i]
-				.fmt_rx
-				.as_ref()
-				.and_then(|rx| rx.try_recv().ok());
-			let Some(res) = fmt_result else { continue };
+			let recv = self.buffers[i].fmt_rx.as_ref().map(|rx| rx.try_recv());
+			let res = match recv {
+				None => continue,                                            // no format in flight
+				Some(Err(std::sync::mpsc::TryRecvError::Empty)) => continue, // still running
+				Some(Err(std::sync::mpsc::TryRecvError::Disconnected)) => {
+					// Worker vanished without sending (panic / kill / the stdin
+					// deadlock). Clear the in-flight flags so we don't tight-poll
+					// at 25 ms forever (P2-E).
+					self.buffers[i].is_formatting = false;
+					self.buffers[i].fmt_rx = None;
+					self.buffers[i].fmt_baseline_version = None;
+					did_work = true;
+					continue;
+				}
+				Some(Ok(res)) => res,
+			};
 
 			self.buffers[i].is_formatting = false;
 			self.buffers[i].fmt_rx = None;
@@ -561,14 +590,36 @@ impl Editor {
 		&mut self.buffers[self.active_buffer]
 	}
 
-	/// The configured tab display width (columns).
+	/// The configured tab display width (columns). Clamped to `>= 1`: a zero
+	/// width (from `config.toml` `tab_width = 0` or `.editorconfig`
+	/// `indent_size = 0`) would otherwise reach `col % tab_w` in the renderer
+	/// and panic with a divide-by-zero (P1-A).
 	pub fn tab_width(&self) -> usize {
-		self.config.tab_width
+		self.config.tab_width.max(1)
 	}
 
 	/// Whether Tab inserts spaces (true) or a literal tab (false).
 	pub fn expand_tab(&self) -> bool {
 		self.config.expand_tab
+	}
+
+	/// Publish O(1) snapshots of the currently-dirty buffers to the global
+	/// crash registry so the panic hook can flush them if the process dies
+	/// (P0-2). Called once per event-loop iteration; `TextRope::clone` is a
+	/// structural-sharing clone, so this stays cheap.
+	pub fn publish_crash_snapshot(&self) {
+		let entries = self
+			.buffers
+			.iter()
+			.filter(|b| b.dirty)
+			.filter_map(|b| {
+				b.swp_path.as_ref().map(|p| crate::crash::CrashEntry {
+					swap_path: p.clone(),
+					text: b.text.clone(),
+				})
+			})
+			.collect();
+		crate::crash::publish(entries);
 	}
 
 	/// Set a status message.
@@ -690,11 +741,18 @@ impl Editor {
 		if idx >= self.buffers.len() {
 			return Err(io::Error::new(io::ErrorKind::NotFound, "buffer index out of range"));
 		}
+		// Remove the buffer's swap file so a discarded/closed buffer doesn't
+		// leave a stale crash-recovery candidate behind (P4-M). Harmless no-op
+		// if it was already cleaned by a save.
+		if let Some(ref swp) = self.buffers[idx].swp_path {
+			crate::recovery::cleanup_swap(swp);
+		}
 		self.buffers.remove(idx);
 
 		if self.buffers.is_empty() {
 			let mut scratch = Buffer::new();
 			scratch.untitled_seq = Some(1);
+			scratch.swp_path = Some(crate::recovery::untitled_swap_path(1));
 			self.buffers.push(scratch);
 			self.active_buffer = 0;
 			return Ok(());
@@ -719,6 +777,195 @@ impl Default for Editor {
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	#[test]
+	fn tab_width_never_zero() {
+		// P1-A: tab_width = 0 (config.toml or .editorconfig indent_size = 0)
+		// caused a `% 0` divide-by-zero panic in the renderer. The accessor
+		// must clamp to >= 1.
+		let mut e = Editor::new();
+		e.config.tab_width = 0;
+		assert!(e.tab_width() >= 1, "tab_width must be clamped to >= 1");
+	}
+
+	#[test]
+	fn convert_spaces_to_tabs_safe_when_tab_width_zero() {
+		// P4-K: with tab_width = 0, `" ".repeat(0)` is "" and
+		// `leading.replace("", "\t")` interleaves a tab before every char,
+		// mangling indentation. The handler must use the clamped width.
+		use crate::editor::commands::Command;
+		use crate::buffer::rope::TextRope;
+		let mut e = Editor::new();
+		e.config.tab_width = 0;
+		e.buffer_mut().text = TextRope::from_str("    code\n");
+		e.execute(Command::ConvertSpacesToTabs);
+		let out = e.buffer().text.to_string_full();
+		// Clamped width 1 → leading spaces become tabs, nothing interleaved.
+		assert!(!out.contains(' '), "indentation mangled with tab_width 0: {:?}", out);
+	}
+
+	#[test]
+	fn save_as_prompt_handles_multibyte() {
+		// P1-B: prompt_cursor is a char count; String::insert/remove take a
+		// byte index. Typing a non-ASCII char then another char panicked.
+		use crate::editor::commands::Command;
+		let mut e = Editor::new();
+		e.save_as_input.clear();
+		e.prompt_cursor = 0;
+		e.execute(Command::SaveAsInsertChar('é'));
+		e.execute(Command::SaveAsInsertChar('x'));
+		assert_eq!(e.save_as_input, "éx");
+		assert_eq!(e.prompt_cursor, 2);
+		e.execute(Command::SaveAsDeleteChar);
+		assert_eq!(e.save_as_input, "é");
+		assert_eq!(e.prompt_cursor, 1);
+	}
+
+	#[test]
+	fn replace_with_prompt_handles_multibyte() {
+		// P1-C: same char-vs-byte bug on the replacement field.
+		use crate::editor::commands::Command;
+		use crate::editor::mode::Mode;
+		let mut e = Editor::new();
+		e.mode = Mode::ReplacingWith;
+		e.replace_with.clear();
+		e.prompt_cursor = 0;
+		e.execute(Command::ReplaceInsertChar('ß'));
+		e.execute(Command::ReplaceInsertChar('y'));
+		assert_eq!(e.replace_with, "ßy");
+		e.execute(Command::ReplaceDeleteChar);
+		assert_eq!(e.replace_with, "ß");
+	}
+
+	#[test]
+	fn wrap_selection_multibyte_then_copy_no_panic() {
+		// P1-D: auto-close wrap computed the selection end with byte length,
+		// leaving the selection head past len_chars. The next slice_to_string
+		// (here via Copy) then panicked on an out-of-range rope slice.
+		use crate::editor::commands::Command;
+		use crate::buffer::rope::TextRope;
+		let mut e = Editor::new();
+		e.config.auto_close = true;
+		e.buffer_mut().text = TextRope::from_str("é");
+		e.execute(Command::SelectAll);
+		e.execute(Command::InsertChar('"'));
+		assert_eq!(e.buffer().text.to_string_full(), "\"é\"");
+		e.execute(Command::Copy); // must not panic
+		assert_eq!(e.internal_clipboard, "\"é\"");
+	}
+
+	#[test]
+	fn duplicate_multibyte_selection_cursor_in_bounds() {
+		// P4-Q: byte length used as a char offset misplaced the cursor past
+		// the duplicated text.
+		use crate::editor::commands::Command;
+		use crate::buffer::rope::TextRope;
+		let mut e = Editor::new();
+		e.buffer_mut().text = TextRope::from_str("é");
+		e.execute(Command::SelectAll);
+		e.execute(Command::DuplicateLineOrSelection);
+		assert_eq!(e.buffer().text.to_string_full(), "éé");
+		assert_eq!(e.buffer().cursors.cursor().col, 2, "cursor should sit after both chars");
+	}
+
+	#[test]
+	fn untitled_buffers_have_swap_paths() {
+		// P0-1: untitled buffers (startup scratch + Ctrl-N) previously had no
+		// swp_path, so the 5s autosave silently skipped them and a crash lost
+		// 100% of unsaved work. Every buffer must carry a swap path.
+		let mut e = Editor::new();
+		assert!(e.buffer().swp_path.is_some(), "startup scratch needs a swap path");
+		e.push_new_untitled();
+		assert!(e.buffer().swp_path.is_some(), "new untitled buffer needs a swap path");
+	}
+
+	#[test]
+	fn formatter_disconnect_clears_is_formatting() {
+		// P2-E: if the formatter thread vanishes without sending (panic / OOM /
+		// the deadlock case), try_recv returns Disconnected. The old code's
+		// `.ok()` swallowed it, leaving is_formatting = true forever → permanent
+		// 25 ms tight-poll. Disconnect must clear the in-flight flags.
+		use std::sync::mpsc;
+		let mut e = Editor::new();
+		let (tx, rx) = mpsc::channel::<Result<String, String>>();
+		drop(tx); // disconnected, no message ever sent
+		{
+			let buf = e.buffer_mut();
+			buf.fmt_rx = Some(rx);
+			buf.is_formatting = true;
+			buf.fmt_baseline_version = Some(buf.version);
+		}
+		e.poll_async_tasks();
+		assert!(!e.buffer().is_formatting, "is_formatting must clear on Disconnected");
+		assert!(e.buffer().fmt_rx.is_none(), "fmt_rx must be dropped on Disconnected");
+	}
+
+	#[test]
+	fn format_document_ignored_while_already_formatting() {
+		// P3-J: repeated Ctrl-F must not spawn overlapping formatter workers.
+		use crate::editor::commands::Command;
+		let mut e = Editor::new();
+		e.buffer_mut().is_formatting = true;
+		e.execute(Command::FormatDocument);
+		assert!(
+			e.buffer().fmt_rx.is_none(),
+			"a second format must not start while one is in flight"
+		);
+	}
+
+	#[test]
+	fn close_buffer_cleans_up_swap_file() {
+		// P4-M: discarding/closing a buffer must remove its swap, else reopening
+		// the file offers "recovery" of content the user discarded.
+		let mut e = Editor::new();
+		let mut swp = std::env::temp_dir();
+		swp.push(format!("dan_p4m_close_{}.swp", std::process::id()));
+		std::fs::write(&swp, "swap").unwrap();
+		e.buffer_mut().swp_path = Some(swp.clone());
+		e.push_new_untitled(); // second buffer so we close a non-last one
+		e.close_buffer(0).expect("close");
+		assert!(!swp.exists(), "closing a buffer must remove its swap file");
+		std::fs::remove_file(&swp).ok();
+	}
+
+	#[test]
+	fn force_quit_cleans_up_swap_file() {
+		// P4-M: ForceQuit discards the active buffer; its swap must go too.
+		use crate::editor::commands::Command;
+		use crate::editor::mode::Mode;
+		let mut e = Editor::new();
+		let mut swp = std::env::temp_dir();
+		swp.push(format!("dan_p4m_fq_{}.swp", std::process::id()));
+		std::fs::write(&swp, "swap").unwrap();
+		e.buffer_mut().dirty = true;
+		e.buffer_mut().swp_path = Some(swp.clone());
+		e.quit_cycle_idx = Some(0);
+		e.mode = Mode::ConfirmQuit;
+		e.execute(Command::ForceQuit);
+		assert!(!swp.exists(), "force-quit discard must remove the swap file");
+		std::fs::remove_file(&swp).ok();
+	}
+
+	#[test]
+	fn project_index_is_bounded() {
+		// P3-G: the index walker pushes every project file; cap it and stop
+		// draining (drop the receiver) once the cap is hit.
+		use std::sync::mpsc;
+		let mut e = Editor::new();
+		let (tx, rx) = mpsc::channel();
+		for i in 0..(MAX_PROJECT_INDEX + 100) {
+			tx.send(std::path::PathBuf::from(format!("f{}", i))).unwrap();
+		}
+		e.project_index_rx = Some(rx);
+		e.poll_async_tasks();
+		assert!(
+			e.project_index.len() <= MAX_PROJECT_INDEX,
+			"project_index grew to {}",
+			e.project_index.len()
+		);
+		assert!(e.project_index_rx.is_none(), "receiver must be dropped at the cap");
+		drop(tx);
+	}
 
 	#[test]
 	fn close_buffer_picks_previous_neighbour() {

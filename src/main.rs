@@ -21,6 +21,7 @@
 mod buffer;
 mod config;
 mod atomic_io;
+mod crash;
 mod editor;
 mod input;
 mod palette;
@@ -93,6 +94,9 @@ fn main() -> io::Result<()> {
 		} else {
 			// Create a new buffer with the target path for saving
 			editor.buffer_mut().file_path = Some(path.to_path_buf());
+			// Swap path keyed to the target so autosave / crash recovery cover
+			// edits to a not-yet-existing file (P0-1).
+			editor.buffer_mut().swp_path = Some(crate::recovery::get_swap_path(path));
 			editor.config.apply_editorconfig(path); // Apply layout rules perfectly even for new files!
 			editor.set_status(format!("[New File] {}", args[1]));
 		}
@@ -117,6 +121,10 @@ fn main() -> io::Result<()> {
 	// never entered, so installing early is safe.
 	let default_panic_hook = std::panic::take_hook();
 	std::panic::set_hook(Box::new(move |panic_info| {
+		// Rescue unsaved buffers to their swap files BEFORE anything else, so a
+		// secondary failure during terminal restore can't cost the user's work.
+		let rescued = crate::crash::dump();
+
 		let mut stdout = io::stdout();
 		let _ = crossterm::ExecutableCommand::execute(
 			&mut stdout,
@@ -138,6 +146,14 @@ fn main() -> io::Result<()> {
 		);
 		let _ = crossterm::terminal::disable_raw_mode();
 		default_panic_hook(panic_info);
+
+		if !rescued.is_empty() {
+			eprintln!("\ndan: rescued {} unsaved buffer(s) before exiting:", rescued.len());
+			for p in &rescued {
+				eprintln!("  {}", p.display());
+			}
+			eprintln!("Reopen the affected file(s) to recover, or inspect the .swp directly.");
+		}
 	}));
 
 	// Set up terminal
@@ -160,6 +176,18 @@ fn main() -> io::Result<()> {
 	if editor.recent_files_dirty {
 		let snap: Vec<_> = editor.recent_files.iter().cloned().collect();
 		crate::palette::index::save_recent_files(&snap);
+	}
+
+	// Clean up untitled crash-dump swaps on a clean exit: they can never be
+	// auto-offered for recovery (no originating file to key on), so leaving them
+	// behind would only litter $TMPDIR. File-backed swaps are intentionally left
+	// for the save/discard paths to manage.
+	for buf in &editor.buffers {
+		if buf.file_path.is_none() {
+			if let Some(ref swp) = buf.swp_path {
+				crate::recovery::cleanup_swap(swp);
+			}
+		}
 	}
 
 	// Restore terminal
@@ -263,6 +291,10 @@ fn run_loop(
 			let cmd = input::map_event(&evt, editor.mode);
 			editor.execute(cmd);
 		}
+
+		// Refresh the crash registry so the panic hook can rescue the latest
+		// dirty-buffer state if the next iteration panics (P0-2).
+		editor.publish_crash_snapshot();
 	}
 
 	Ok(())

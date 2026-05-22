@@ -9,6 +9,32 @@ use self::rope::TextRope;
 
 use crate::sanitize::sanitize_paste;
 
+/// Max file size we'll load into memory. Larger files risk OOM-aborting the
+/// process — which would lose every other unsaved buffer — so `from_file`
+/// refuses them outright (P3-H).
+const MAX_FILE_BYTES: u64 = 1024 * 1024 * 1024; // 1 GiB
+
+/// True if a file of `len` bytes is too large to safely load.
+fn is_too_large(len: u64) -> bool {
+	len > MAX_FILE_BYTES
+}
+
+/// Encode `text` as UTF-16 with a leading byte-order mark, in the requested
+/// endianness. Used on save for files opened as UTF-16 (P4-N), since
+/// encoding_rs only decodes UTF-16.
+fn encode_utf16_with_bom(text: &str, little_endian: bool) -> Vec<u8> {
+	let mut out = Vec::with_capacity(2 + text.len() * 2);
+	out.extend_from_slice(if little_endian { &[0xFF, 0xFE] } else { &[0xFE, 0xFF] });
+	for unit in text.encode_utf16() {
+		if little_endian {
+			out.extend_from_slice(&unit.to_le_bytes());
+		} else {
+			out.extend_from_slice(&unit.to_be_bytes());
+		}
+	}
+	out
+}
+
 /// A text buffer representing a file or scratch document.
 pub struct Buffer {
 	/// The text content.
@@ -93,24 +119,50 @@ impl Buffer {
 			));
 		}
 
-		let bytes = std::fs::read(path)?;
-
-		// Treat any file containing a NUL byte as binary; refuse to open.
-		if bytes.contains(&0) {
+		// Refuse pathologically large files before reading them into memory
+		// (P3-H): a multi-GB read can OOM-abort and take every buffer with it.
+		let meta = std::fs::metadata(path)?;
+		if is_too_large(meta.len()) {
 			return Err(io::Error::new(
 				io::ErrorKind::InvalidData,
-				"File appears to be binary",
+				format!(
+					"File too large to open ({} bytes; limit {} bytes)",
+					meta.len(),
+					MAX_FILE_BYTES
+				),
 			));
 		}
 
-		let (content, encoding) = if let Ok(s) = std::str::from_utf8(&bytes) {
-			(s.to_string(), encoding_rs::UTF_8)
+		let bytes = std::fs::read(path)?;
+
+		// A UTF-16/UTF-32 byte-order mark up front means the file legitimately
+		// contains NUL bytes (every ASCII char), so it must NOT be rejected by
+		// the NUL binary heuristic below (P4-N). `decode` strips the BOM.
+		let bom_encoding = encoding_rs::Encoding::for_bom(&bytes)
+			.map(|(enc, _)| enc)
+			.filter(|&enc| enc != encoding_rs::UTF_8);
+
+		let (content, encoding) = if let Some(enc) = bom_encoding {
+			let (decoded, _, _) = enc.decode(&bytes);
+			(decoded.into_owned(), enc)
 		} else {
-			let mut detector = chardetng::EncodingDetector::new();
-			detector.feed(&bytes, true);
-			let enc = detector.guess(None, true);
-			let (dec, _, _) = enc.decode(&bytes);
-			(dec.into_owned(), enc)
+			// Treat any file containing a NUL byte as binary; refuse to open.
+			if bytes.contains(&0) {
+				return Err(io::Error::new(
+					io::ErrorKind::InvalidData,
+					"File appears to be binary",
+				));
+			}
+
+			if let Ok(s) = std::str::from_utf8(&bytes) {
+				(s.to_string(), encoding_rs::UTF_8)
+			} else {
+				let mut detector = chardetng::EncodingDetector::new();
+				detector.feed(&bytes, true);
+				let enc = detector.guess(None, true);
+				let (dec, _, _) = enc.decode(&bytes);
+				(dec.into_owned(), enc)
+			}
 		};
 
 		// --- Smart Indentation Detection ---
@@ -219,6 +271,16 @@ impl Buffer {
 	/// substituting `?` (encoding_rs's default) would corrupt the user's
 	/// file (D4.5).
 	fn encode_for_save(&self, text: &str) -> io::Result<Vec<u8>> {
+		// encoding_rs is decode-only for UTF-16 (its `encode` silently falls
+		// back to UTF-8). Encode UTF-16 by hand so a UTF-16 file opened via its
+		// BOM round-trips faithfully instead of being re-encoded to UTF-8 (P4-N).
+		if self.encoding == encoding_rs::UTF_16LE {
+			return Ok(encode_utf16_with_bom(text, true));
+		}
+		if self.encoding == encoding_rs::UTF_16BE {
+			return Ok(encode_utf16_with_bom(text, false));
+		}
+
 		let (encoded_bytes, _, had_unmappable) = self.encoding.encode(text);
 		if had_unmappable {
 			return Err(io::Error::new(
@@ -261,11 +323,16 @@ impl Buffer {
 		let text = self.prepare_save_text(config);
 		let encoded_bytes = self.encode_for_save(&text)?;
 		crate::atomic_io::write(path, &encoded_bytes)?;
-		self.file_path = Some(path.to_path_buf());
 
+		// Drop the swap from this buffer's previous identity (a different file,
+		// or an untitled crash-dump path) before adopting the new one.
 		if let Some(ref swp) = self.swp_path {
 			crate::recovery::cleanup_swap(swp);
 		}
+		self.file_path = Some(path.to_path_buf());
+		// Adopt a swap path keyed to the new file so autosave / crash recovery
+		// keeps covering this buffer after Save-As (P0-1).
+		self.swp_path = Some(crate::recovery::get_swap_path(path));
 
 		self.dirty = false;
 		Ok(())
@@ -443,6 +510,38 @@ mod tests {
 	use super::*;
 
 	#[test]
+	fn rejects_files_over_size_cap() {
+		// P3-H: loading a multi-GB file can OOM-abort the process and lose every
+		// other unsaved buffer. from_file refuses anything over the cap.
+		assert!(!is_too_large(0));
+		assert!(!is_too_large(MAX_FILE_BYTES));
+		assert!(is_too_large(MAX_FILE_BYTES + 1));
+	}
+
+	#[test]
+	fn opens_and_round_trips_utf16le_with_bom() {
+		// P4-N: a UTF-16 file is full of NUL bytes for ASCII content and was
+		// wrongly rejected by the NUL binary heuristic. It must open and, on
+		// save, round-trip to the same bytes (no silent re-encode to UTF-8).
+		let mut tmp = std::env::temp_dir();
+		tmp.push(format!("dan_p4n_{}.txt", std::process::id()));
+		let mut bytes = vec![0xFF, 0xFE]; // UTF-16LE BOM
+		for u in "hi".encode_utf16() {
+			bytes.extend_from_slice(&u.to_le_bytes());
+		}
+		std::fs::write(&tmp, &bytes).unwrap();
+
+		let (buf, _, _) = Buffer::from_file(&tmp).unwrap();
+		assert_eq!(buf.text.to_string_full(), "hi");
+		assert_eq!(buf.encoding, encoding_rs::UTF_16LE);
+
+		let cfg = crate::config::Config::default();
+		let out = buf.encode_for_save(&buf.prepare_save_text(&cfg)).unwrap();
+		assert_eq!(out, bytes, "UTF-16LE save must round-trip BOM + code units");
+		std::fs::remove_file(&tmp).ok();
+	}
+
+	#[test]
 	fn insert_str_preserves_c0_bytes() {
 		// D4.8 regression: storage layer must not silently sanitize.
 		// `insert_str` is the literal-insert API and must round-trip every byte.
@@ -508,6 +607,23 @@ mod tests {
 		let result = b.save(&cfg);
 		assert!(result.is_err(), "save should refuse unmappable chars");
 		assert!(!tmp.exists(), "no file should be written when save refuses");
+	}
+
+	#[test]
+	fn save_to_sets_swap_path() {
+		// P0-1: after Save-As a buffer must get a swp_path so autosave / crash
+		// recovery covers it (previously only open_file ever set swp_path).
+		let mut b = Buffer::new();
+		b.insert_str(0, "hello");
+		let mut tmp = std::env::temp_dir();
+		tmp.push(format!("dan_p01_saveto_{}.txt", std::process::id()));
+		let cfg = crate::config::Config::default();
+		b.save_to(&tmp, &cfg).unwrap();
+		assert_eq!(b.swp_path, Some(crate::recovery::get_swap_path(&tmp)));
+		std::fs::remove_file(&tmp).ok();
+		if let Some(swp) = &b.swp_path {
+			std::fs::remove_file(swp).ok();
+		}
 	}
 
 	#[test]

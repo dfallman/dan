@@ -39,6 +39,21 @@ pub fn get_swap_path(original_path: &Path) -> PathBuf {
 	PathBuf::from(".dan.swp")
 }
 
+/// Swap-file path for an unsaved (untitled) buffer, keyed by its editor
+/// sequence number and this process's PID.
+///
+/// Unlike `get_swap_path` there is no originating file to key recovery on, so
+/// these are best-effort crash dumps: the periodic autosave and the panic hook
+/// write here, the editor cleans them up on a clean exit, and they are not
+/// auto-offered on the next launch (P0-1). They live under `$TMPDIR/dan_swaps/`.
+pub fn untitled_swap_path(seq: usize) -> PathBuf {
+	let mut dir = env::temp_dir();
+	dir.push("dan_swaps");
+	let _ = fs::create_dir_all(&dir);
+	dir.push(format!(".dan-untitled-{}-{}.swp", seq, std::process::id()));
+	dir
+}
+
 /// Write `content` to `swap_path` via temp + fsync + rename.
 ///
 /// Hardened against symlink-TOCTOU on the temp path (S2.3) and against

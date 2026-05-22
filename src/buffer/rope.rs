@@ -104,8 +104,16 @@ impl TextRope {
 	}
 
 	/// Extract a range of characters as a String.
+	///
+	/// Out-of-range or inverted ranges are clamped to the document rather than
+	/// panicking: a stale or miscomputed selection (e.g. an inflated cursor
+	/// column) must degrade to a clamped read, never crash the editor and
+	/// strand the user's unsaved work. Mirrors `line_slice`/`char_at`.
 	pub fn slice_to_string(&self, range: Range<usize>) -> String {
-		self.rope.slice(range).to_string()
+		let len = self.rope.len_chars();
+		let start = range.start.min(len);
+		let end = range.end.min(len).max(start);
+		self.rope.slice(start..end).to_string()
 	}
 
 	/// Get the full text as a String.
@@ -250,6 +258,16 @@ mod tests {
 		assert_eq!(r.len_lines(), 2);
 		assert_eq!(r.line_slice(2).len_chars(), 0, "index == len_lines");
 		assert_eq!(r.line_slice(99).len_chars(), 0, "index well past end");
+	}
+
+	#[test]
+	fn slice_to_string_clamps_out_of_range() {
+		// Backstop for P1-D: a stale/inflated selection range must degrade to a
+		// clamped slice, never panic the editor and strand unsaved work.
+		let r = TextRope::from_str("abc");
+		assert_eq!(r.slice_to_string(0..99), "abc");
+		assert_eq!(r.slice_to_string(2..99), "c");
+		assert_eq!(r.slice_to_string(5..2), ""); // start > end
 	}
 
 	#[test]

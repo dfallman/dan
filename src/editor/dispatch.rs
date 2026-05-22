@@ -216,7 +216,8 @@ impl Editor {
 						let wrapped = format!("{}{}{}", open, text, close);
 						self.buffer_mut().insert_str(start, &wrapped);
 
-						let new_end = start + wrapped.len();
+						// Char count, not byte length: `start` is a char offset.
+						let new_end = start + wrapped.chars().count();
 						let end_line = self.buffer().text.char_to_line(new_end);
 						let end_col = new_end - self.buffer().text.line_to_char(end_line);
 
@@ -504,7 +505,8 @@ impl Editor {
 					self.clear_selection();
 					self.buffer_mut().insert_str(end, &text);
 					// Place cursor at the end of the inserted duplicate.
-					let new_pos = end + text.len();
+					// Char count, not byte length: `end` is a char offset.
+					let new_pos = end + text.chars().count();
 					let line = self.buffer().text.char_to_line(new_pos);
 					let line_start = self.buffer().text.line_to_char(line);
 					let col = new_pos - line_start;
@@ -615,7 +617,7 @@ impl Editor {
 			// -- Global Replace --
 			Command::ReplaceInsertChar(ch) => {
 				if self.mode == Mode::ReplacingWith {
-					self.replace_with.insert(self.prompt_cursor, ch);
+					prompt_insert_char(&mut self.replace_with, self.prompt_cursor, ch);
 					self.prompt_cursor += 1;
 				}
 			}
@@ -623,7 +625,7 @@ impl Editor {
 				if self.mode == Mode::ReplacingWith
 					&& self.prompt_cursor > 0 {
 						self.prompt_cursor -= 1;
-						self.replace_with.remove(self.prompt_cursor);
+						prompt_remove_char(&mut self.replace_with, self.prompt_cursor);
 					}
 			}
 			Command::ReplaceWithConfirm => {
@@ -648,7 +650,8 @@ impl Editor {
 					self.buffer_mut().insert_str(start, &replacement);
 					self.buffer_mut().commit_edits();
 
-					let new_pos = start + replacement.len();
+					// Char count, not byte length: `start` is a char offset.
+					let new_pos = start + replacement.chars().count();
 					let line = self.buffer().text.char_to_line(new_pos);
 					let col = new_pos - self.buffer().text.line_to_char(line);
 					self.buffer_mut().search_saved_cursor = Some((line, col));
@@ -832,14 +835,14 @@ impl Editor {
 			}
 			Command::GoToLineInsertChar(ch) => {
 				if ch.is_ascii_digit() {
-					self.goto_line_input.insert(self.prompt_cursor, ch);
+					prompt_insert_char(&mut self.goto_line_input, self.prompt_cursor, ch);
 					self.prompt_cursor += 1;
 				}
 			}
 			Command::GoToLineDeleteChar => {
 				if self.prompt_cursor > 0 {
 					self.prompt_cursor -= 1;
-					self.goto_line_input.remove(self.prompt_cursor);
+					prompt_remove_char(&mut self.goto_line_input, self.prompt_cursor);
 				}
 			}
 			Command::GoToLineConfirm => {
@@ -874,13 +877,13 @@ impl Editor {
 				self.mode = Mode::SaveAs;
 			}
 			Command::SaveAsInsertChar(ch) => {
-				self.save_as_input.insert(self.prompt_cursor, ch);
+				prompt_insert_char(&mut self.save_as_input, self.prompt_cursor, ch);
 				self.prompt_cursor += 1;
 			}
 			Command::SaveAsDeleteChar => {
 				if self.prompt_cursor > 0 {
 					self.prompt_cursor -= 1;
-					self.save_as_input.remove(self.prompt_cursor);
+					prompt_remove_char(&mut self.save_as_input, self.prompt_cursor);
 				}
 			}
 			Command::PromptCursorLeft => {
@@ -1017,6 +1020,11 @@ impl Editor {
 			}
 			Command::ForceQuit => {
 				// Discard the active buffer's dirty state and advance the cycle.
+				// Remove its swap too so the discarded content isn't offered for
+				// recovery on the next open (P4-M).
+				if let Some(swp) = self.buffer().swp_path.clone() {
+					crate::recovery::cleanup_swap(&swp);
+				}
 				self.buffer_mut().dirty = false;
 				self.advance_quit_cycle();
 			}
@@ -1065,6 +1073,11 @@ impl Editor {
 			}
 
 			Command::FormatDocument => {
+				// Don't stack formatter runs: a second spawn would orphan the
+				// first worker + child and overwrite fmt_rx (P3-J).
+				if self.buffer().is_formatting {
+					return;
+				}
 				let ext_str = self
 					.buffer()
 					.file_path
@@ -1280,7 +1293,10 @@ impl Editor {
 					return;
 				}
 				match crate::buffer::Buffer::from_file(&path) {
-					Ok((new_buf, _et, _tw)) => {
+					Ok((mut new_buf, _et, _tw)) => {
+						// Preserve crash-recovery coverage across reload (P0-1):
+						// from_file leaves swp_path None.
+						new_buf.swp_path = Some(crate::recovery::get_swap_path(&path));
 						self.buffers[self.active_buffer] = new_buf;
 						self.set_status(format!("Reloaded {}", path.display()));
 					}
@@ -1320,6 +1336,7 @@ impl Editor {
 				self.buffers.clear();
 				let mut scratch = crate::buffer::Buffer::new();
 				scratch.untitled_seq = Some(1);
+				scratch.swp_path = Some(crate::recovery::untitled_swap_path(1));
 				self.buffers.push(scratch);
 				self.active_buffer = 0;
 			}
@@ -1462,7 +1479,7 @@ impl Editor {
 				// Convert ONLY leading-whitespace tabs — touching mid-line tabs
 				// (e.g. column-aligned data, doc-comments) would silently
 				// corrupt formatting.
-				let tw = self.config.tab_width;
+				let tw = self.tab_width();
 				let spaces = " ".repeat(tw);
 				let text = self.buffer().text.to_string_full();
 				let out: String = text
@@ -1489,7 +1506,7 @@ impl Editor {
 			Command::ConvertSpacesToTabs => {
 				// Same constraint as the inverse: only collapse leading-whitespace
 				// space-runs, never anything mid-line.
-				let tw = self.config.tab_width;
+				let tw = self.tab_width();
 				let spaces = " ".repeat(tw);
 				let text = self.buffer().text.to_string_full();
 				let out: String = text
@@ -1602,6 +1619,28 @@ impl Editor {
 /// for now; can be wired to the actual rendered modal height later.
 fn palette_visible_rows(_editor: &crate::editor::Editor) -> usize {
 	14
+}
+
+/// Insert `ch` into `s` at **char** index `char_idx` (0..=char_count). The
+/// editor's `prompt_cursor` is a char position; `String::insert` takes a byte
+/// index, and using the char index directly panics on a non-boundary
+/// (`is_char_boundary`) the moment any multibyte char precedes the cursor
+/// (P1-B / P1-C). This translates char→byte first.
+fn prompt_insert_char(s: &mut String, char_idx: usize, ch: char) {
+	let byte_idx = s
+		.char_indices()
+		.nth(char_idx)
+		.map(|(b, _)| b)
+		.unwrap_or(s.len());
+	s.insert(byte_idx, ch);
+}
+
+/// Remove the char at **char** index `char_idx` from `s`. No-op if out of
+/// range. Char-index counterpart to `String::remove` (which takes bytes).
+fn prompt_remove_char(s: &mut String, char_idx: usize) {
+	if let Some((b, _)) = s.char_indices().nth(char_idx) {
+		s.remove(b);
+	}
 }
 
 fn sort_lines(editor: &mut crate::editor::Editor, descending: bool) {

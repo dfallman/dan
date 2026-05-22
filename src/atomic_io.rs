@@ -1,6 +1,19 @@
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+
+/// A per-call-unique temp-file suffix: PID plus a process-wide monotonic
+/// counter. PID alone (the previous scheme) collided when two threads in the
+/// same process wrote the same target concurrently — e.g. the debounced
+/// recent-files save racing the synchronous shutdown save — and the second
+/// `create_new` failed with `AlreadyExists`, silently dropping that write
+/// (P4-O).
+fn temp_suffix() -> String {
+	static COUNTER: AtomicU64 = AtomicU64::new(0);
+	let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+	format!("{}.{}", std::process::id(), n)
+}
 
 /// Write `bytes` to `path` atomically: temp-file + fsync + rename.
 ///
@@ -30,7 +43,7 @@ pub fn write(path: &Path, bytes: &[u8]) -> io::Result<()> {
 	tmp_path.push(format!(
 		".{}.dan-tmp.{}",
 		file_name.to_string_lossy(),
-		std::process::id()
+		temp_suffix()
 	));
 
 	let original_perms = fs::metadata(&target).ok().map(|m| m.permissions());
@@ -102,6 +115,15 @@ mod tests {
 		d.push(format!("dan_atomic_io_test_{}", std::process::id()));
 		fs::create_dir_all(&d).unwrap();
 		d
+	}
+
+	#[test]
+	fn temp_suffix_is_unique_per_call() {
+		// P4-O: each write must use a distinct temp name so concurrent writers
+		// to the same target don't collide on create_new.
+		let a = temp_suffix();
+		let b = temp_suffix();
+		assert_ne!(a, b, "temp suffixes must be unique per call");
 	}
 
 	#[test]

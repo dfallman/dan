@@ -1,5 +1,10 @@
 use super::rope::TextRope;
 
+/// Maximum retained undo snapshots. Past this, the oldest are dropped so a long
+/// session can't grow history without bound (P3-F). ropey's structural sharing
+/// keeps each snapshot cheap, but the count itself was previously unbounded.
+const MAX_UNDO_DEPTH: usize = 1000;
+
 /// Undo/redo history. Stores Rope snapshots; ropey's structural sharing
 /// makes each clone effectively O(1).
 #[derive(Debug)]
@@ -33,6 +38,10 @@ impl History {
 	pub fn commit(&mut self) {
 		if let Some(snap) = self.pending_snapshot.take() {
 			self.undo_stack.push(snap);
+			// Bound the stack: drop the oldest snapshot(s) past the cap (P3-F).
+			while self.undo_stack.len() > MAX_UNDO_DEPTH {
+				self.undo_stack.remove(0);
+			}
 		}
 	}
 
@@ -63,6 +72,24 @@ impl History {
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	#[test]
+	fn undo_stack_is_bounded() {
+		// P3-F: an unbounded undo stack grows for the whole session. Cap it.
+		let mut h = History::new();
+		let text = TextRope::from_str("x");
+		for _ in 0..(MAX_UNDO_DEPTH + 50) {
+			h.start_group(&text);
+			h.commit();
+		}
+		assert!(
+			h.undo_stack.len() <= MAX_UNDO_DEPTH,
+			"undo stack grew to {} (cap {})",
+			h.undo_stack.len(),
+			MAX_UNDO_DEPTH
+		);
+	}
+
 	#[test]
 	fn test_snapshot_undo_redo() {
 		let initial = TextRope::from_str("hello");
