@@ -89,7 +89,17 @@ impl TextRope {
 	}
 
 	/// Get a line as a `ropey::RopeSlice` — zero-allocation.
+	///
+	/// Out-of-range indices return an empty slice rather than panicking,
+	/// matching the bounds behaviour of `line()` and `line_len_chars()`. A
+	/// stale cursor or scroll offset (e.g. after an async formatter shrinks the
+	/// document) must degrade to an empty render, never crash the editor and
+	/// strand the user's unsaved work.
 	pub fn line_slice(&self, line_idx: usize) -> ropey::RopeSlice<'_> {
+		if line_idx >= self.rope.len_lines() {
+			let end = self.rope.len_chars();
+			return self.rope.slice(end..end);
+		}
 		self.rope.line(line_idx)
 	}
 
@@ -228,6 +238,18 @@ mod tests {
 		assert_eq!(r.char_at(0), 'a');
 		assert_eq!(r.char_at(1), 'b');
 		assert_eq!(r.char_at(2), 'c');
+	}
+
+	#[test]
+	fn line_slice_out_of_bounds_returns_empty() {
+		// Regression: a line index at/past the end must not panic. ropey's
+		// `Rope::line` panics "Attempt to index past end of Rope" — `line()`
+		// and `line_len_chars()` guard against it, but `line_slice()` did not,
+		// so a stale cursor/scroll index crashed the whole editor.
+		let r = TextRope::from_str("a\nb"); // lines: "a\n", "b" -> len_lines == 2
+		assert_eq!(r.len_lines(), 2);
+		assert_eq!(r.line_slice(2).len_chars(), 0, "index == len_lines");
+		assert_eq!(r.line_slice(99).len_chars(), 0, "index well past end");
 	}
 
 	#[test]

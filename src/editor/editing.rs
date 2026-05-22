@@ -29,27 +29,7 @@ impl Editor {
 	/// Required after operations that shrink the document (like Undo/Redo)
 	/// where the cursors might otherwise point to non-existent lines or columns.
 	pub(crate) fn clamp_cursors(&mut self) {
-		let max_line = self.buffer().line_count().saturating_sub(1);
-
-		// Clamp Head
-		if self.buffer().cursors.primary().head.line > max_line {
-			self.buffer_mut().cursors.primary_mut().head.line = max_line;
-		}
-		let head_line = self.buffer().cursors.primary().head.line;
-		let head_len = self.line_len_no_newline(head_line);
-		if self.buffer().cursors.primary().head.col > head_len {
-			self.buffer_mut().cursors.primary_mut().head.set_col(head_len);
-		}
-
-		// Clamp Anchor
-		if self.buffer().cursors.primary().anchor.line > max_line {
-			self.buffer_mut().cursors.primary_mut().anchor.line = max_line;
-		}
-		let anchor_line = self.buffer().cursors.primary().anchor.line;
-		let anchor_len = self.line_len_no_newline(anchor_line);
-		if self.buffer().cursors.primary().anchor.col > anchor_len {
-			self.buffer_mut().cursors.primary_mut().anchor.set_col(anchor_len);
-		}
+		self.buffer_mut().clamp_cursors();
 	}
 
 	/// Swap the current line with the line above it. Cursor follows.

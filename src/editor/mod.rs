@@ -381,6 +381,10 @@ impl Editor {
 						self.buffers[i].delete_range(prefix, end_char);
 						self.buffers[i].insert_str(prefix, &insert_text);
 						self.buffers[i].commit_edits();
+						// A reformat can return fewer lines than the buffer had,
+						// leaving the cursor past the new end. Re-clamp so the
+						// next render's line lookups stay in bounds.
+						self.buffers[i].clamp_cursors();
 						self.set_status("File formatted successfully");
 					} else {
 						self.set_status("File is already formatted");
@@ -746,5 +750,44 @@ mod tests {
 		e.close_buffer(0).expect("close");
 		assert_eq!(e.buffers.len(), 2);
 		assert_eq!(e.active_buffer, 1);
+	}
+
+	#[test]
+	fn formatter_result_with_fewer_lines_clamps_cursor() {
+		// Regression: an async formatter that returns fewer lines than the
+		// buffer had used to leave the cursor pointing past the new end of the
+		// document. The next render then called `line_slice(stale_line)` and
+		// panicked ("Attempt to index past end of Rope"). Applying the result
+		// must re-clamp the buffer's cursors.
+		use std::sync::mpsc;
+
+		let mut e = Editor::new();
+		{
+			let buf = e.buffer_mut();
+			buf.text = crate::buffer::rope::TextRope::from_str("a\nb\nc\nd");
+			buf.cursors.set_cursor(3, 1); // on the last line ("d")
+		}
+
+		// Simulate an in-flight format whose result shrinks the document.
+		let (tx, rx) = mpsc::channel();
+		tx.send(Ok("x\n".to_string())).expect("send"); // 2 lines: "x\n", ""
+		{
+			let buf = e.buffer_mut();
+			buf.fmt_baseline_version = Some(buf.version); // unchanged -> applied
+			buf.fmt_rx = Some(rx);
+			buf.is_formatting = true;
+		}
+
+		let did_work = e.poll_async_tasks();
+		assert!(did_work, "formatter result should have been applied");
+
+		let line_count = e.buffer().line_count();
+		let cursor_line = e.buffer().cursors.cursor().line;
+		assert!(
+			cursor_line < line_count,
+			"cursor line {} must stay within line_count {}",
+			cursor_line,
+			line_count
+		);
 	}
 }

@@ -359,6 +359,52 @@ impl Buffer {
 		self.history.commit();
 	}
 
+	/// Length of a line excluding its trailing newline.
+	fn line_len_no_newline(&self, line: usize) -> usize {
+		let len = self.text.line_len_chars(line);
+		if len > 0 {
+			let start = self.text.line_to_char(line);
+			if self.text.char_at(start + len - 1) == '\n' {
+				return len - 1;
+			}
+		}
+		len
+	}
+
+	/// Clamp this buffer's cursors (head + anchor) so they never point past the
+	/// end of the document. Required after any operation that can shrink the
+	/// buffer — including the async formatter applying a result with fewer lines
+	/// than the buffer had. Without it a stale cursor reaches `line_slice` and
+	/// panics ("index past end of Rope"). Operates on the buffer itself so it
+	/// works for buffers that are not the editor's active one.
+	pub(crate) fn clamp_cursors(&mut self) {
+		let max_line = self.text.len_lines().saturating_sub(1);
+
+		// Cursor is Copy: read both endpoints out, clamp against the text, then
+		// write them back — avoids borrowing `self.text` and `self.cursors` at once.
+		let mut head = self.cursors.primary().head;
+		if head.line > max_line {
+			head.line = max_line;
+		}
+		let head_len = self.line_len_no_newline(head.line);
+		if head.col > head_len {
+			head.set_col(head_len);
+		}
+
+		let mut anchor = self.cursors.primary().anchor;
+		if anchor.line > max_line {
+			anchor.line = max_line;
+		}
+		let anchor_len = self.line_len_no_newline(anchor.line);
+		if anchor.col > anchor_len {
+			anchor.set_col(anchor_len);
+		}
+
+		let sel = self.cursors.primary_mut();
+		sel.head = head;
+		sel.anchor = anchor;
+	}
+
 	/// Undo the last edit group.
 	pub fn undo(&mut self) {
 		if let Some(restored) = self.history.undo(self.text.clone()) {
