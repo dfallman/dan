@@ -1,8 +1,29 @@
 //! Palette state machine: query, items, filter, selection, scroll.
 
 use nucleo::Matcher;
-use crate::palette::items::PaletteItem;
+use crate::palette::items::{ActionId, PaletteItem};
 use crate::palette::match_::score;
+
+/// One rendered row of the palette result list: either a section divider or a
+/// result item (carrying its index into `filtered`). Dividers occupy a visible
+/// row but are never selectable — selection always lands on an `Item`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PaletteRow {
+    Divider,
+    Item(usize),
+}
+
+/// Visual grouping used to place section dividers. Three groups, in display
+/// order: buffers (incl. "New buffer"), recent/project files, then commands.
+/// A divider is drawn wherever consecutive results change group.
+fn group_of(item: &PaletteItem) -> u8 {
+    match item {
+        PaletteItem::Buffer { .. } => 0,
+        PaletteItem::Action { id: ActionId::NewBuffer, .. } => 0,
+        PaletteItem::File { .. } => 1,
+        PaletteItem::Action { .. } => 2,
+    }
+}
 
 #[allow(dead_code)]
 pub struct PaletteState {
@@ -83,17 +104,18 @@ impl PaletteState {
         if self.filtered.is_empty() { return; }
         if self.selection + 1 < self.filtered.len() {
             self.selection += 1;
-            if self.selection >= self.scroll + visible_rows {
-                self.scroll = self.selection + 1 - visible_rows;
-            }
+            // Scroll in visual-row space so divider rows are accounted for (1).
+            self.ensure_selection_visible(visible_rows);
         }
     }
 
     pub fn move_up(&mut self) {
         if self.selection > 0 {
             self.selection -= 1;
-            if self.selection < self.scroll {
-                self.scroll = self.selection;
+            // Only the top bound can change when moving up.
+            let vis = self.visual_index(self.selection);
+            if vis < self.scroll {
+                self.scroll = vis;
             }
         }
     }
@@ -110,6 +132,50 @@ impl PaletteState {
         self.filtered.get(self.selection).map(|&(i, _)| &self.all_items[i])
     }
 
+    /// The full sequence of rendered rows (items interleaved with section
+    /// dividers), in display order. Single source of truth shared by the
+    /// renderer and by scroll math so divider rows can't desync the two.
+    pub fn display_rows(&self) -> Vec<PaletteRow> {
+        let mut rows = Vec::with_capacity(self.filtered.len() + 2);
+        let mut prev_group: Option<u8> = None;
+        for (vis_i, &(all_idx, _)) in self.filtered.iter().enumerate() {
+            let g = group_of(&self.all_items[all_idx]);
+            if prev_group.is_some_and(|p| p != g) {
+                rows.push(PaletteRow::Divider);
+            }
+            rows.push(PaletteRow::Item(vis_i));
+            prev_group = Some(g);
+        }
+        rows
+    }
+
+    /// Visual row index (position in `display_rows`) of the item at
+    /// `filtered_idx`, i.e. its `filtered` index plus the dividers above it.
+    pub fn visual_index(&self, filtered_idx: usize) -> usize {
+        let mut dividers = 0;
+        let last = filtered_idx.min(self.filtered.len().saturating_sub(1));
+        for i in 1..=last {
+            let g = group_of(&self.all_items[self.filtered[i].0]);
+            let pg = group_of(&self.all_items[self.filtered[i - 1].0]);
+            if g != pg {
+                dividers += 1;
+            }
+        }
+        filtered_idx + dividers
+    }
+
+    /// Adjust `scroll` (a visual-row offset) so the selected item's visual row
+    /// stays within the visible window.
+    fn ensure_selection_visible(&mut self, visible_rows: usize) {
+        let visible_rows = visible_rows.max(1);
+        let vis = self.visual_index(self.selection);
+        if vis < self.scroll {
+            self.scroll = vis;
+        } else if vis >= self.scroll + visible_rows {
+            self.scroll = vis + 1 - visible_rows;
+        }
+    }
+
     pub fn refilter(&mut self) {
         self.filtered.clear();
         if self.query.is_empty() {
@@ -124,18 +190,23 @@ impl PaletteState {
                     self.filtered.push((i, s));
                 }
             }
-            // Three sections:
+            // Four sections, in display order:
             //   0: Buffer items (top)
             //   1: NewBuffer action (sits at the bottom of the buffer list)
-            //   2: everything else
-            // Within each section: score DESC, then kind_rank ASC, then index.
+            //   2: recent / project Files
+            //   3: every other command (Action)
+            // Files and commands are kept in separate sections (not interleaved
+            // by score) so the recent-files | commands divider reads cleanly
+            // even while filtering (2). Within each section: score DESC, then
+            // kind_rank ASC, then index.
             let all = &self.all_items;
             let section = |idx: usize| -> u8 {
                 use crate::palette::{PaletteItem, ActionId};
                 match &all[idx] {
                     PaletteItem::Buffer { .. } => 0,
                     PaletteItem::Action { id: ActionId::NewBuffer, .. } => 1,
-                    _ => 2,
+                    PaletteItem::File { .. } => 2,
+                    PaletteItem::Action { .. } => 3,
                 }
             };
             self.filtered.sort_by(|a, b| {
@@ -161,6 +232,107 @@ mod tests {
 
     fn action(label: &str) -> PaletteItem {
         PaletteItem::Action { id: ActionId::Save, label: label.into(), hint: None }
+    }
+
+    fn buffer(name: &str) -> PaletteItem {
+        PaletteItem::Buffer { idx: 0, dirty: false, path_display: name.into(), is_current: true }
+    }
+
+    fn file(name: &str) -> PaletteItem {
+        PaletteItem::File { path: name.into(), display: name.into(), last_opened: None }
+    }
+
+    #[test]
+    fn display_rows_inserts_dividers_between_groups() {
+        // (2): buffers | recent files | commands — a divider at each boundary.
+        let mut p = PaletteState::new();
+        p.open_with(vec![buffer("b"), file("f"), action("cmd")]);
+        let rows = p.display_rows();
+        assert_eq!(
+            rows,
+            vec![
+                PaletteRow::Item(0),
+                PaletteRow::Divider,
+                PaletteRow::Item(1),
+                PaletteRow::Divider,
+                PaletteRow::Item(2),
+            ]
+        );
+    }
+
+    #[test]
+    fn display_rows_single_divider_when_files_absent() {
+        // Buffer then commands, no files → exactly one divider.
+        let mut p = PaletteState::new();
+        p.open_with(vec![buffer("b"), action("c1"), action("c2")]);
+        let rows = p.display_rows();
+        assert_eq!(
+            rows,
+            vec![
+                PaletteRow::Item(0),
+                PaletteRow::Divider,
+                PaletteRow::Item(1),
+                PaletteRow::Item(2),
+            ]
+        );
+    }
+
+    #[test]
+    fn visual_index_accounts_for_dividers_above() {
+        let mut p = PaletteState::new();
+        p.open_with(vec![buffer("b"), file("f"), action("cmd")]);
+        assert_eq!(p.visual_index(0), 0); // buffer
+        assert_eq!(p.visual_index(1), 2); // file, after 1 divider
+        assert_eq!(p.visual_index(2), 4); // command, after 2 dividers
+    }
+
+    #[test]
+    fn scroll_keeps_selection_visible_with_dividers() {
+        // (1): a divider consumes a visible row, so scrolling must track the
+        // selected item's *visual* row, not its item index.
+        let mut p = PaletteState::new();
+        let mut items = vec![buffer("b")];
+        for i in 0..5 {
+            items.push(action(&format!("a{i}")));
+        }
+        p.open_with(items); // groups: [buffer, cmd, cmd, cmd, cmd, cmd]
+        let visible_rows = 4;
+        for _ in 0..10 {
+            p.move_down(visible_rows);
+        }
+        assert_eq!(p.selection, 5, "should land on the last item");
+
+        // The selected item's true visual row (from display_rows) must be in
+        // the window [scroll, scroll + visible_rows).
+        let rows = p.display_rows();
+        let true_vis = rows
+            .iter()
+            .position(|r| matches!(r, PaletteRow::Item(i) if *i == p.selection))
+            .expect("selection must map to a visual row");
+        assert!(
+            p.scroll <= true_vis && true_vis < p.scroll + visible_rows,
+            "selected visual row {} not in window [{}, {})",
+            true_vis,
+            p.scroll,
+            p.scroll + visible_rows
+        );
+    }
+
+    #[test]
+    fn filtered_keeps_files_before_commands() {
+        // (2): the divider only reads cleanly if files always precede commands,
+        // even when a query interleaves them by score.
+        let mut p = PaletteState::new();
+        p.open_with(vec![action("save"), file("save.txt")]);
+        p.insert_char('s');
+        p.insert_char('a');
+        let order: Vec<u8> = p.filtered.iter()
+            .map(|&(i, _)| match &p.all_items[i] {
+                PaletteItem::File { .. } => 1,
+                _ => 2,
+            })
+            .collect();
+        assert_eq!(order, vec![1, 2], "files must sort before commands");
     }
 
     #[test]

@@ -1615,10 +1615,14 @@ impl Editor {
 	}
 }
 
-/// Number of result rows the palette shows at once. Conservative fixed value
-/// for now; can be wired to the actual rendered modal height later.
-fn palette_visible_rows(_editor: &crate::editor::Editor) -> usize {
-	14
+/// Number of result rows the palette modal shows at once — divider rows
+/// included. Must match `render::chrome::build_palette_window`'s `visible_rows`
+/// (`min(terminal_height - 4, 20) - 6`) so the scroll math keeps the selected
+/// item on screen; the previous hardcoded `14` over-reported on terminals
+/// shorter than 24 rows.
+fn palette_visible_rows(editor: &crate::editor::Editor) -> usize {
+	let max_height = editor.terminal_height.saturating_sub(4).min(20);
+	(max_height as usize).saturating_sub(6).max(1)
 }
 
 /// Insert `ch` into `s` at **char** index `char_idx` (0..=char_count). The

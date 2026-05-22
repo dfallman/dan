@@ -369,64 +369,57 @@ pub fn build_palette_window(editor: &Editor, vw: u16, vh: u16) -> Vec<Window> {
 			]));
 		}
 	} else {
-		// "No matches" row: shown when the query filtered out everything.
-		// Sits at screen_idx 0; subsequent rows are blank fillers.
+		// Result rows are driven by one display-row model (items interleaved
+		// with section dividers). `scroll` is a visual-row offset into that
+		// sequence, so divider rows can no longer desync scroll from selection (1).
 		let no_matches = total == 0 && !editor.palette.query.is_empty();
+		let rows = editor.palette.display_rows();
 		let mut screen_idx: u16 = 0;
-		let mut filtered_idx = editor.palette.scroll;
-		let mut rendered_any_buffer = false;
-		let mut divider_shown = false;
+		let mut row_cursor = editor.palette.scroll;
 		while screen_idx < visible_rows as u16 {
 			let row_y = 3 + screen_idx;
-			if filtered_idx >= total {
-				if no_matches && screen_idx == 0 {
-					// "    No matches               " — same indentation as items
-					// (leading pad + marker slot + sep = 3 cells), in dim grey.
-					let label = "No matches";
-					let body_inner = inner.saturating_sub(4);
-					let pad = body_inner.saturating_sub(label.chars().count());
-					windows.push(make_row(row_y, vec![
-						frag("▌".to_string(), accent, bg),
-						frag("   ".to_string(), fg, bg),  // pad + marker slot + sep
-						frag(label.to_string(), dim, bg),
-						frag(" ".repeat(pad), fg, bg),
-						frag(" ".to_string(), fg, bg),
-						frag("│".to_string(), line, bg),
-					]));
-				} else {
-					// Empty filler row inside the box
-					windows.push(make_row(row_y, vec![
-						frag("▌".to_string(), accent, bg),
-						frag(fit("", inner), fg, bg),
-						frag("│".to_string(), line, bg),
-					]));
-				}
-				screen_idx += 1;
-				continue;
-			}
-			let (item_index_in_all, _score) = editor.palette.filtered[filtered_idx];
-			let item = &editor.palette.all_items[item_index_in_all];
-			let is_selected = filtered_idx == editor.palette.selection;
-			let is_buffer_row = matches!(item, PaletteItem::Buffer { .. });
-			// "New buffer" is an Action but lives at the bottom of the buffer
-			// section, so the divider should fire AFTER it, not before it.
-			let is_buffer_section_row = is_buffer_row
-				|| matches!(item, PaletteItem::Action { id: crate::palette::ActionId::NewBuffer, .. });
-
-			// Inject a divider on the first row that's no longer in the buffer
-			// section, but only if at least one buffer-section row was actually
-			// rendered above in this view.
-			if !is_buffer_section_row && rendered_any_buffer && !divider_shown {
+			// A divider occupies its own visible row.
+			if let Some(crate::palette::PaletteRow::Divider) = rows.get(row_cursor) {
 				let div = format!("{}┤", "─".repeat(inner));
 				windows.push(make_row(row_y, vec![
 					frag("▌".to_string(), accent, bg),
 					frag(div, line, bg),
 				]));
-				divider_shown = true;
 				screen_idx += 1;
-				continue;     // re-evaluate the same item on the next screen row
+				row_cursor += 1;
+				continue;
 			}
-
+			let filtered_idx = match rows.get(row_cursor) {
+				Some(&crate::palette::PaletteRow::Item(i)) => i,
+				_ => {
+					// Past the last result: "No matches" on the first row, else blank.
+					if no_matches && screen_idx == 0 {
+						let label = "No matches";
+						let body_inner = inner.saturating_sub(4);
+						let pad = body_inner.saturating_sub(label.chars().count());
+						windows.push(make_row(row_y, vec![
+							frag("▌".to_string(), accent, bg),
+							frag("   ".to_string(), fg, bg),
+							frag(label.to_string(), dim, bg),
+							frag(" ".repeat(pad), fg, bg),
+							frag(" ".to_string(), fg, bg),
+							frag("│".to_string(), line, bg),
+						]));
+					} else {
+						windows.push(make_row(row_y, vec![
+							frag("▌".to_string(), accent, bg),
+							frag(fit("", inner), fg, bg),
+							frag("│".to_string(), line, bg),
+						]));
+					}
+					screen_idx += 1;
+					row_cursor += 1;
+					continue;
+				}
+			};
+			let (item_index_in_all, _score) = editor.palette.filtered[filtered_idx];
+			let item = &editor.palette.all_items[item_index_in_all];
+			let is_selected = filtered_idx == editor.palette.selection;
 			let row_bg = if is_selected { theme.selection_bg } else { bg };
 			// Inner row layout: leading pad(1) + marker(1) + sep(1) + body + trailing pad(1) = inner
 			let body_inner = inner.saturating_sub(4);
@@ -521,9 +514,8 @@ pub fn build_palette_window(editor: &Editor, vw: u16, vh: u16) -> Vec<Window> {
 			row_frags.push(frag("│".to_string(), line, bg));
 
 			windows.push(make_row(row_y, row_frags));
-			if is_buffer_section_row { rendered_any_buffer = true; }
 			screen_idx += 1;
-			filtered_idx += 1;
+			row_cursor += 1;
 		}
 	}
 
