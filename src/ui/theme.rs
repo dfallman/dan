@@ -34,6 +34,8 @@ pub struct Theme {
     pub toolbar_bg: Color,
     pub toolbar_fg: Color,
     pub toolbar_fg_dim: Color,
+    /// Right-side toolbar info (^H Help · lang · encoding · Ln/Col).
+    pub toolbar_info: Color,
     pub status_bg: Color,
     pub status_fg: Color,
     pub dirty_flag: Color,
@@ -48,6 +50,10 @@ pub struct Theme {
     pub mode_save: Color,
     pub mode_danger: Color,
     pub mode_replace: Color,
+    /// The app's primary accent color: the ▌ glyphs throughout the app
+    /// (status bar, palette, prompt, help) and the Edit/Sel mode label.
+    /// `accent`, `status_bg`, `mode_edit`, and `mode_select` derive from it.
+    pub primary: Color,
     pub accent: Color,
     pub warning: Color,
     pub error: Color,
@@ -81,6 +87,7 @@ impl Theme {
                 toolbar_bg: Color::AnsiValue(254),
                 toolbar_fg: Color::AnsiValue(16),
                 toolbar_fg_dim: Color::DarkGrey,
+                toolbar_info: Color::DarkGrey,
                 status_bg: Color::Blue,
                 status_fg: Color::AnsiValue(16),
                 dirty_flag: Color::Blue,
@@ -96,6 +103,7 @@ impl Theme {
                 mode_danger: Color::DarkRed,
                 mode_replace: Color::DarkMagenta,
                 accent: Color::DarkMagenta,
+                primary: Color::DarkMagenta,
                 warning: Color::DarkYellow,
                 error: Color::DarkRed,
                 empty_space: Color::White,
@@ -119,36 +127,47 @@ impl Theme {
                 hotkey: Color::Blue,
             }
         } else {
-            // Dark theme
+            // Dark theme. `primary` is the app accent (▌ glyphs + Edit/Sel
+            // mode label); a warm yellow (#dbb86d), switched from the old
+            // cyan/blue. Change it here to retint all primary chrome at once.
+            let primary = Color::Rgb { r: 0xdb, g: 0xb8, b: 0x6d };
+            // The ^S/^A key-hint accent, reused for the toolbar's right-side
+            // info (^H Help · lang · encoding · Ln/Col).
+            let key_hint = Color::Blue;
             Self {
                 toolbar_bg: Color::AnsiValue(236),
                 toolbar_fg: Color::White,
                 // DarkGrey (ANSI bright-black) renders near-invisible on the
                 // dark backgrounds of many terminals; use plain white for now.
                 toolbar_fg_dim: Color::White,
-                status_bg: Color::Blue,
+                toolbar_info: key_hint,
+                status_bg: primary,                     // fg of the ▌ status/help/prompt glyphs (misnomer)
                 status_fg: Color::AnsiValue(16),
                 dirty_flag: Color::Blue,                // dirty is file has been edited
-                help_label: Color::Blue,
+                help_label: primary,
                 prompt_bg: Color::AnsiValue(236),
                 prompt_fg: Color::White,
                 active_row_bg: Color::AnsiValue(236),
-                mode_edit: Color::Blue,
-                mode_select: Color::Blue,
+                mode_edit: primary,
+                mode_select: primary,
                 mode_search: Color::DarkYellow,
                 mode_goto: Color::DarkCyan,
                 mode_save: Color::DarkGreen,
                 mode_danger: Color::DarkRed,
                 mode_replace: Color::DarkMagenta,
-                accent: Color::Cyan,
+                accent: primary,
+                primary,
                 warning: Color::Yellow,
                 error: Color::Red,
                 empty_space: Color::AnsiValue(236),
                 text_main: Color::White,
 
-                line_nr: Color::White,
+                // Line numbers (and whitespace markers ·→↵, which reuse
+                // line_nr) and the past-EOF ⋅ filler read better dim —
+                // keep DarkGrey here.
+                line_nr: Color::DarkGrey,
                 line_nr_active: Color::White,
-                eof_marker: Color::White,
+                eof_marker: Color::DarkGrey,
                 selection_bg: Color::Cyan,
                 selection_fg: Color::AnsiValue(16),
                 match_bg: Color::Yellow,
@@ -161,7 +180,7 @@ impl Theme {
                 prompt_warning_fg: Color::AnsiValue(16),
                 prompt_danger_bg: Color::Red,
                 prompt_danger_fg: Color::AnsiValue(16),
-                hotkey: Color::Blue,
+                hotkey: key_hint,
             }
         }
     }

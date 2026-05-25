@@ -167,7 +167,7 @@ pub fn build_status_bar(editor: &Editor, vp: &Viewport) -> Window {
 
 	fragments.push(UiFragment {
 		text: right,
-		fg: editor.theme.toolbar_fg_dim,
+		fg: editor.theme.toolbar_info,
 		bg: editor.theme.toolbar_bg,
 		is_flex: false, is_bold: false,
 	});
