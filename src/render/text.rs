@@ -133,6 +133,7 @@ pub fn render_wrap(
 
 		if skip_lines == 0 {
 			screen.mov_to(0, screen_row as u16);
+			screen.clear_attrs();
 			if show_line_numbers {
 				let line_num = format!("{:>width$} ", buf_line + 1, width = gutter_width);
 				screen.set_bg(base_bg);
@@ -162,6 +163,7 @@ pub fn render_wrap(
 					let remaining = text_area_width.saturating_sub(screen_col);
 					if remaining > 0 {
 						screen.set_bg(base_bg);
+						screen.clear_attrs();
 						for _ in 0..remaining {
 							screen.put_char(' ');
 						}
@@ -176,6 +178,7 @@ pub fn render_wrap(
 
 				if current_vrow >= skip_lines {
 					screen.mov_to(0, screen_row as u16);
+					screen.clear_attrs();
 					if show_line_numbers {
 						let wrap_gutter = format!("{:>width$} ", "↳", width = gutter_width);
 						screen.set_bg(base_bg);
@@ -267,6 +270,7 @@ pub fn render_wrap(
 			let remaining = (vp.width as usize).saturating_sub(cols_used);
 			if remaining > 0 {
 				screen.set_bg(base_bg);
+				screen.clear_attrs();
 				// EOL marker: emit ↵ before padding when show_whitespace is on.
 				if editor.config.show_whitespace {
 					screen.set_fg(editor.theme.line_nr);
@@ -290,6 +294,7 @@ pub fn render_wrap(
 	while screen_row < text_height {
 		screen.mov_to(0, screen_row as u16);
 		screen.set_bg(Color::Reset);
+		screen.clear_attrs();
 		let mut cols_written: usize = 0;
 		if show_line_numbers {
 			let tilde_gutter = format!("{:>width$} ", "⋅", width = gutter_width);
@@ -346,6 +351,7 @@ pub fn render_nowrap(
 		};
 		screen.mov_to(0, row as u16);
 		screen.set_bg(base_bg);
+		screen.clear_attrs();
 		let mut cols_written: usize = 0;
 
 		if line_idx < line_count {
@@ -484,6 +490,7 @@ pub fn render_nowrap(
 		let remaining = (vp.width as usize).saturating_sub(cols_written);
 		if remaining > 0 {
 			screen.set_bg(base_bg);
+			screen.clear_attrs();
 			// EOL marker: emit ↵ before padding for real lines when show_whitespace is on.
 			let is_real_line = line_idx < line_count;
 			if editor.config.show_whitespace && is_real_line {
@@ -500,5 +507,75 @@ pub fn render_nowrap(
 				screen.put_char(' ');
 			}
 		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use crate::buffer::rope::TextRope;
+	use crate::editor::Editor;
+	use std::path::PathBuf;
+
+	/// Render two lines where line 0 is markdown emphasis (forced italic by
+	/// `Editor::new`'s markup.italic theme override) and line 1 is plain.
+	/// Returns the composed screen grid as (chars, italic-flags) per row.
+	fn render_grid(wrap: bool) -> Vec<(Vec<char>, Vec<bool>)> {
+		let mut e = Editor::new();
+		e.config.wrap_lines = wrap;
+		e.config.line_numbers = true;
+		e.config.syntax_highlight = true;
+		e.buffer_mut().file_path = Some(PathBuf::from("test.md"));
+		e.buffer_mut().text = TextRope::from_str("*italic text*\nplain second line\n");
+		let mut out: Vec<u8> = Vec::new();
+		crate::render::render(&mut e, &mut out).unwrap();
+		let scr = e.last_screen.as_ref().unwrap();
+		let w = scr.width as usize;
+		let h = scr.height as usize;
+		(0..h)
+			.map(|y| {
+				let cells = &scr.grid[y * w..(y + 1) * w];
+				(
+					cells.iter().map(|c| c.ch).collect(),
+					cells.iter().map(|c| c.italic).collect(),
+				)
+			})
+			.collect()
+	}
+
+	/// Regression: line numbers were rendered italic when the previous line
+	/// ended in an italic syntax token, because the gutter inherited the
+	/// buffer's sticky `italic` cell-state instead of resetting it.
+	fn assert_gutter_not_italic(wrap: bool) {
+		let grid = render_grid(wrap);
+
+		// Precondition: line 0's emphasis really did highlight as italic,
+		// otherwise the test can't observe the leak it's guarding against.
+		let (row0_ch, row0_it) = &grid[0];
+		let last_italic_text = row0_ch
+			.iter()
+			.zip(row0_it)
+			.any(|(c, it)| *it && !c.is_whitespace());
+		assert!(last_italic_text, "setup: line 0 text should be italic (wrap={wrap})");
+
+		// The gutter of line 1 (the row whose first glyph is the digit '2')
+		// must not carry any italic cells.
+		let (row1_ch, row1_it) = &grid[1];
+		assert_eq!(row1_ch[0], '2', "row 1 should start with line number 2 (wrap={wrap})");
+		let gutter_italic = row1_ch
+			.iter()
+			.zip(row1_it)
+			.take_while(|(c, _)| c.is_ascii_digit() || **c == ' ')
+			.any(|(_, it)| *it);
+		assert!(!gutter_italic, "line number gutter leaked italic from prior line (wrap={wrap})");
+	}
+
+	#[test]
+	fn line_number_not_italic_after_italic_line_nowrap() {
+		assert_gutter_not_italic(false);
+	}
+
+	#[test]
+	fn line_number_not_italic_after_italic_line_wrap() {
+		assert_gutter_not_italic(true);
 	}
 }

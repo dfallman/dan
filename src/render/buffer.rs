@@ -90,6 +90,17 @@ impl ScreenBuffer {
 		self.bold = bold;
 	}
 
+	/// Clear text attributes (bold/italic/underline) to off. Gutter, padding,
+	/// and other "plain" cells must call this before writing: the buffer carries
+	/// sticky attribute state, so syntax styling from the previous line's text
+	/// (e.g. an italic comment) leaks in otherwise — italic line numbers being
+	/// the classic symptom.
+	pub fn clear_attrs(&mut self) {
+		self.bold = false;
+		self.italic = false;
+		self.underline = false;
+	}
+
 	pub fn mov_to(&mut self, x: u16, y: u16) {
 		self.cursor_x = x;
 		self.cursor_y = y;
