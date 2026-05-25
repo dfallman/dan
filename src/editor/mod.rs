@@ -108,6 +108,12 @@ pub struct Editor {
 	/// scratch is seq 1 (renders as `[Untitled]`); subsequent NewBuffer
 	/// invocations get 2, 3, 4… (rendered as `[Untitled 2]`, etc).
 	pub next_untitled_seq: usize,
+	/// True when the startup terminal colour query (OSC 10/11, via
+	/// terminal-colorsaurus) failed or was deemed unsupported. Some terminals
+	/// answer the query's DA1 sentinel *before* the colour replies, so
+	/// colorsaurus bails out and the late colour replies leak into stdin —
+	/// main.rs drains that stray input before the first frame when this is set.
+	pub color_query_failed: bool,
 }
 
 impl Editor {
@@ -119,7 +125,12 @@ impl Editor {
 		// syntect's syntax-set initialization can blow that and SIGKILL the
 		// process. Spawn a dedicated 32 MB-stack thread and join it so the
 		// expensive initialization happens off the main thread.
-		let mode = terminal_colorsaurus::theme_mode(terminal_colorsaurus::QueryOptions::default()).unwrap_or(terminal_colorsaurus::ThemeMode::Dark);
+		let mode_result = terminal_colorsaurus::theme_mode(terminal_colorsaurus::QueryOptions::default());
+		// A failed/unsupported query means the terminal may still send its colour
+		// replies late (see `color_query_failed`); record it so main.rs can flush
+		// the leftover bytes before they get parsed as typed input.
+		let color_query_failed = mode_result.is_err();
+		let mode = mode_result.unwrap_or(terminal_colorsaurus::ThemeMode::Dark);
 		let is_light_bg = mode == terminal_colorsaurus::ThemeMode::Light;
 
 		let mut theme = config.theme.clone();
@@ -226,6 +237,7 @@ impl Editor {
 			recent_files_dirty: false,
 			last_recent_save: std::time::Instant::now(),
 			next_untitled_seq: 2,
+			color_query_failed,
 		}
 	}
 

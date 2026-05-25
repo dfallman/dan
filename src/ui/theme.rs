@@ -123,7 +123,9 @@ impl Theme {
             Self {
                 toolbar_bg: Color::AnsiValue(236),
                 toolbar_fg: Color::White,
-                toolbar_fg_dim: Color::DarkGrey,
+                // DarkGrey (ANSI bright-black) renders near-invisible on the
+                // dark backgrounds of many terminals; use plain white for now.
+                toolbar_fg_dim: Color::White,
                 status_bg: Color::Blue,
                 status_fg: Color::AnsiValue(16),
                 dirty_flag: Color::Blue,                // dirty is file has been edited
@@ -144,9 +146,9 @@ impl Theme {
                 empty_space: Color::AnsiValue(236),
                 text_main: Color::White,
 
-                line_nr: Color::DarkGrey,
+                line_nr: Color::White,
                 line_nr_active: Color::White,
-                eof_marker: Color::DarkGrey,
+                eof_marker: Color::White,
                 selection_bg: Color::Cyan,
                 selection_fg: Color::AnsiValue(16),
                 match_bg: Color::Yellow,
@@ -154,7 +156,7 @@ impl Theme {
                 active_match_bg: Color::Green,
                 active_match_fg: Color::AnsiValue(16),
 
-                prompt_info: Color::DarkGrey,
+                prompt_info: Color::White,
                 prompt_warning_bg: Color::Yellow,
                 prompt_warning_fg: Color::AnsiValue(16),
                 prompt_danger_bg: Color::Red,

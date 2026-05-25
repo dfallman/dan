@@ -168,6 +168,26 @@ fn main() -> io::Result<()> {
 		.get_mut()
 		.execute(crossterm::event::EnableBracketedPaste)?;
 
+	// Flush stray terminal-query replies before the first frame.
+	//
+	// Editor::new() asks the terminal for its fg/bg colours (OSC 10/11, via
+	// terminal-colorsaurus) to auto-pick a light/dark theme. colorsaurus tells
+	// query-capable terminals apart from the rest by also sending a DA1 request
+	// and assuming replies come back in order — a DA1 answer before the colour
+	// answers is read as "unsupported". Some terminals (e.g. Terax) answer DA1
+	// *first* despite fully supporting the colour query, so colorsaurus bails
+	// and the colour replies arrive late, landing in our stdin. crossterm then
+	// parses them as key input, typing the raw reply ("10;rgb:…11;rgb:…") into
+	// the buffer on the first frame. When the query failed, drain that leftover
+	// input. The replies come as one burst, so stopping after a brief quiet gap
+	// catches them without swallowing real keystrokes (nobody types this fast
+	// the instant the editor launches).
+	if editor.color_query_failed {
+		while event::poll(Duration::from_millis(20))? {
+			let _ = event::read()?;
+		}
+	}
+
 	// Main loop
 	let result = run_loop(&mut editor, &mut writer, &shutdown_signal);
 
