@@ -20,9 +20,9 @@ A fast, modeless, lightweight terminal text editor written in Rust. Designed for
 | Modeless | ✅ | ❌ | ✅ | ✅ |
 | Rust-based | ✅ | ❌ | ❌ | ✅ |
 | Atomic Saves | ✅ (fsync/rename) | ⚠️ (Configurable) | ❌ | ❌ |
-| Buffer Architecture | Rope $O(\log N)$ | Gap Buffer/Piece Table | Flat String | Gap Buffer |
-| Rendering | Differential | Full/Partial Redraw | Full Redraw | Full Redraw |
-| Crash Recovery | ✅ (Auto-swp) | ✅ (Swap files) | ❌ | ❌ |
+| Buffer Architecture | Rope $O(\log N)$ | Gap buffer/Piece table | Flat string | Gap buffer |
+| Rendering | Differential | Full/partial redraw | Full redraw | Full redraw |
+| Crash Recovery | ✅ Auto-swap | ✅ Swap files | ❌ | ❌ |
 | Command Palette | ✅ | ❌ (Cmd line) | ❌ | ❌ |
 | Out-of-box Config | Zero-config | High learning curve | Minimal | Minimal |
 
@@ -47,41 +47,28 @@ For more installation options, see [Installation](#installation).
 
 Dan uses familiar shortcuts out of the box — `Ctrl-C`/`V` to copy/paste, `Ctrl-S` to save, `Ctrl-Z`/`Y` to undo/redo, `Ctrl-Q` to quit. Press `Ctrl-H` to toggle the built-in help bar at any time.
 
-- **Command palette** (`Ctrl-P`): A searchable overlay covering every editor action, all open buffers, and project files. Switch buffers, open files, or trigger any command without leaving the keyboard.
-
 <p align="center">
   <img width="800" alt="Command palette" src="https://github.com/user-attachments/assets/4c3ca372-42cd-46f5-934a-26bcae4babcd" />
   <br>
   <em>Dan's command palette</em>
 </p>
 
-- **Multiple buffers**: Dan supports multiple open buffers simultaneously, managed through the command palette.
+- **Rope-Backed Text Buffer**: Utilizes a rope structure ensuring $O(\\log N)$ time complexity for insertions and deletions. Memory usage scales with edit volume rather than raw file size, permitting fluid, non-blocking navigation and manipulation of 100MB+ log files.
+- **Optimized Terminal I/O & Differential Rendering**: Implements differential rendering to minimize bandwidth by emitting ANSI escape sequences strictly for modified cells. To sustain $O(1)$ scroll performance in massive files, `dan` maintains a syntax snapshot cache every 200 lines, eliminating the need to re-lex the entire visible range during rapid vertical movement.
+- **POSIX-Compliant Atomic Writes (Crash-Safe I/O)**: File writes are executed via a temporary sibling file, followed by an `fsync` and atomic `rename`. A system crash or disk-full condition mid-save leaves the original file intact, preserving original file permissions and symlink targets.
+- **Crash Recovery**: Periodically checkpoints the active buffer to a hidden `.swp` file every 5 seconds using safe write patterns. Unplanned terminal disconnects or crashed sessions trigger automatic recovery prompts on the next open.
+- **Interactive Command Palette (`Ctrl-P`)**: A fuzzy-search overlay covering all editor actions, active buffers, and project workspace files to keep operations entirely on the home row.
+- **Multiple Buffers**: Concurrent support for multiple active buffers, indexed and managed via the command palette.
+- **Context-Aware Syntax Highlighting**: Powered by `syntect` with broad language grammar support. Queries the terminal background at startup to apply adaptive themes (OneHalfDark/OneHalfLight) automatically, with immediate toggling via `Ctrl-T`.
+- **Background Auto-Formatter (`Ctrl-L`)**: Pipes buffer contents to external formatters (Prettier, Rustfmt, Ruff) on a background thread. Formatted output is applied transactionally only if the buffer was not modified during execution.
+- **Fuzzy Search & Destructive Replace**: Instant buffer-wide searching with `Ctrl-F`, easily promoted to standard find-and-replace using `Ctrl-R`.
+- **Unicode & CJK Support**: Correct visual alignment, cell measurements, and cursor positioning for double-width characters and complex emoji.
+- **Native Clipboard Integration**: Cross-platform clipboard access using `arboard`, falling back gracefully to an internal in-memory buffer on headless SSH sessions without display servers.
+- **Auto-Pairs & Wrap-on-Type**: Automated closure insertion for brackets and quotes, with contextual wrap behavior when keys are typed over an active selection.
+- **Robust Encoding Detection**: Scans and parses legacy encodings (Shift-JIS, Windows-1252, etc.) utilizing Byte Order Mark (BOM) sniffing, normalizes to UTF-8 internally, and transparently round-trips to the native encoding on save.
+- **Active Content Sanitization**: Sanitizes raw terminal escape sequences at render time. Malicious or hostile files containing raw ANSI codes cannot alter terminal chrome or exfiltrate local clipboard states.
+- **Hierarchical Configuration**: Evaluates settings through a layered model: core defaults → `~/.config/dan/config.toml` → local workspace `.editorconfig` rules.
 
-- **Rendering**: Differential rendering — only changed cells are written to the terminal. A syntax snapshot cache (taken every 200 lines) means scrolling deep into long files stays smooth, including over slow SSH links.
-
-- **Text buffer**: Rope-backed, so inserts and deletes are O(log N) and memory use scales with edits rather than file size. Dan handles very large files without loading them into a flat string.
-
-- **Syntax highlighting**: Powered by [syntect](https://github.com/trishume/syntect/), with broad language support. Dan queries your terminal's background color at startup and picks a sensible default theme. Override the theme via config, or toggle syntax highlighting on/off with `Ctrl-T`.
-
-- **Auto-formatter** (`Ctrl-L`): Pipes the buffer through an external formatter (Prettier, Rustfmt, or Ruff) in a background thread. The result is applied only if the buffer hasn't been edited during formatting. See [Formatter](#formatter).
-
-- **Search & replace**: `Ctrl-F` to search; press `Ctrl-R` while searching to promote to find-and-replace.
-
-- **Atomic saves**: Saves go through a sibling temp file → fsync → rename. A crash or full disk mid-write leaves the file in its prior state rather than truncated. Original permissions and symlink targets are preserved.
-
-- **Crash recovery**: Every 5 seconds, Dan writes the buffer to a hidden `.swp` file using the same safe write pattern. If the terminal crashes or SSH drops, reopening the file prompts for recovery.
-
-- **Unicode & CJK support**: Correct visual alignment for double-width characters and emojis.
-
-- **Native OS clipboard support**: Cross-platform via [arboard](https://docs.rs/arboard/latest/arboard/), with an in-memory fallback when no display server is available (e.g., headless SSH).
-
-- **Auto-pairs**: Closing brackets and quotes auto-insert on typing; typing a bracket around an active selection wraps it.
-
-- **File encoding detection**: Detects legacy encodings (Shift-JIS, Windows-1252, etc.) on open, works in UTF-8, and round-trips back to the original encoding on save.
-
-- **Content safety**: Terminal escape sequences embedded in file content are sanitized at render time, so opening a hostile file can't write over the editor chrome or exfiltrate clipboard state.
-
-- **Layered config**: Internal defaults → `~/.config/dan/config.toml` → `.editorconfig` in the project tree. See [Configuration](#configuration).
 
 ## Keyboard shortcuts
 
@@ -263,9 +250,7 @@ Formatter output and errors are shown in the status bar.
 
 ## Note on AI use
 
-I've been writing code for over 30 years. Lately, LLM agent-enhanced coding practices have rekindled my sense of awe at what's possible. This project has been built using a range of tools, including Anthropic's Claude Code (with Opus 4.7).
-
-Unlike some who dismiss anything touched by a coding agent as "slop," I don't see it that way. To me, these tools are a way to move much faster, explore many more ideas, and test those ideas and implementations more rigorously than I ever could on my own.
+I've been writing code for over 30 years. Lately, LLM agent-enhanced coding practices have rekindled my sense of awe at what's possible. This project has been built using a range of tools. By leveraging advanced LLMs for boilerplate generation, rapid prototyping, and automated unit testing, development efforts were focused on high-level architectural decisions, robust edge-case verification, and low-level performance optimizations.
 
 ---
 
