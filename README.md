@@ -6,11 +6,9 @@ A fast, modeless, lightweight terminal text editor written in Rust. Designed for
   <img width="800" alt="screenshot of dan" src="https://github.com/user-attachments/assets/d84984c2-ed8e-4df5-8161-77a235c65a6e" />
 </p>
 
-### Key Performance Metrics:
+### Key performance metrics:
 - **Memory footprint**: Typically consumes < 20MB RSS.
-
 - **File handling capacity**: Fluid, non-blocking navigation and manipulation of 100MB+ log files.
-
 - **Bandwidth optimization**: Implements aggressive rendering optimizations to minimize transmitted escape sequences.
 
 ### Architectural comparison
