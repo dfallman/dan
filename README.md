@@ -47,12 +47,6 @@ For more installation options, see [Installation](#installation).
 
 Dan uses familiar shortcuts out of the box — `Ctrl-C`/`V` to copy/paste, `Ctrl-S` to save, `Ctrl-Z`/`Y` to undo/redo, `Ctrl-Q` to quit. Press `Ctrl-H` to toggle the built-in help bar at any time.
 
-<p align="center">
-  <img width="800" alt="Command palette" src="https://github.com/user-attachments/assets/4c3ca372-42cd-46f5-934a-26bcae4babcd" />
-  <br>
-  <em>Dan's command palette</em>
-</p>
-
 - **Rope-Backed Text Buffer**: Utilizes a rope structure ensuring $O(\\log N)$ time complexity for insertions and deletions. Memory usage scales with edit volume rather than raw file size, permitting fluid, non-blocking navigation and manipulation of 100MB+ log files.
 - **Optimized Terminal I/O & Differential Rendering**: Implements differential rendering to minimize bandwidth by emitting ANSI escape sequences strictly for modified cells. To sustain $O(1)$ scroll performance in massive files, `dan` maintains a syntax snapshot cache every 200 lines, eliminating the need to re-lex the entire visible range during rapid vertical movement.
 - **POSIX-Compliant Atomic Writes (Crash-Safe I/O)**: File writes are executed via a temporary sibling file, followed by an `fsync` and atomic `rename`. A system crash or disk-full condition mid-save leaves the original file intact, preserving original file permissions and symlink targets.
@@ -144,7 +138,7 @@ cd dan
 cargo build --release
 cp target/release/dan /usr/local/bin/
 # or
-cargo install --path .
+<img width="2180" height="1806" alt="CleanShot 2026-06-04 at 15 12 03@2x" src="https://github.com/user-attachments/assets/3bf61843-f315-4cce-8bdc-c4bea84352c2" />
 ```
 
 ### Windows
@@ -165,10 +159,6 @@ Dan works without any configuration file. To customize it, create `~/.config/dan
 ```
 dan ~/.config/dan/config.toml
 ```
-
-<p align="center">
-  <img width="800" alt="Settings" src="https://github.com/user-attachments/assets/6c6515dc-ba43-4944-ab96-ee634bf26f0a" />
-</p>
 
 ```toml
 # Display
