@@ -13,6 +13,20 @@ A fast, modeless, lightweight terminal text editor written in Rust. Designed for
 
 - **Bandwidth optimization**: Implements aggressive rendering optimizations to minimize transmitted escape sequences.
 
+### Architectural comparison
+
+| Feature | Dan | Vim | Nano | Micro |
+| --- | --- | --- | --- | --- |
+| Modeless | ✅ | ❌ | ✅ | ✅ |
+| Rust-based | ✅ | ❌ | ❌ | ✅ |
+| Atomic Saves | ✅ (fsync/rename) | ⚠️ (Configurable) | ❌ | ❌ |
+| Buffer Architecture | Rope $O(\log N)$ | Gap Buffer/Piece Table | Flat String | Gap Buffer |
+| Rendering | Differential | Full/Partial Redraw | Full Redraw | Full Redraw |
+| Crash Recovery | ✅ (Auto-swp) | ✅ (Swap files) | ❌ | ❌ |
+| Command Palette | ✅ | ❌ (Cmd line) | ❌ | ❌ |
+| Out-of-box Config | Zero-config | High learning curve | Minimal | Minimal |
+
+
 ## Quick install
 
 Install or update [Rust](https://rustup.rs/):
