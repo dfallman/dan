@@ -3,7 +3,7 @@
 A fast, modeless, lightweight terminal text editor written in Rust. Designed for zero-configuration deployment, dan maintains ultra-low input latency even over high-jitter SSH connections and delivers high-performance operations on massive files thanks to its Rope buffer architecture.
 
 <p align="center">
-  <img width="800" alt="screenshot of dan" src="https://github.com/user-attachments/assets/dba6a295-93fa-4da5-a109-b389e84e0bbb" />
+  <img width="800" alt="screenshot of dan" src="https://github.com/user-attachments/assets/9a1ed027-1a1f-496c-80ee-9ca188cabcf0" />
 </p>
 
 ### Key Performance Metrics:
