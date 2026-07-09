@@ -1002,15 +1002,18 @@ mod tests {
 	}
 
 	#[test]
-	fn info_banner_helpers_promote_and_clear() {
+	fn recover_swap_defers_then_promotes_info_banner() {
 		let mut e = Editor::new();
-
-		e.set_info_banner(true, 2, true);
+		e.set_info_banner(true, 8, true);
 		assert!(!e.info_banner_visible());
-
 		e.promote_info_banner();
 		assert!(e.info_banner_visible());
+	}
 
+	#[test]
+	fn clear_info_banner_removes_it() {
+		let mut e = Editor::new();
+		e.set_info_banner(false, 4, false);
 		e.clear_info_banner();
 		assert!(e.info_banner.is_none());
 	}

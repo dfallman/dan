@@ -80,6 +80,7 @@ impl Editor {
 		}
 		self.mode = Mode::Editing;
 		self.clear_status();
+		self.promote_info_banner();
 	}
 
 	pub(crate) fn cmd_recover_swap_decline(&mut self) {
@@ -88,6 +89,7 @@ impl Editor {
 		}
 		self.mode = Mode::Editing;
 		self.clear_status();
+		self.promote_info_banner();
 	}
 
 	pub(crate) fn cmd_copy_path_abs(&mut self) {

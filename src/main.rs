@@ -261,8 +261,10 @@ fn run_loop(
 			&& editor.mode != crate::editor::mode::Mode::ConfirmQuit
 			&& editor.mode != crate::editor::mode::Mode::SaveAs
 			&& editor.mode != crate::editor::mode::Mode::Palette
+			&& editor.mode != crate::editor::mode::Mode::RecoverSwap
 		{
 			editor.clear_status();
+			editor.clear_info_banner();
 		}
 
 		// Handle resize events directly (not routed through Command).
@@ -283,8 +285,10 @@ fn run_loop(
 				&& editor.mode != crate::editor::mode::Mode::ConfirmQuit
 				&& editor.mode != crate::editor::mode::Mode::SaveAs
 				&& editor.mode != crate::editor::mode::Mode::Palette
+				&& editor.mode != crate::editor::mode::Mode::RecoverSwap
 			{
 				editor.clear_status();
+				editor.clear_info_banner();
 			}
 			if let Event::Resize(w, h) = evt {
 				editor.handle_resize(w, h);
