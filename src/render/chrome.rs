@@ -869,7 +869,7 @@ pub fn build_info_banner(editor: &Editor, width: u16, base_y: u16) -> Vec<Window
 			},
 			UiFragment {
 				text: label,
-				fg: editor.theme.toolbar_fg,
+				fg: editor.theme.help_label,
 				bg: editor.theme.toolbar_bg,
 				is_flex: false,
 				is_bold: true,
@@ -1282,9 +1282,9 @@ mod info_banner_tests {
 		assert!(!wins.is_empty());
 		assert_eq!(wins[0].rect.width, 80);
 		let has_bold_info = wins.iter().any(|w| {
-			w.fragments
-				.iter()
-				.any(|f| f.is_bold && f.text.contains("INFO"))
+			w.fragments.iter().any(|f| {
+				f.is_bold && f.text.contains("Info") && f.fg == e.theme.help_label
+			})
 		});
 		assert!(has_bold_info);
 	}

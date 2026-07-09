@@ -122,7 +122,7 @@ impl Locale for EnglishLocale {
             Message::PromptClipLeft => "←".to_string(),
             Message::PromptClipRight => "→".to_string(),
             Message::StatusMessage(msg) => msg,
-            Message::InfoBannerLabel => "INFO:".to_string(),
+            Message::InfoBannerLabel => "Info:".to_string(),
             Message::InfoBannerIndentTabs => "tabs".to_string(),
             Message::InfoBannerIndentSpaces(n) => format!("{} spaces", n),
             Message::InfoBannerBody(desc) => {
@@ -212,7 +212,7 @@ impl Locale for SwedishLocale {
             Message::PromptClipLeft => "←".to_string(),
             Message::PromptClipRight => "→".to_string(),
             Message::StatusMessage(msg) => msg,
-            Message::InfoBannerLabel => "INFO:".to_string(),
+            Message::InfoBannerLabel => "Info:".to_string(),
             Message::InfoBannerIndentTabs => "tabbar".to_string(),
             Message::InfoBannerIndentSpaces(n) => format!("{} mellanslag", n),
             Message::InfoBannerBody(desc) => {
@@ -361,7 +361,7 @@ mod tests {
     #[test]
     fn sniff_info_banner_english_shape() {
         let en = EnglishLocale;
-        assert_eq!(en.translate(Message::InfoBannerLabel), "INFO:");
+        assert_eq!(en.translate(Message::InfoBannerLabel), "Info:");
         assert_eq!(en.translate(Message::InfoBannerIndentTabs), "tabs");
         assert_eq!(en.translate(Message::InfoBannerIndentSpaces(8)), "8 spaces");
         assert_eq!(
