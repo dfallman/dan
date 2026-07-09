@@ -9,3 +9,5 @@ test-file.txt
 rustfmt.toml
 /doc
 *.bak
+
+.worktrees/
