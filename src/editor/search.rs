@@ -19,9 +19,46 @@ pub(crate) fn parse_search_query(query: &str) -> ParsedSearch<'_> {
 }
 
 impl Editor {
+	pub(crate) fn clear_search_regex_state(&mut self) {
+		self.search_is_regex = false;
+		self.cached_regex = None;
+		self.search_regex_error = false;
+	}
+
 	/// Re-run the search against the buffer and jump to the nearest match.
 	pub(crate) fn refresh_search_matches(&mut self) {
-		let matches = self.buffer().text.find_all(&self.search_query);
+		self.search_regex_error = false;
+		let matches = match parse_search_query(&self.search_query) {
+			ParsedSearch::Literal(needle) => {
+				self.search_is_regex = false;
+				self.cached_regex = None;
+				self.buffer().text.find_all(needle)
+			}
+			ParsedSearch::RegexPattern(pattern) => {
+				self.search_is_regex = true;
+				let need_compile = self
+					.cached_regex
+					.as_ref()
+					.map(|re| re.as_str() != pattern)
+					.unwrap_or(true);
+				if need_compile {
+					match regex::Regex::new(pattern) {
+						Ok(re) => self.cached_regex = Some(re),
+						Err(_) => {
+							self.cached_regex = None;
+							self.search_regex_error = true;
+							self.buffer_mut().search_matches.clear();
+							self.buffer_mut().search_match_idx = 0;
+							self.clear_status();
+							return;
+						}
+					}
+				}
+				let re = self.cached_regex.as_ref().unwrap();
+				self.buffer().text.find_all_regex(re)
+			}
+		};
+
 		self.buffer_mut().search_matches = matches;
 		if self.buffer().search_matches.is_empty() {
 			self.clear_status();

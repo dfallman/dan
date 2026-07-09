@@ -65,6 +65,7 @@ impl Editor {
 		}
 		self.mode = Mode::Editing;
 		self.search_query.clear();
+		self.clear_search_regex_state();
 		self.buffer_mut().search_matches.clear();
 		self.buffer_mut().search_match_idx = 0;
 		self.buffer_mut().search_saved_cursor = None;
@@ -81,6 +82,7 @@ impl Editor {
 			self.buffer_mut().cursors.set_cursor(line, col);
 		}
 		self.search_query.clear();
+		self.clear_search_regex_state();
 		self.buffer_mut().search_matches.clear();
 		self.buffer_mut().search_match_idx = 0;
 		self.mode = Mode::Editing;

@@ -23,6 +23,7 @@ impl Editor {
 		if self.buffer().search_matches.is_empty() {
 			self.mode = Mode::Editing;
 			self.search_query.clear();
+			self.clear_search_regex_state();
 			self.clear_status();
 		} else {
 			self.mode = Mode::ReplacingStep;
@@ -53,6 +54,7 @@ impl Editor {
 			if self.buffer().search_matches.is_empty() {
 				self.mode = Mode::Editing;
 				self.search_query.clear();
+				self.clear_search_regex_state();
 				self.clear_status();
 			} else {
 				// match idx is implicitly resync'd via refresh geometry bounding to the nearest next item naturally
@@ -93,6 +95,7 @@ impl Editor {
 		self.clamp_cursors();
 		self.mode = Mode::Editing;
 		self.search_query.clear();
+		self.clear_search_regex_state();
 		self.buffer_mut().search_matches.clear();
 		self.buffer_mut().search_match_idx = 0;
 		self.clear_status();
@@ -107,6 +110,7 @@ impl Editor {
 			self.buffer_mut().cursors.set_cursor(line, col);
 		}
 		self.search_query.clear();
+		self.clear_search_regex_state();
 		self.replace_query.clear();
 		self.replace_with.clear();
 		self.buffer_mut().search_matches.clear();

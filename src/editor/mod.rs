@@ -75,6 +75,12 @@ pub struct Editor {
 	pub show_help: bool,
 	/// Current search query string (populated during search mode).
 	pub search_query: String,
+	/// True when the current `search_query` is `/pattern/` regex mode.
+	pub search_is_regex: bool,
+	/// Compiled pattern for the current regex query; cleared when the query changes.
+	pub(crate) cached_regex: Option<regex::Regex>,
+	/// True when regex mode failed to compile; chrome shows "invalid regex".
+	pub search_regex_error: bool,
 	/// Pattern entered in the replace prompt's first step.
 	pub replace_query: String,
 	/// Replacement text entered in the replace prompt's second step.
@@ -232,6 +238,9 @@ impl Editor {
 			suppress_next_paste: false,
 			show_help: false,
 			search_query: String::new(),
+			search_is_regex: false,
+			cached_regex: None,
+			search_regex_error: false,
 			replace_query: String::new(),
 			replace_with: String::new(),
 			highlighter,
@@ -1289,6 +1298,43 @@ mod tests {
 			cursor_line,
 			line_count
 		);
+	}
+
+	#[test]
+	fn refresh_search_regex_finds_matches() {
+		let mut e = Editor::new();
+		e.buffer_mut().text = crate::buffer::rope::TextRope::from_str("foo bar foo");
+		e.search_query = "/foo/".into();
+		e.refresh_search_matches();
+		assert!(e.search_is_regex);
+		assert!(!e.search_regex_error);
+		assert_eq!(e.buffer().search_matches, vec![(0, 3), (8, 11)]);
+	}
+
+	#[test]
+	fn refresh_search_invalid_regex_clears_matches() {
+		let mut e = Editor::new();
+		e.buffer_mut().text = crate::buffer::rope::TextRope::from_str("foo");
+		e.search_query = "/foo/".into();
+		e.refresh_search_matches();
+		assert_eq!(e.buffer().search_matches.len(), 1);
+
+		e.search_query = "/foo(/".into();
+		e.refresh_search_matches();
+		assert!(e.search_is_regex);
+		assert!(e.search_regex_error);
+		assert!(e.buffer().search_matches.is_empty());
+	}
+
+	#[test]
+	fn refresh_search_literal_unchanged() {
+		let mut e = Editor::new();
+		e.buffer_mut().text = crate::buffer::rope::TextRope::from_str("Hello");
+		e.search_query = "hello".into();
+		e.refresh_search_matches();
+		assert!(!e.search_is_regex);
+		assert!(!e.search_regex_error);
+		assert_eq!(e.buffer().search_matches, vec![(0, 5)]);
 	}
 
 	#[test]
