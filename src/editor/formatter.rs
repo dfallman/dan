@@ -1,6 +1,7 @@
 use std::io::Write;
 use std::process::{Command, Stdio};
-use std::sync::mpsc;
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::{mpsc, Arc};
 use std::thread;
 
 pub enum Tool {
@@ -23,8 +24,17 @@ impl Tool {
 }
 
 /// Spawns an external unblocking structural thread evaluating specific language payloads safely reporting exclusively over an MPSC boundary.
-pub fn spawn_formatter(ext_str: String, content: String, tx: mpsc::Sender<Result<String, String>>) {
+///
+/// `child_pid` is set to the spawned formatter child's PID so the editor can
+/// terminate it on shutdown and avoid orphaned prettier/rustfmt/ruff processes.
+pub fn spawn_formatter(
+	ext_str: String,
+	content: String,
+	tx: mpsc::Sender<Result<String, String>>,
+	child_pid: Arc<AtomicU32>,
+) {
 	thread::spawn(move || {
+		let clear_pid = || child_pid.store(0, Ordering::Relaxed);
 		let tool = Tool::from_extension(&ext_str);
 
 		let child = match &tool {
@@ -56,6 +66,7 @@ pub fn spawn_formatter(ext_str: String, content: String, tx: mpsc::Sender<Result
 
 		match child {
 			Ok(mut c) => {
+				child_pid.store(c.id(), Ordering::Relaxed);
 				// Write stdin on a dedicated thread so wait_with_output can drain
 				// stdout/stderr concurrently. Writing the whole input before
 				// reading any output deadlocks once the child fills its
@@ -69,6 +80,7 @@ pub fn spawn_formatter(ext_str: String, content: String, tx: mpsc::Sender<Result
 				}
 				match c.wait_with_output() {
 					Ok(output) => {
+						clear_pid();
 						if output.status.success() {
 							let _ =
 								tx.send(Ok(String::from_utf8_lossy(&output.stdout).to_string()));
@@ -80,11 +92,13 @@ pub fn spawn_formatter(ext_str: String, content: String, tx: mpsc::Sender<Result
 						}
 					}
 					Err(e) => {
+						clear_pid();
 						let _ = tx.send(Err(format!("Formatter failed to wait: {}", e)));
 					}
 				}
 			}
 			Err(e) => {
+				clear_pid();
 				if e.kind() == std::io::ErrorKind::NotFound {
 					let binary_name = match tool {
 						Tool::Prettier => "prettier",
@@ -102,4 +116,20 @@ pub fn spawn_formatter(ext_str: String, content: String, tx: mpsc::Sender<Result
 			}
 		}
 	});
+}
+
+/// Send SIGTERM to a formatter child process. No-op for pid 0 or on non-Unix.
+pub fn terminate_child(pid: u32) {
+	if pid == 0 {
+		return;
+	}
+	#[cfg(unix)]
+	{
+		let _ = std::process::Command::new("kill")
+			.arg(pid.to_string())
+			.stdin(Stdio::null())
+			.stdout(Stdio::null())
+			.stderr(Stdio::null())
+			.status();
+	}
 }

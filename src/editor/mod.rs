@@ -26,6 +26,11 @@ use std::io;
 /// walker thread exit on its next `send`).
 const MAX_PROJECT_INDEX: usize = 50_000;
 
+/// Cap on project-index paths drained per `poll_async_tasks` tick. Prevents a
+/// large-repo walk from triggering a full re-render for every single file in
+/// one tight-poll iteration.
+const INDEX_DRAIN_BATCH: usize = 50;
+
 /// Core editor state — pico-style modeless editor.
 pub struct Editor {
 	/// Loaded configuration.
@@ -304,7 +309,12 @@ impl Editor {
 		// forever and we tight-poll at 25ms).
 		if self.project_index_rx.is_some() {
 			let mut drop_rx = false;
+			let mut index_added = false;
+			let mut drained = 0usize;
 			loop {
+				if drained >= INDEX_DRAIN_BATCH {
+					break;
+				}
 				if self.project_index.len() >= MAX_PROJECT_INDEX {
 					// Cap reached: stop draining and drop the receiver so the
 					// walker thread exits on its next send (P3-G).
@@ -316,6 +326,8 @@ impl Editor {
 					Ok(p) => {
 						self.project_index.push(p);
 						did_work = true;
+						index_added = true;
+						drained += 1;
 					}
 					Err(std::sync::mpsc::TryRecvError::Empty) => break,
 					Err(std::sync::mpsc::TryRecvError::Disconnected) => {
@@ -327,6 +339,9 @@ impl Editor {
 			}
 			if drop_rx {
 				self.project_index_rx = None;
+			}
+			if index_added && self.mode == Mode::Palette && self.palette.open {
+				self.sync_palette_items();
 			}
 		}
 
@@ -363,6 +378,15 @@ impl Editor {
 		// from via indexed access, NOT through buffer_mut().
 		let n = self.buffers.len();
 		for i in 0..n {
+			// Self-heal: is_formatting without a receiver would tight-poll forever.
+			if self.buffers[i].is_formatting && self.buffers[i].fmt_rx.is_none() {
+				self.buffers[i].is_formatting = false;
+				self.buffers[i].fmt_baseline_version = None;
+				self.buffers[i].fmt_child_pid = None;
+				did_work = true;
+				continue;
+			}
+
 			let recv = self.buffers[i].fmt_rx.as_ref().map(|rx| rx.try_recv());
 			let res = match recv {
 				None => continue,                                            // no format in flight
@@ -374,6 +398,7 @@ impl Editor {
 					self.buffers[i].is_formatting = false;
 					self.buffers[i].fmt_rx = None;
 					self.buffers[i].fmt_baseline_version = None;
+					self.buffers[i].fmt_child_pid = None;
 					did_work = true;
 					continue;
 				}
@@ -382,6 +407,7 @@ impl Editor {
 
 			self.buffers[i].is_formatting = false;
 			self.buffers[i].fmt_rx = None;
+			self.buffers[i].fmt_child_pid = None;
 			let baseline = self.buffers[i].fmt_baseline_version.take();
 			let buffer_changed = baseline
 				.map(|v| v != self.buffers[i].version)
@@ -505,21 +531,47 @@ impl Editor {
 	///
 	/// Items, in order: open buffers (current first), recent files (excluding
 	/// already-open), project-index files (excluding open + recent), then
-	/// every action from the static registry. Lazily detects the project root
-	/// and spawns the index walker the first time the palette is opened.
+	/// every action from the static registry. The project indexer is started
+	/// lazily when the user types a query (see `ensure_project_indexer_started`).
 	pub fn open_palette(&mut self) {
-		use crate::palette::PaletteItem;
+		let items = self.build_palette_items();
+		self.palette.open_with(items);
+	}
 
-		// Lazy: detect project root and start the indexer on first open.
-		if self.project_index.is_empty() && self.project_index_rx.is_none() {
-			let start = self.buffer().file_path.as_deref().and_then(|p| p.parent())
-				.map(|p| p.to_path_buf())
-				.unwrap_or_else(|| self.project_root.clone());
-			self.project_root = crate::palette::index::detect_project_root(&start);
-			let (tx, rx) = std::sync::mpsc::channel();
-			crate::palette::index::spawn_index_walker(self.project_root.clone(), tx);
-			self.project_index_rx = Some(rx);
+	/// Start the background project-file walker on first palette search.
+	pub fn ensure_project_indexer_started(&mut self) {
+		if !self.project_index.is_empty() || self.project_index_rx.is_some() {
+			return;
 		}
+		let start = self
+			.buffer()
+			.file_path
+			.as_deref()
+			.and_then(|p| p.parent())
+			.map(|p| p.to_path_buf())
+			.unwrap_or_else(|| self.project_root.clone());
+		self.project_root = crate::palette::index::detect_project_root(&start);
+		let (tx, rx) = std::sync::mpsc::channel();
+		crate::palette::index::spawn_index_walker(self.project_root.clone(), tx);
+		self.project_index_rx = Some(rx);
+	}
+
+	/// Rebuild palette items while preserving the current query and cursor.
+	pub fn sync_palette_items(&mut self) {
+		if !self.palette.open {
+			return;
+		}
+		let query = self.palette.query.clone();
+		let query_cursor = self.palette.query_cursor;
+		let items = self.build_palette_items();
+		self.palette.open_with(items);
+		self.palette.query = query;
+		self.palette.query_cursor = query_cursor;
+		self.palette.refilter();
+	}
+
+	fn build_palette_items(&self) -> Vec<crate::palette::PaletteItem> {
+		use crate::palette::PaletteItem;
 
 		let mut items: Vec<PaletteItem> = Vec::new();
 
@@ -589,7 +641,23 @@ impl Editor {
 			)
 		}));
 
-		self.palette.open_with(items);
+		items
+	}
+
+	/// Kill in-flight formatter children, drop async receivers, and stop the
+	/// project indexer so shutdown doesn't leave orphaned processes or a
+	/// tight-poll loop during the final unwind.
+	pub fn shutdown_async_work(&mut self) {
+		for buf in &mut self.buffers {
+			if let Some(pid_slot) = buf.fmt_child_pid.take() {
+				let pid = pid_slot.load(std::sync::atomic::Ordering::Relaxed);
+				crate::editor::formatter::terminate_child(pid);
+			}
+			buf.fmt_rx = None;
+			buf.is_formatting = false;
+			buf.fmt_baseline_version = None;
+		}
+		self.project_index_rx = None;
 	}
 
 	/// Get a reference to the active buffer.
@@ -959,6 +1027,16 @@ mod tests {
 	}
 
 	#[test]
+	fn is_formatting_without_rx_clears_on_poll() {
+		// If is_formatting is set without a receiver, poll_async_tasks must
+		// self-heal so the main loop doesn't tight-poll at 25 ms forever.
+		let mut e = Editor::new();
+		e.buffer_mut().is_formatting = true;
+		e.poll_async_tasks();
+		assert!(!e.buffer().is_formatting);
+	}
+
+	#[test]
 	fn project_index_is_bounded() {
 		// P3-G: the index walker pushes every project file; cap it and stop
 		// draining (drop the receiver) once the cap is hit.
@@ -969,7 +1047,9 @@ mod tests {
 			tx.send(std::path::PathBuf::from(format!("f{}", i))).unwrap();
 		}
 		e.project_index_rx = Some(rx);
-		e.poll_async_tasks();
+		while e.project_index_rx.is_some() {
+			e.poll_async_tasks();
+		}
 		assert!(
 			e.project_index.len() <= MAX_PROJECT_INDEX,
 			"project_index grew to {}",

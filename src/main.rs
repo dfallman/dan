@@ -31,10 +31,9 @@ mod sanitize;
 mod syntax;
 pub mod ui;
 mod utils;
+mod terminal_guard;
 
 use crossterm::event::{self, Event};
-use crossterm::terminal::{self, EnterAlternateScreen, LeaveAlternateScreen};
-use crossterm::ExecutableCommand;
 
 use std::env;
 use std::io::{self, BufWriter};
@@ -51,20 +50,20 @@ pub const VERSION: &str = include_str!("../VERSION");
 /// Short git hash (embedded at compile time by build.rs).
 pub const GIT_HASH: &str = env!("GIT_HASH");
 
-/// Register handlers for SIGTERM, SIGHUP, SIGQUIT that flip the returned
-/// flag. The main loop polls this flag and triggers a graceful shutdown,
-/// ensuring the terminal is restored from raw mode + alt screen instead of
-/// being stranded after `kill` / SSH drop / parent-process exit. SIGINT is
-/// not registered here — crossterm's raw mode delivers Ctrl-C as a normal
-/// `KeyEvent` instead. On non-Unix the returned flag is never flipped.
+/// Register handlers for SIGTERM, SIGHUP, SIGQUIT, and SIGINT that flip the
+/// returned flag. The main loop polls this flag and triggers a graceful
+/// shutdown, ensuring the terminal is restored from raw mode + alt screen
+/// instead of being stranded after `kill` / SSH drop / parent-process exit.
+/// On non-Unix the returned flag is never flipped.
 fn install_signal_shutdown_flag() -> io::Result<Arc<AtomicBool>> {
 	let flag = Arc::new(AtomicBool::new(false));
 	#[cfg(unix)]
 	{
-		use signal_hook::consts::{SIGHUP, SIGQUIT, SIGTERM};
+		use signal_hook::consts::{SIGHUP, SIGINT, SIGQUIT, SIGTERM};
 		signal_hook::flag::register(SIGTERM, Arc::clone(&flag))?;
 		signal_hook::flag::register(SIGHUP, Arc::clone(&flag))?;
 		signal_hook::flag::register(SIGQUIT, Arc::clone(&flag))?;
+		signal_hook::flag::register(SIGINT, Arc::clone(&flag))?;
 	}
 	Ok(flag)
 }
@@ -156,17 +155,9 @@ fn main() -> io::Result<()> {
 		}
 	}));
 
-	// Set up terminal
-	let stdout = io::stdout();
-	let mut writer = BufWriter::with_capacity(64 * 1024, stdout);
-	terminal::enable_raw_mode()?;
-	writer.get_mut().execute(EnterAlternateScreen)?;
-
-	// Enable bracketed paste so the terminal sends paste as a
-	// single Event::Paste(String) instead of individual key events.
-	writer
-		.get_mut()
-		.execute(crossterm::event::EnableBracketedPaste)?;
+	// Set up terminal (restored automatically by TerminalGuard on drop).
+	let mut terminal = terminal_guard::TerminalGuard::enter()?;
+	let writer = terminal.writer_mut();
 
 	// Flush stray terminal-query replies before the first frame.
 	//
@@ -189,7 +180,9 @@ fn main() -> io::Result<()> {
 	}
 
 	// Main loop
-	let result = run_loop(&mut editor, &mut writer, &shutdown_signal);
+	let result = run_loop(&mut editor, writer, &shutdown_signal);
+
+	editor.shutdown_async_work();
 
 	// Flush recent-files to disk on shutdown — synchronous so the write
 	// definitely completes before the process exits.
@@ -209,21 +202,6 @@ fn main() -> io::Result<()> {
 			}
 		}
 	}
-
-	// Restore terminal
-	writer
-		.get_mut()
-		.execute(crossterm::event::DisableBracketedPaste)?;
-	writer.get_mut().execute(crossterm::style::ResetColor)?;
-	writer.get_mut().execute(crossterm::style::SetAttribute(
-		crossterm::style::Attribute::Reset,
-	))?;
-	writer.get_mut().execute(crossterm::cursor::Show)?;
-	writer
-		.get_mut()
-		.execute(crossterm::cursor::SetCursorStyle::DefaultUserShape)?;
-	writer.get_mut().execute(LeaveAlternateScreen)?;
-	terminal::disable_raw_mode()?;
 
 	result
 }
@@ -249,10 +227,11 @@ fn run_loop(
 
 		// Wait for an event, polling async tasks continuously.
 		// Tight 25 ms poll while a formatter task is in flight (we want its
-		// result rendered as soon as it lands); otherwise relax to 500 ms so
-		// an idle editor isn't waking the CPU 40×/sec. Autosave (5 s cadence)
-		// is unaffected; keystrokes are delivered immediately because
-		// `event::poll` returns as soon as stdin is readable.
+		// result rendered as soon as it lands); 200 ms while the project
+		// indexer is walking; otherwise relax to 500 ms so an idle editor isn't
+		// waking the CPU 40×/sec. Autosave (5 s cadence) is unaffected;
+		// keystrokes are delivered immediately because `event::poll` returns as
+		// soon as stdin is readable.
 		let evt = loop {
 			if shutdown_signal.load(Ordering::Relaxed) {
 				editor.should_quit = true;
@@ -263,10 +242,12 @@ fn run_loop(
 				render::render(editor, writer)?;
 			}
 
-			let any_formatting = editor.buffers.iter().any(|b| b.is_formatting);
-			let has_pending_async = any_formatting || editor.project_index_rx.is_some();
-			let poll_timeout = if has_pending_async {
+			let any_formatting = editor.buffers.iter().any(|b| b.fmt_rx.is_some());
+			let indexing = editor.project_index_rx.is_some();
+			let poll_timeout = if any_formatting {
 				Duration::from_millis(25)
+			} else if indexing {
+				Duration::from_millis(200)
 			} else {
 				Duration::from_millis(500)
 			};

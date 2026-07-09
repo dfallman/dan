@@ -1089,11 +1089,18 @@ impl Editor {
 
 				let content = self.buffer().text.to_string_full();
 				let (tx, rx) = std::sync::mpsc::channel();
-				crate::editor::formatter::spawn_formatter(ext_str, content, tx);
+				let child_pid = std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0));
+				crate::editor::formatter::spawn_formatter(
+					ext_str,
+					content,
+					tx,
+					std::sync::Arc::clone(&child_pid),
+				);
 
 				let baseline = self.buffer().version;
 				let buf = self.buffer_mut();
 				buf.fmt_rx = Some(rx);
+				buf.fmt_child_pid = Some(child_pid);
 				buf.fmt_baseline_version = Some(baseline);
 				buf.is_formatting = true;
 				self.set_status("Formatting...");
@@ -1146,7 +1153,10 @@ impl Editor {
 					self.mode = Mode::Editing;
 				}
 			}
-			Command::PaletteInsertChar(ch) => self.palette.insert_char(ch),
+			Command::PaletteInsertChar(ch) => {
+				self.ensure_project_indexer_started();
+				self.palette.insert_char(ch);
+			}
 			Command::PaletteDeleteChar => self.palette.delete_char(),
 			Command::PaletteUp => self.palette.move_up(),
 			Command::PaletteDown => {

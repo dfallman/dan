@@ -76,6 +76,8 @@ pub struct Buffer {
 	pub fmt_baseline_version: Option<u64>,
 	/// True while a formatter run is in flight for this buffer.
 	pub is_formatting: bool,
+	/// PID of the spawned formatter child (0 = none). Used to kill orphans on exit.
+	pub fmt_child_pid: Option<std::sync::Arc<std::sync::atomic::AtomicU32>>,
 	/// For unpathed buffers, an editor-assigned monotonic sequence number.
 	/// `None` (or `Some(1)` if unset) renders as `[Untitled]`; `Some(n)` for
 	/// `n > 1` renders as `[Untitled n]`. Loaded-from-file buffers leave this
@@ -106,6 +108,7 @@ impl Buffer {
 			fmt_rx: None,
 			fmt_baseline_version: None,
 			is_formatting: false,
+			fmt_child_pid: None,
 			untitled_seq: None,
 		}
 	}
@@ -222,6 +225,7 @@ impl Buffer {
 			fmt_rx: None,
 			fmt_baseline_version: None,
 			is_formatting: false,
+			fmt_child_pid: None,
 			untitled_seq: None,
 		};
 
