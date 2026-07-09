@@ -90,6 +90,24 @@ impl Editor {
 
 		}
 	}
+
+	/// Expand `replace_with` for a match char range. Literal mode returns
+	/// `replace_with` unchanged (no `$` expansion).
+	pub(crate) fn expand_replacement_for_match(&self, start: usize, end: usize) -> String {
+		if !self.search_is_regex {
+			return self.replace_with.clone();
+		}
+		let Some(re) = self.cached_regex.as_ref() else {
+			return self.replace_with.clone();
+		};
+		let matched = self.buffer().text.slice_to_string(start..end);
+		let Some(caps) = re.captures(&matched) else {
+			return self.replace_with.clone();
+		};
+		let mut out = String::new();
+		caps.expand(&self.replace_with, &mut out);
+		out
+	}
 }
 
 #[cfg(test)]

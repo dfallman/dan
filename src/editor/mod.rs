@@ -1338,6 +1338,57 @@ mod tests {
 	}
 
 	#[test]
+	fn regex_replace_yes_expands_capture() {
+		let mut e = Editor::new();
+		e.buffer_mut().text = crate::buffer::rope::TextRope::from_str("foo_bar");
+		e.search_query = "/(foo)_(bar)/".into();
+		e.refresh_search_matches();
+		assert_eq!(e.buffer().search_matches, vec![(0, 7)]);
+		e.replace_with = "$2-$1".into();
+		e.mode = crate::editor::mode::Mode::ReplacingStep;
+		e.cmd_replace_action_yes();
+		assert_eq!(e.buffer().text.to_string_full(), "bar-foo");
+	}
+
+	#[test]
+	fn literal_replace_does_not_expand_dollar() {
+		let mut e = Editor::new();
+		e.buffer_mut().text = crate::buffer::rope::TextRope::from_str("foo");
+		e.search_query = "foo".into();
+		e.refresh_search_matches();
+		e.replace_with = "$1".into();
+		e.mode = crate::editor::mode::Mode::ReplacingStep;
+		e.cmd_replace_action_yes();
+		assert_eq!(e.buffer().text.to_string_full(), "$1");
+	}
+
+	#[test]
+	fn regex_replace_all_expands_each_match() {
+		let mut e = Editor::new();
+		e.buffer_mut().text = crate::buffer::rope::TextRope::from_str("a1 a2");
+		e.search_query = "/a(\\d)/".into();
+		e.refresh_search_matches();
+		assert_eq!(e.buffer().search_matches.len(), 2);
+		e.replace_with = "X$1".into();
+		e.mode = crate::editor::mode::Mode::ReplacingStep;
+		e.buffer_mut().search_match_idx = 0;
+		e.cmd_replace_action_all();
+		assert_eq!(e.buffer().text.to_string_full(), "X1 X2");
+	}
+
+	#[test]
+	fn regex_replace_named_group_and_dollar_escape() {
+		let mut e = Editor::new();
+		e.buffer_mut().text = crate::buffer::rope::TextRope::from_str("ab");
+		e.search_query = "/(?P<x>a)(b)/".into();
+		e.refresh_search_matches();
+		e.replace_with = "$$-$x".into();
+		e.mode = crate::editor::mode::Mode::ReplacingStep;
+		e.cmd_replace_action_yes();
+		assert_eq!(e.buffer().text.to_string_full(), "$-a");
+	}
+
+	#[test]
 	fn toggle_comment_line_style_round_trips() {
 		let mut e = Editor::new();
 		e.buffer_mut().file_path = Some(std::path::PathBuf::from("main.rs"));

@@ -37,7 +37,7 @@ impl Editor {
 			buf.search_matches.get(buf.search_match_idx).copied()
 		};
 		if let Some((start, end)) = current {
-			let replacement = self.replace_with.clone();
+			let replacement = self.expand_replacement_for_match(start, end);
 			self.buffer_mut().commit_edits(); // wrap
 			self.buffer_mut().delete_range(start, end);
 			self.buffer_mut().insert_str(start, &replacement);
@@ -77,7 +77,6 @@ impl Editor {
 
 	pub(crate) fn cmd_replace_action_all(&mut self) {
 		self.buffer_mut().commit_edits(); // Explicit history block grouping
-		let replacement = self.replace_with.clone();
 
 		// Iterate end-to-start so each replace leaves earlier match
 		// offsets intact. Start from search_match_idx so already-skipped
@@ -87,6 +86,7 @@ impl Editor {
 			buf.search_matches[buf.search_match_idx..].to_vec()
 		};
 		for &(start, end) in pending_matches.iter().rev() {
+			let replacement = self.expand_replacement_for_match(start, end);
 			self.buffer_mut().delete_range(start, end);
 			self.buffer_mut().insert_str(start, &replacement);
 		}
