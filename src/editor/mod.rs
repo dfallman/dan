@@ -4,6 +4,7 @@ mod dispatch;
 mod editing;
 pub mod formatter;
 pub mod mode;
+pub(crate) mod mouse;
 mod navigation;
 mod search;
 mod selection;

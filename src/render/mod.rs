@@ -24,6 +24,22 @@ pub struct Viewport {
 	pub overlay_rows: u16,
 }
 
+/// Count overlay rows (help / prompt / info banner) for the given size.
+/// Used by render and by mouse hit-testing (which must not call `terminal::size`).
+pub fn overlay_rows_for(editor: &Editor, width: u16, height: u16) -> u16 {
+	let mut overlay: u16 = 0;
+	if let Some(prompt_windows) = chrome::build_prompt(editor, width, height) {
+		overlay += prompt_windows.len() as u16;
+	} else if editor.show_help && !editor.palette.open {
+		overlay += chrome::build_help_bar(editor, width, height).len() as u16;
+	}
+	if editor.info_banner_visible() {
+		let base_y = height.saturating_sub(1 + overlay + 1);
+		overlay += chrome::build_info_banner(editor, width, base_y).len() as u16;
+	}
+	overlay
+}
+
 impl Viewport {
 	/// Query the actual terminal size and sync the editor's cached values.
 	pub fn from_editor(editor: &mut Editor) -> Self {
@@ -32,17 +48,7 @@ impl Viewport {
 		editor.terminal_height = h;
 		// Status bar is always 1 row — it never changes.
 		let chrome: u16 = 1;
-		let mut overlay: u16 = 0;
-
-		if let Some(prompt_windows) = chrome::build_prompt(&*editor, w, h) {
-			overlay += prompt_windows.len() as u16;
-		} else if editor.show_help && !editor.palette.open {
-			overlay += chrome::build_help_bar(&*editor, w, h).len() as u16;
-		}
-		if editor.info_banner_visible() {
-			let base_y = h.saturating_sub(1 + overlay + 1);
-			overlay += chrome::build_info_banner(&*editor, w, base_y).len() as u16;
-		}
+		let overlay = overlay_rows_for(editor, w, h);
 		Self {
 			width: w,
 			height: h,
