@@ -306,7 +306,7 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 	// -- Render 2D UI Components Orchestrator --
 	if editor.palette.open {
 		if let Some(rect) = chrome::palette_modal_rect(vp.width, vp.height) {
-			screen.dim_outside_rect(rect, editor.theme.line_nr);
+			screen.dim_outside_rect(rect, editor.theme.palette.backdrop_dim);
 		}
 	}
 	let interactive_cursor = chrome::render_ui(editor, &mut screen, &vp);

@@ -5,7 +5,7 @@ use super::Viewport;
 use crate::editor::mode::Mode;
 use crate::editor::Editor;
 use crate::palette::match_::score_with_indices;
-use crate::palette::{PaletteItem, section_label};
+use crate::palette::{PaletteItem, PaletteRow};
 use nucleo::Matcher;
 
 use crate::ui::layout::{Gravity, Rect, UiFragment, Window};
@@ -285,13 +285,13 @@ fn palette_border_row(
 	row
 }
 
-/// Section header color: Buffers stay dim; Files and Commands use blue tones.
-fn palette_section_fg(group: u8, theme: &crate::ui::theme::Theme) -> Color {
+/// Localized section title for palette group ids (see `group_of` in palette state).
+fn palette_section_label(editor: &Editor, group: u8) -> String {
 	match group {
-		0 => theme.prompt_info,
-		1 => theme.hotkey,
-		2 => Color::DarkCyan,
-		_ => theme.prompt_info,
+		0 => editor.locale.translate(Message::PaletteSectionBuffers),
+		1 => editor.locale.translate(Message::PaletteSectionFiles),
+		2 => editor.locale.translate(Message::PaletteSectionCommands),
+		_ => String::new(),
 	}
 }
 
@@ -498,12 +498,12 @@ pub fn build_palette_window(editor: &Editor, vw: u16, vh: u16) -> Vec<Window> {
 	let total = editor.palette.filtered.len();
 	let query = &editor.palette.query;
 
-	let theme = &editor.theme;
-	let bg = theme.prompt_bg;
-	let fg = theme.prompt_fg;
-	let line = theme.prompt_info; // borders: same family as modal, not toolbar dim
-	let dim = theme.prompt_info;
-	let accent = theme.accent;
+	let p = &editor.theme.palette;
+	let bg = p.bg;
+	let fg = p.fg;
+	let line = p.border;
+	let dim = p.dim;
+	let accent = p.accent;
 
 	let make_row = |y: u16, frags: Vec<UiFragment>| -> Window {
 		Window {
@@ -535,7 +535,10 @@ pub fn build_palette_window(editor: &Editor, vw: u16, vh: u16) -> Vec<Window> {
 	let query_inner = inner.saturating_sub(3);
 	let query_frags: Vec<UiFragment> = if query.is_empty() {
 		vec![frag(
-			palette_fit("Search buffers, files, and commands…", query_inner),
+			palette_fit(
+				&editor.locale.translate(Message::PalettePlaceholder),
+				query_inner,
+			),
 			dim,
 			bg,
 		)]
@@ -613,9 +616,9 @@ pub fn build_palette_window(editor: &Editor, vw: u16, vh: u16) -> Vec<Window> {
 		let mut row_cursor = editor.palette.scroll;
 		while screen_idx < visible_rows as u16 {
 			let row_y = 3 + screen_idx;
-			if let Some(crate::palette::PaletteRow::Section(g)) = rows.get(row_cursor) {
-				let label = format!("  {}", section_label(*g));
-				let section_fg = palette_section_fg(*g, theme);
+			if let Some(PaletteRow::Section(g)) = rows.get(row_cursor) {
+				let label = format!("  {}", palette_section_label(editor, *g));
+				let section_fg = p.section_fg(*g);
 				windows.push(make_row(
 					row_y,
 					palette_border_row(
@@ -638,7 +641,7 @@ pub fn build_palette_window(editor: &Editor, vw: u16, vh: u16) -> Vec<Window> {
 				Some(&crate::palette::PaletteRow::Item(i)) => i,
 				_ => {
 					if no_matches && screen_idx == 0 {
-						let label = "No matches";
+						let label = editor.locale.translate(Message::PaletteNoMatches);
 						let body_inner = inner.saturating_sub(4);
 						let pad = body_inner.saturating_sub(label.chars().count());
 						windows.push(make_row(
@@ -674,7 +677,7 @@ pub fn build_palette_window(editor: &Editor, vw: u16, vh: u16) -> Vec<Window> {
 			let body_inner = inner.saturating_sub(4);
 
 			let body_frags =
-				palette_row_body_frags(item, query, body_inner, row_fg, row_bg, dim);
+				palette_row_body_frags(item, query, body_inner, row_fg, row_bg, p.hint);
 
 			let marker_str = if is_selected { "→" } else { " " };
 			let content = vec![
@@ -711,19 +714,22 @@ pub fn build_palette_window(editor: &Editor, vw: u16, vh: u16) -> Vec<Window> {
 	// Status row: keyboard hints left, match count right.
 	let total_all = editor.palette.all_items.len();
 	let indexing = if editor.project_index_rx.is_some() {
-		" · indexing…"
+		editor.locale.translate(Message::PaletteIndexingSuffix)
 	} else {
-		""
+		String::new()
 	};
 	let hints = if editor.palette.close_prompt_idx.is_some() {
-		" ^S save  ^D discard  esc cancel"
+		editor.locale.translate(Message::PaletteFooterCloseHints)
 	} else {
-		" ↑↓ navigate  ↵ open  esc close"
+		editor.locale.translate(Message::PaletteFooterHints)
 	};
-	let count = format!("{} of {}{}", total, total_all, indexing);
+	let mut count = editor
+		.locale
+		.translate(Message::PaletteResultCount(total, total_all));
+	count.push_str(&indexing);
 	let count_len = count.chars().count();
 	let hints_room = inner.saturating_sub(count_len + 1);
-	let hints_display = palette_fit(hints, hints_room);
+	let hints_display = palette_fit(&hints, hints_room);
 	let hints_len = hints_display.chars().count();
 	let pad = inner.saturating_sub(hints_len + count_len);
 	let footer_content = vec![

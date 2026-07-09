@@ -47,6 +47,15 @@ pub enum Message {
     PromptClipRight,
     StatusMessage(String),
     EscToClose,
+    PalettePlaceholder,
+    PaletteSectionBuffers,
+    PaletteSectionFiles,
+    PaletteSectionCommands,
+    PaletteFooterHints,
+    PaletteFooterCloseHints,
+    PaletteResultCount(usize, usize),
+    PaletteIndexingSuffix,
+    PaletteNoMatches,
 }
 
 pub trait Locale: Send + Sync {
@@ -106,6 +115,19 @@ impl Locale for EnglishLocale {
             Message::PromptClipRight => "→".to_string(),
             Message::StatusMessage(msg) => msg,
             Message::EscToClose => "Esc Close".to_string(),
+            Message::PalettePlaceholder => {
+                "Search buffers, files, and commands…".to_string()
+            }
+            Message::PaletteSectionBuffers => "Buffers".to_string(),
+            Message::PaletteSectionFiles => "Files".to_string(),
+            Message::PaletteSectionCommands => "Commands".to_string(),
+            Message::PaletteFooterHints => " ↑↓ navigate  ↵ open  esc close".to_string(),
+            Message::PaletteFooterCloseHints => {
+                " ^S save  ^D discard  esc cancel".to_string()
+            }
+            Message::PaletteResultCount(shown, total) => format!("{} of {}", shown, total),
+            Message::PaletteIndexingSuffix => " · indexing…".to_string(),
+            Message::PaletteNoMatches => "No matches".to_string(),
         }
     }
 }

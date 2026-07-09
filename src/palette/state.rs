@@ -14,16 +14,6 @@ pub enum PaletteRow {
     Item(usize),
 }
 
-/// Label for a palette section group (see `group_of`).
-pub fn section_label(group: u8) -> &'static str {
-    match group {
-        0 => "Buffers",
-        1 => "Files",
-        2 => "Commands",
-        _ => "",
-    }
-}
-
 /// Visual grouping used to place section dividers. Three groups, in display
 /// order: buffers (incl. "New buffer"), recent/project files, then commands.
 /// A divider is drawn wherever consecutive results change group.

@@ -77,6 +77,38 @@ pub struct Theme {
     pub prompt_danger_bg: Color,
     pub prompt_danger_fg: Color,
     pub hotkey: Color,
+
+    /// Command-palette (Ctrl-P) chrome colours — kept separate from prompt
+    /// colours so the modal can be retuned without affecting other overlays.
+    pub palette: PaletteTheme,
+}
+
+/// Colours used exclusively by the command palette modal.
+#[derive(Debug, Clone)]
+pub struct PaletteTheme {
+    pub bg: Color,
+    pub fg: Color,
+    pub border: Color,
+    pub dim: Color,
+    pub accent: Color,
+    /// Action key hints (e.g. `⌃F`) in the result list.
+    pub hint: Color,
+    pub section_buffers: Color,
+    pub section_files: Color,
+    pub section_commands: Color,
+    /// Foreground used when dimming the editor behind the open palette.
+    pub backdrop_dim: Color,
+}
+
+impl PaletteTheme {
+    pub fn section_fg(&self, group: u8) -> Color {
+        match group {
+            0 => self.section_buffers,
+            1 => self.section_files,
+            2 => self.section_commands,
+            _ => self.dim,
+        }
+    }
 }
 
 impl Theme {
@@ -125,6 +157,18 @@ impl Theme {
                 prompt_danger_bg: Color::Red,
                 prompt_danger_fg: Color::AnsiValue(16),
                 hotkey: Color::Blue,
+                palette: PaletteTheme {
+                    bg: Color::White,
+                    fg: Color::AnsiValue(16),
+                    border: Color::DarkGrey,
+                    dim: Color::DarkGrey,
+                    accent: Color::DarkMagenta,
+                    hint: Color::DarkGrey,
+                    section_buffers: Color::DarkGrey,
+                    section_files: Color::Blue,
+                    section_commands: Color::DarkCyan,
+                    backdrop_dim: Color::Grey,
+                },
             }
         } else {
             // Dark theme. `primary` is the app accent (▌ glyphs + Edit/Sel
@@ -181,6 +225,18 @@ impl Theme {
                 prompt_danger_bg: Color::Red,
                 prompt_danger_fg: Color::AnsiValue(16),
                 hotkey: key_hint,
+                palette: PaletteTheme {
+                    bg: Color::AnsiValue(236),
+                    fg: Color::White,
+                    border: Color::White,
+                    dim: Color::White,
+                    accent: primary,
+                    hint: Color::White,
+                    section_buffers: Color::White,
+                    section_files: key_hint,
+                    section_commands: Color::DarkCyan,
+                    backdrop_dim: Color::DarkGrey,
+                },
             }
         }
     }
