@@ -212,6 +212,40 @@ impl TextRope {
 
 		results
 	}
+
+	/// Regex search over a fully materialized UTF-8 haystack.
+	/// Returns char-offset `(start, end)` pairs. Zero-width matches are skipped
+	/// (advance one char past the empty match so collection cannot loop forever).
+	pub fn find_all_regex(&self, re: &regex::Regex) -> Vec<(usize, usize)> {
+		let haystack = self.to_string_full();
+		let mut results = Vec::new();
+		let mut search_from = 0usize; // byte offset
+		while search_from <= haystack.len() {
+			let Some(m) = re.find_at(&haystack, search_from) else {
+				break;
+			};
+			let byte_start = m.start();
+			let byte_end = m.end();
+			if byte_start == byte_end {
+				// Skip zero-width: advance one char (or one byte at EOF).
+				let advance = haystack[byte_start..]
+					.chars()
+					.next()
+					.map(|c| c.len_utf8())
+					.unwrap_or(1);
+				search_from = byte_start.saturating_add(advance);
+				if search_from == byte_start {
+					break;
+				}
+				continue;
+			}
+			let start_char = haystack[..byte_start].chars().count();
+			let end_char = start_char + haystack[byte_start..byte_end].chars().count();
+			results.push((start_char, end_char));
+			search_from = byte_end;
+		}
+		results
+	}
 }
 impl Default for TextRope {
 	fn default() -> Self {
@@ -370,5 +404,50 @@ mod tests {
 		// "aa" in "aaaa" yields non-overlapping matches at 0 and 2.
 		let r = TextRope::from_str("aaaa");
 		assert_eq!(r.find_all("aa"), vec![(0, 2), (2, 4)]);
+	}
+
+	#[test]
+	fn find_all_regex_basic() {
+		let r = TextRope::from_str("foo bar foo");
+		let re = regex::Regex::new("foo").unwrap();
+		assert_eq!(r.find_all_regex(&re), vec![(0, 3), (8, 11)]);
+	}
+
+	#[test]
+	fn find_all_regex_case_sensitive_by_default() {
+		let r = TextRope::from_str("Foo foo");
+		let re = regex::Regex::new("foo").unwrap();
+		assert_eq!(r.find_all_regex(&re), vec![(4, 7)]);
+	}
+
+	#[test]
+	fn find_all_regex_inline_case_insensitive() {
+		let r = TextRope::from_str("Foo foo");
+		let re = regex::Regex::new("(?i)foo").unwrap();
+		assert_eq!(r.find_all_regex(&re), vec![(0, 3), (4, 7)]);
+	}
+
+	#[test]
+	fn find_all_regex_non_ascii_char_spans() {
+		let r = TextRope::from_str("weiß weiß");
+		let re = regex::Regex::new("ß").unwrap();
+		let hits = r.find_all_regex(&re);
+		assert_eq!(hits.len(), 2);
+		assert_eq!(hits[0].1 - hits[0].0, 1);
+	}
+
+	#[test]
+	fn find_all_regex_skips_zero_width() {
+		let r = TextRope::from_str("aa");
+		let re = regex::Regex::new("a*").unwrap();
+		let hits = r.find_all_regex(&re);
+		assert!(hits.iter().all(|&(s, e)| s < e), "no zero-width: {:?}", hits);
+		assert_eq!(hits, vec![(0, 2)]);
+	}
+
+	#[test]
+	fn find_all_literal_still_case_insensitive() {
+		let r = TextRope::from_str("Hello");
+		assert_eq!(r.find_all("hello"), vec![(0, 5)]);
 	}
 }
