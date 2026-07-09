@@ -7,6 +7,7 @@ mod clipboard;
 mod editing;
 mod file;
 mod motion;
+mod mouse;
 mod palette_buffers;
 pub(super) mod prompts;
 mod replace;
@@ -61,6 +62,9 @@ impl Editor {
 			Command::SelectLineStart => self.cmd_select_line_start(),
 			Command::SelectLineEnd => self.cmd_select_line_end(),
 			Command::SelectAll => self.cmd_select_all(),
+			Command::MouseDown { col, row } => self.cmd_mouse_down(col, row),
+			Command::MouseDrag { col, row } => self.cmd_mouse_drag(col, row),
+			Command::MouseUp { col, row } => self.cmd_mouse_up(col, row),
 			Command::InsertChar(ch) => self.cmd_insert_char(ch),
 			Command::InsertString(s) => self.cmd_insert_string(s),
 			Command::InsertNewline => self.cmd_insert_newline(),

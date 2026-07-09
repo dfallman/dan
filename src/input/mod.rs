@@ -1,4 +1,4 @@
-use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent};
 
 use crate::editor::commands::Command;
 use crate::editor::mode::Mode;
@@ -35,6 +35,31 @@ pub fn map_event(event: &Event, mode: Mode) -> Command {
 			}
 		}
 		Event::Paste(text) => Command::InsertString(text.clone()),
+		Event::Mouse(me) => map_mouse(me, mode),
+		_ => Command::Noop,
+	}
+}
+
+fn map_mouse(me: &MouseEvent, mode: Mode) -> Command {
+	if mode != Mode::Editing {
+		return Command::Noop;
+	}
+	use crossterm::event::{MouseButton, MouseEventKind};
+	match me.kind {
+		MouseEventKind::Down(MouseButton::Left) => Command::MouseDown {
+			col: me.column,
+			row: me.row,
+		},
+		MouseEventKind::Drag(MouseButton::Left) => Command::MouseDrag {
+			col: me.column,
+			row: me.row,
+		},
+		MouseEventKind::Up(MouseButton::Left) => Command::MouseUp {
+			col: me.column,
+			row: me.row,
+		},
+		MouseEventKind::ScrollUp => Command::ScrollViewportUp,
+		MouseEventKind::ScrollDown => Command::ScrollViewportDown,
 		_ => Command::Noop,
 	}
 }
@@ -517,6 +542,71 @@ mod tests {
 			),
 			("resize noop", Event::Resize(80, 24), Mode::Editing, Command::Noop),
 		]);
+	}
+
+	fn mouse(kind: crossterm::event::MouseEventKind, col: u16, row: u16) -> Event {
+		use crossterm::event::MouseEvent;
+		Event::Mouse(MouseEvent {
+			kind,
+			column: col,
+			row,
+			modifiers: KeyModifiers::NONE,
+		})
+	}
+
+	#[test]
+	fn mouse_editing_maps_click_drag_wheel() {
+		use crossterm::event::{MouseButton, MouseEventKind as K};
+		assert_map(&[
+			(
+				"down",
+				mouse(K::Down(MouseButton::Left), 3, 5),
+				Mode::Editing,
+				Command::MouseDown { col: 3, row: 5 },
+			),
+			(
+				"drag",
+				mouse(K::Drag(MouseButton::Left), 4, 6),
+				Mode::Editing,
+				Command::MouseDrag { col: 4, row: 6 },
+			),
+			(
+				"up",
+				mouse(K::Up(MouseButton::Left), 4, 6),
+				Mode::Editing,
+				Command::MouseUp { col: 4, row: 6 },
+			),
+			(
+				"wheel up",
+				mouse(K::ScrollUp, 0, 0),
+				Mode::Editing,
+				Command::ScrollViewportUp,
+			),
+			(
+				"wheel down",
+				mouse(K::ScrollDown, 0, 0),
+				Mode::Editing,
+				Command::ScrollViewportDown,
+			),
+			(
+				"right click noop",
+				mouse(K::Down(MouseButton::Right), 1, 1),
+				Mode::Editing,
+				Command::Noop,
+			),
+		]);
+	}
+
+	#[test]
+	fn mouse_ignored_in_palette_and_search() {
+		use crossterm::event::{MouseButton, MouseEventKind as K};
+		let ev = mouse(K::Down(MouseButton::Left), 2, 2);
+		assert_eq!(map_event(&ev, Mode::Palette), Command::Noop);
+		assert_eq!(map_event(&ev, Mode::Searching), Command::Noop);
+		assert_eq!(
+			map_event(&mouse(K::ScrollDown, 0, 0), Mode::Palette),
+			Command::Noop
+		);
 	}
 
 	#[test]

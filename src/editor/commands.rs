@@ -32,6 +32,11 @@ pub enum Command {
 	SelectLineEnd,
 	SelectAll,
 
+	// -- Mouse --
+	MouseDown { col: u16, row: u16 },
+	MouseDrag { col: u16, row: u16 },
+	MouseUp { col: u16, row: u16 },
+
 	// -- Editing --
 	InsertChar(char),
 	InsertString(String),
