@@ -49,6 +49,7 @@ fn map_mouse(me: &MouseEvent, mode: Mode) -> Command {
 		MouseEventKind::Down(MouseButton::Left) => Command::MouseDown {
 			col: me.column,
 			row: me.row,
+			extend: me.modifiers.contains(KeyModifiers::SHIFT),
 		},
 		MouseEventKind::Drag(MouseButton::Left) => Command::MouseDrag {
 			col: me.column,
@@ -554,6 +555,21 @@ mod tests {
 		})
 	}
 
+	fn mouse_mods(
+		kind: crossterm::event::MouseEventKind,
+		col: u16,
+		row: u16,
+		mods: KeyModifiers,
+	) -> Event {
+		use crossterm::event::MouseEvent;
+		Event::Mouse(MouseEvent {
+			kind,
+			column: col,
+			row,
+			modifiers: mods,
+		})
+	}
+
 	#[test]
 	fn mouse_editing_maps_click_drag_wheel() {
 		use crossterm::event::{MouseButton, MouseEventKind as K};
@@ -562,7 +578,21 @@ mod tests {
 				"down",
 				mouse(K::Down(MouseButton::Left), 3, 5),
 				Mode::Editing,
-				Command::MouseDown { col: 3, row: 5 },
+				Command::MouseDown {
+					col: 3,
+					row: 5,
+					extend: false,
+				},
+			),
+			(
+				"shift+down",
+				mouse_mods(K::Down(MouseButton::Left), 3, 5, KeyModifiers::SHIFT),
+				Mode::Editing,
+				Command::MouseDown {
+					col: 3,
+					row: 5,
+					extend: true,
+				},
 			),
 			(
 				"drag",

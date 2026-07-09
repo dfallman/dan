@@ -1,21 +1,50 @@
 use super::Editor;
+use crate::editor::cursor::Cursor;
 use crate::editor::mouse::screen_to_buffer;
 
 impl Editor {
-	pub(crate) fn cmd_mouse_down(&mut self, col: u16, row: u16) {
+	pub(crate) fn cmd_mouse_down(&mut self, col: u16, row: u16, extend: bool) {
 		if !self.config.mouse {
 			return;
 		}
 		let Some((line, c)) = screen_to_buffer(self, col, row) else {
 			return;
 		};
-		self.buffer_mut().cursors.set_cursor(line, c);
 		let tab_w = self.tab_width();
 		let vcol = crate::editor::visual_col::visual_col_at(
 			self.buffer().text.line_slice(line).chars(),
 			c,
 			tab_w,
 		);
+		let click = Cursor {
+			line,
+			col: c,
+			desired_vcol: vcol,
+		};
+
+		if extend && self.has_selection() {
+			// Keep the far end of the existing selection as the new anchor;
+			// move the head to the click. Click above → select click..old_end;
+			// click below → select old_start..click; click inside → contract.
+			let (start, end) = self.buffer().cursors.primary().ordered();
+			let click_before_start = line < start.line || (line == start.line && c < start.col);
+			let anchor = if click_before_start { end } else { start };
+			let sel = self.buffer_mut().cursors.primary_mut();
+			sel.anchor = anchor;
+			sel.head = click;
+			return;
+		}
+
+		if extend {
+			// No prior selection: pin anchor at current cursor, head at click.
+			let anchor = self.buffer().cursors.cursor();
+			let sel = self.buffer_mut().cursors.primary_mut();
+			sel.anchor = anchor;
+			sel.head = click;
+			return;
+		}
+
+		self.buffer_mut().cursors.set_cursor(line, c);
 		self.buffer_mut().cursors.primary_mut().head.desired_vcol = vcol;
 	}
 
@@ -77,6 +106,7 @@ mod tests {
 		e.execute(Command::MouseDown {
 			col: gw + 2,
 			row: 0,
+			extend: false,
 		});
 		let c = e.buffer().cursors.cursor();
 		assert_eq!((c.line, c.col), (0, 2));
@@ -87,7 +117,11 @@ mod tests {
 	fn mouse_drag_selects_range() {
 		let mut e = editor_with_lines(&["abcdef"], 40, 10);
 		let gw = (e.gutter_width() + 1) as u16;
-		e.execute(Command::MouseDown { col: gw, row: 0 });
+		e.execute(Command::MouseDown {
+			col: gw,
+			row: 0,
+			extend: false,
+		});
 		e.execute(Command::MouseDrag {
 			col: gw + 3,
 			row: 0,
@@ -107,7 +141,11 @@ mod tests {
 		let mut e = editor_with_lines(&["abcdef"], 40, 10);
 		e.config.mouse = false;
 		let before = e.buffer().cursors.cursor();
-		e.execute(Command::MouseDown { col: 5, row: 0 });
+		e.execute(Command::MouseDown {
+			col: 5,
+			row: 0,
+			extend: false,
+		});
 		assert_eq!(e.buffer().cursors.cursor(), before);
 	}
 
@@ -134,7 +172,11 @@ mod tests {
 		);
 		e.config.scroll_off = 0;
 		let gw = (e.gutter_width() + 1) as u16;
-		e.execute(Command::MouseDown { col: gw, row: 0 });
+		e.execute(Command::MouseDown {
+			col: gw,
+			row: 0,
+			extend: false,
+		});
 		e.execute(Command::MouseDrag {
 			col: gw + 1,
 			row: 2,
@@ -147,5 +189,84 @@ mod tests {
 		assert!(e.buffer().cursors.has_selection());
 		assert_eq!(*e.buffer().cursors.primary(), before);
 		assert_eq!(e.buffer().scroll_y, 2);
+	}
+
+	#[test]
+	fn shift_click_above_extends_to_old_end() {
+		let mut e = editor_with_lines(&["aaaa", "bbbb", "cccc", "dddd"], 40, 20);
+		let gw = (e.gutter_width() + 1) as u16;
+		// Select line 1 col0 .. line 2 col2 via drag
+		e.execute(Command::MouseDown {
+			col: gw,
+			row: 1,
+			extend: false,
+		});
+		e.execute(Command::MouseDrag {
+			col: gw + 2,
+			row: 2,
+		});
+		let (start, end) = e.buffer().cursors.primary().ordered();
+		assert_eq!((start.line, start.col), (1, 0));
+		assert_eq!((end.line, end.col), (2, 2));
+
+		// Shift-click above on line 0 → click .. old end
+		e.execute(Command::MouseDown {
+			col: gw + 1,
+			row: 0,
+			extend: true,
+		});
+		let (a, b) = e.buffer().cursors.primary().ordered();
+		assert_eq!((a.line, a.col), (0, 1));
+		assert_eq!((b.line, b.col), (2, 2));
+	}
+
+	#[test]
+	fn shift_click_below_extends_from_old_start() {
+		let mut e = editor_with_lines(&["aaaa", "bbbb", "cccc", "dddd"], 40, 20);
+		let gw = (e.gutter_width() + 1) as u16;
+		e.execute(Command::MouseDown {
+			col: gw,
+			row: 1,
+			extend: false,
+		});
+		e.execute(Command::MouseDrag {
+			col: gw + 2,
+			row: 2,
+		});
+
+		// Shift-click below on line 3 → old start .. click
+		e.execute(Command::MouseDown {
+			col: gw + 3,
+			row: 3,
+			extend: true,
+		});
+		let (a, b) = e.buffer().cursors.primary().ordered();
+		assert_eq!((a.line, a.col), (1, 0));
+		assert_eq!((b.line, b.col), (3, 3));
+	}
+
+	#[test]
+	fn shift_click_inside_contracts() {
+		let mut e = editor_with_lines(&["aaaa", "bbbb", "cccc", "dddd"], 40, 20);
+		let gw = (e.gutter_width() + 1) as u16;
+		e.execute(Command::MouseDown {
+			col: gw,
+			row: 1,
+			extend: false,
+		});
+		e.execute(Command::MouseDrag {
+			col: gw + 2,
+			row: 2,
+		});
+
+		// Shift-click inside on line 2 col0 → old start .. click
+		e.execute(Command::MouseDown {
+			col: gw,
+			row: 2,
+			extend: true,
+		});
+		let (a, b) = e.buffer().cursors.primary().ordered();
+		assert_eq!((a.line, a.col), (1, 0));
+		assert_eq!((b.line, b.col), (2, 0));
 	}
 }

@@ -33,7 +33,7 @@ pub enum Command {
 	SelectAll,
 
 	// -- Mouse --
-	MouseDown { col: u16, row: u16 },
+	MouseDown { col: u16, row: u16, extend: bool },
 	MouseDrag { col: u16, row: u16 },
 	MouseUp { col: u16, row: u16 },
 
