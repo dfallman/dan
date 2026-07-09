@@ -3,7 +3,9 @@
 //! Ensures cleanup on early `?` returns, panics (alongside the panic hook), and
 //! normal exit — any path where `main` unwinds while modes were enabled.
 
-use crossterm::event::{DisableBracketedPaste, EnableBracketedPaste};
+use crossterm::event::{
+	DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture,
+};
 use crossterm::terminal::{self, EnterAlternateScreen, LeaveAlternateScreen};
 use crossterm::ExecutableCommand;
 use std::io::{self, BufWriter, Write};
@@ -15,11 +17,12 @@ pub struct TerminalGuard {
 	raw_mode: bool,
 	alt_screen: bool,
 	bracketed_paste: bool,
+	mouse: bool,
 }
 
 impl TerminalGuard {
-	/// Enter raw mode, the alternate screen, and bracketed-paste mode.
-	pub fn enter() -> io::Result<Self> {
+	/// Enter raw mode, the alternate screen, bracketed-paste, and optionally mouse capture.
+	pub fn enter(mouse: bool) -> io::Result<Self> {
 		let stdout = io::stdout();
 		let writer = BufWriter::with_capacity(64 * 1024, stdout);
 		let mut guard = Self {
@@ -27,6 +30,7 @@ impl TerminalGuard {
 			raw_mode: false,
 			alt_screen: false,
 			bracketed_paste: false,
+			mouse: false,
 		};
 
 		terminal::enable_raw_mode()?;
@@ -38,6 +42,11 @@ impl TerminalGuard {
 		guard.writer.get_mut().execute(EnableBracketedPaste)?;
 		guard.bracketed_paste = true;
 
+		if mouse {
+			guard.writer.get_mut().execute(EnableMouseCapture)?;
+			guard.mouse = true;
+		}
+
 		Ok(guard)
 	}
 
@@ -48,6 +57,10 @@ impl TerminalGuard {
 	/// Restore terminal modes and flush pending output. Called from `Drop` and
 	/// may be called explicitly before returning from `main`.
 	pub fn restore(&mut self) {
+		if self.mouse {
+			let _ = self.writer.get_mut().execute(DisableMouseCapture);
+			self.mouse = false;
+		}
 		if self.bracketed_paste {
 			let _ = self.writer.get_mut().execute(DisableBracketedPaste);
 			self.bracketed_paste = false;

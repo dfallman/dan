@@ -129,6 +129,10 @@ fn main() -> io::Result<()> {
 			&mut stdout,
 			crossterm::event::DisableBracketedPaste,
 		);
+		let _ = crossterm::ExecutableCommand::execute(
+			&mut stdout,
+			crossterm::event::DisableMouseCapture,
+		);
 		let _ = crossterm::ExecutableCommand::execute(&mut stdout, crossterm::style::ResetColor);
 		let _ = crossterm::ExecutableCommand::execute(
 			&mut stdout,
@@ -156,7 +160,7 @@ fn main() -> io::Result<()> {
 	}));
 
 	// Set up terminal (restored automatically by TerminalGuard on drop).
-	let mut terminal = terminal_guard::TerminalGuard::enter()?;
+	let mut terminal = terminal_guard::TerminalGuard::enter(editor.config.mouse)?;
 	let writer = terminal.writer_mut();
 
 	// Flush stray terminal-query replies before the first frame.
