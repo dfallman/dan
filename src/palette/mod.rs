@@ -6,6 +6,6 @@ pub mod index;
 pub mod state;
 
 #[allow(unused_imports)]
-pub use state::{PaletteState, PaletteRow};
+pub use state::{PaletteState, PaletteRow, section_label};
 #[allow(unused_imports)]
 pub use items::{PaletteItem, ActionId, action_registry, action_to_command};

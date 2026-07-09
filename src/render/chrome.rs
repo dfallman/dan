@@ -1,10 +1,12 @@
 use crossterm::style::Color;
+use std::collections::HashSet;
 
 use super::Viewport;
 use crate::editor::mode::Mode;
 use crate::editor::Editor;
-
-
+use crate::palette::match_::score_with_indices;
+use crate::palette::{PaletteItem, section_label};
+use nucleo::Matcher;
 
 use crate::ui::layout::{Gravity, Rect, UiFragment, Window};
 use crate::ui::overlay::{OverlayBlock, OverlayBuilder};
@@ -46,7 +48,251 @@ fn truncate_path(path: &str, max_len: usize) -> String {
         let start: String = path.chars().take(start_len).collect();
         let end: String = path.chars().skip(path.chars().count().saturating_sub(end_len)).collect();
         format!("{}...{}", start, end)
-    }
+	}
+}
+
+/// Matched char indices for palette fuzzy highlighting (one matcher per call).
+fn palette_match_indices(query: &str, haystack: &str) -> Vec<u32> {
+	if query.is_empty() {
+		return Vec::new();
+	}
+	let mut matcher = Matcher::new(nucleo::Config::DEFAULT);
+	score_with_indices(&mut matcher, query, haystack)
+		.map(|(_, idx)| idx)
+		.unwrap_or_default()
+}
+
+/// Map nucleo indices from `original` onto displayed text after left-truncation.
+fn remap_indices_fit_left(original: &str, display: &str, indices: &[u32]) -> HashSet<usize> {
+	let orig_len = original.chars().count();
+	let disp_len = display.chars().count();
+	if orig_len <= disp_len && !display.starts_with('…') {
+		return indices.iter().map(|&i| i as usize).collect();
+	}
+	if display.starts_with('…') {
+		let kept_len = disp_len.saturating_sub(1);
+		let start = orig_len.saturating_sub(kept_len);
+		return indices
+			.iter()
+			.filter_map(|&idx| {
+				let i = idx as usize;
+				(i >= start).then_some(i - start + 1)
+			})
+			.collect();
+	}
+	HashSet::new()
+}
+
+/// Map nucleo indices after right-truncation to `display_len` columns.
+fn remap_indices_trunc_right(display_len: usize, indices: &[u32]) -> HashSet<usize> {
+	indices
+		.iter()
+		.filter_map(|&idx| ((idx as usize) < display_len).then_some(idx as usize))
+		.collect()
+}
+
+fn palette_frag(text: String, fg: Color, bg: Color, bold: bool) -> UiFragment {
+	UiFragment {
+		text,
+		fg,
+		bg,
+		is_flex: false,
+		is_bold: bold,
+	}
+}
+
+/// Split `text` into fragments, bolding chars whose indices appear in `highlight`.
+fn highlight_text_frags(
+	text: &str,
+	highlight: &HashSet<usize>,
+	fg: Color,
+	bg: Color,
+) -> Vec<UiFragment> {
+	let mut frags = Vec::new();
+	let mut run = String::new();
+	let mut run_bold = false;
+	for (i, ch) in text.chars().enumerate() {
+		let bold = highlight.contains(&i);
+		if run.is_empty() {
+			run_bold = bold;
+			run.push(ch);
+		} else if bold == run_bold {
+			run.push(ch);
+		} else {
+			frags.push(palette_frag(run, fg, bg, run_bold));
+			run = ch.to_string();
+			run_bold = bold;
+		}
+	}
+	if !run.is_empty() {
+		frags.push(palette_frag(run, fg, bg, run_bold));
+	}
+	frags
+}
+
+/// Pad/truncate `s` to exactly `n` display columns.
+fn palette_fit(s: &str, n: usize) -> String {
+	let count = s.chars().count();
+	if count == n {
+		s.to_string()
+	} else if count > n {
+		s.chars().take(n).collect()
+	} else {
+		let mut out = s.to_string();
+		for _ in 0..(n - count) {
+			out.push(' ');
+		}
+		out
+	}
+}
+
+/// Left-truncate `s` to `n` columns with a leading "…".
+fn palette_fit_left(s: &str, n: usize) -> String {
+	let count = s.chars().count();
+	if count <= n {
+		let mut out = s.to_string();
+		for _ in 0..(n - count) {
+			out.push(' ');
+		}
+		out
+	} else if n == 0 {
+		String::new()
+	} else {
+		let kept: String = s
+			.chars()
+			.rev()
+			.take(n - 1)
+			.collect::<Vec<_>>()
+			.into_iter()
+			.rev()
+			.collect();
+		format!("…{}", kept)
+	}
+}
+
+/// Build highlighted body fragments for one palette result row.
+fn palette_row_body_frags(
+	item: &PaletteItem,
+	query: &str,
+	body_inner: usize,
+	row_fg: Color,
+	row_bg: Color,
+	dim: Color,
+) -> Vec<UiFragment> {
+	let match_idx = palette_match_indices(query, item.search_text());
+	let mut frags = Vec::new();
+
+	match item {
+		PaletteItem::Action { label, hint, .. } => {
+			let hint_str = hint.as_deref().unwrap_or("");
+			if hint_str.is_empty() {
+				let text = palette_fit(label, body_inner);
+				let hi = remap_indices_trunc_right(text.chars().count(), &match_idx);
+				frags.extend(highlight_text_frags(&text, &hi, row_fg, row_bg));
+			} else {
+				let lcount = label.chars().count();
+				let hcount = hint_str.chars().count();
+				if lcount + 2 + hcount <= body_inner {
+					let hi = remap_indices_trunc_right(lcount, &match_idx);
+					frags.extend(highlight_text_frags(label, &hi, row_fg, row_bg));
+					let pad = body_inner - lcount - hcount;
+					if pad > 0 {
+						frags.push(palette_frag(" ".repeat(pad), row_fg, row_bg, false));
+					}
+					frags.push(palette_frag(hint_str.to_string(), dim, row_bg, true));
+				} else {
+					let text = palette_fit(label, body_inner);
+					let hi = remap_indices_trunc_right(text.chars().count(), &match_idx);
+					frags.extend(highlight_text_frags(&text, &hi, row_fg, row_bg));
+				}
+			}
+		}
+		PaletteItem::Buffer {
+			path_display,
+			dirty,
+			..
+		} => {
+			let dirty_w = if *dirty { 2 } else { 0 };
+			let path_room = body_inner.saturating_sub(dirty_w);
+			let path_chars: Vec<char> = path_display.chars().collect();
+			let path_str: String = if path_chars.len() <= path_room {
+				path_display.to_string()
+			} else if path_room == 0 {
+				String::new()
+			} else {
+				let kept: String = path_chars
+					.iter()
+					.rev()
+					.take(path_room - 1)
+					.copied()
+					.collect::<Vec<_>>()
+					.into_iter()
+					.rev()
+					.collect();
+				format!("…{}", kept)
+			};
+			let hi = remap_indices_fit_left(path_display, &path_str, &match_idx);
+			frags.extend(highlight_text_frags(&path_str, &hi, row_fg, row_bg));
+			if *dirty {
+				frags.push(palette_frag(" ".to_string(), row_fg, row_bg, false));
+				frags.push(palette_frag("●".to_string(), row_fg, row_bg, true));
+			}
+			let body_chars: usize = frags.iter().map(|f| f.text.chars().count()).sum();
+			let body_pad = body_inner.saturating_sub(body_chars);
+			if body_pad > 0 {
+				frags.push(palette_frag(" ".repeat(body_pad), row_fg, row_bg, false));
+			}
+		}
+		PaletteItem::File { display, .. } => {
+			let text = palette_fit_left(display, body_inner);
+			let hi = remap_indices_fit_left(display, &text, &match_idx);
+			frags.extend(highlight_text_frags(&text, &hi, row_fg, row_bg));
+		}
+	}
+
+	let body_chars: usize = frags.iter().map(|f| f.text.chars().count()).sum();
+	let body_pad = body_inner.saturating_sub(body_chars);
+	if body_pad > 0 {
+		frags.push(palette_frag(" ".repeat(body_pad), row_fg, row_bg, false));
+	}
+	frags
+}
+
+fn palette_hline(left: char, right: char, inner: usize) -> String {
+	format!("{}{}{}", left, "─".repeat(inner), right)
+}
+
+/// `│` + inner content (padded) + `│`
+fn palette_border_row(
+	inner_content: Vec<UiFragment>,
+	inner: usize,
+	line: Color,
+	bg: Color,
+) -> Vec<UiFragment> {
+	let used: usize = inner_content.iter().map(|f| f.text.chars().count()).sum();
+	let mut content = inner_content;
+	if used < inner {
+		let (fg, row_bg) = content
+			.last()
+			.map(|f| (f.fg, f.bg))
+			.unwrap_or((line, bg));
+		content.push(palette_frag(" ".repeat(inner - used), fg, row_bg, false));
+	}
+	let mut row = Vec::with_capacity(2 + content.len());
+	row.push(palette_frag("│".to_string(), line, bg, false));
+	row.extend(content);
+	row.push(palette_frag("│".to_string(), line, bg, false));
+	row
+}
+
+/// Section header color: Buffers stay dim; Files and Commands use blue tones.
+fn palette_section_fg(group: u8, theme: &crate::ui::theme::Theme) -> Color {
+	match group {
+		0 => theme.prompt_info,
+		1 => theme.hotkey,
+		2 => Color::DarkCyan,
+		_ => theme.prompt_info,
+	}
 }
 
 /// Render the status bar.
@@ -224,8 +470,6 @@ fn help_shortcuts(editor: &Editor) -> Vec<(String, String)> {
 ///
 /// Returns an empty vec if the viewport is too small to render the modal.
 pub fn build_palette_window(editor: &Editor, vw: u16, vh: u16) -> Vec<Window> {
-	use crate::palette::PaletteItem;
-
 	let mut windows: Vec<Window> = Vec::new();
 
 	let width = vw.saturating_sub(4).min(80);
@@ -240,55 +484,14 @@ pub fn build_palette_window(editor: &Editor, vw: u16, vh: u16) -> Vec<Window> {
 	let palette_w = width;
 	let visible_rows = (palette_h as usize).saturating_sub(6);
 	let total = editor.palette.filtered.len();
+	let query = &editor.palette.query;
 
 	let theme = &editor.theme;
 	let bg = theme.prompt_bg;
 	let fg = theme.prompt_fg;
-	let line = theme.toolbar_fg_dim; // box-drawing border colour (dark grey)
+	let line = theme.prompt_info; // borders: same family as modal, not toolbar dim
 	let dim = theme.prompt_info;
-	let accent = theme.accent;        // ▌ left tab + selected marker + "> " prompt
-	let input_fg = theme.warning;     // query text — the eye-magnet
-	let hint_fg = theme.hotkey;       // ⌃-keystroke hints
-	let dirty_fg = theme.dirty_flag;  // post-name "●" on dirty buffers
-
-	fn frag(text: String, fg: crossterm::style::Color, bg: crossterm::style::Color) -> UiFragment {
-		UiFragment { text, fg, bg, is_flex: false, is_bold: false }
-	}
-
-	// Pad/truncate `s` so it occupies exactly `n` display columns (1 col per char).
-	fn fit(s: &str, n: usize) -> String {
-		let count = s.chars().count();
-		if count == n {
-			s.to_string()
-		} else if count > n {
-			s.chars().take(n).collect()
-		} else {
-			let mut out = s.to_string();
-			for _ in 0..(n - count) {
-				out.push(' ');
-			}
-			out
-		}
-	}
-
-	// Left-truncate `s` to `n` display columns with a leading "…", preserving
-	// the trailing portion (so the filename stays visible on long paths).
-	// Pads with spaces if `s` is shorter than `n`.
-	fn fit_left(s: &str, n: usize) -> String {
-		let count = s.chars().count();
-		if count <= n {
-			let mut out = s.to_string();
-			for _ in 0..(n - count) { out.push(' '); }
-			out
-		} else if n == 0 {
-			String::new()
-		} else {
-			// Keep the rightmost (n-1) chars and prepend "…".
-			let kept: String = s.chars().rev().take(n - 1).collect::<Vec<_>>()
-				.into_iter().rev().collect();
-			format!("…{}", kept)
-		}
-	}
+	let accent = theme.accent;
 
 	let make_row = |y: u16, frags: Vec<UiFragment>| -> Window {
 		Window {
@@ -300,57 +503,70 @@ pub fn build_palette_window(editor: &Editor, vw: u16, vh: u16) -> Vec<Window> {
 		}
 	};
 
-	let inner = palette_w as usize - 2; // chars between the side borders
+	let inner = palette_w as usize - 2;
 
-	// Row 0: top border — left edge is the toolbar-style "▌" accent
-	let top = format!("{}┐", "─".repeat(inner));
-	windows.push(make_row(0, vec![
-		frag("▌".to_string(), accent, bg),
-		frag(top, line, bg),
-	]));
+	fn frag(text: String, fg: Color, bg: Color) -> UiFragment {
+		palette_frag(text, fg, bg, false)
+	}
 
-	// Row 1: query bar:  ▌ > <query>           │
-	// "▌ > " and trailing "│" total 4 chars; inner content area = inner - 3.
+	fn hline_row(left: char, right: char, inner: usize, line: Color, bg: Color) -> Vec<UiFragment> {
+		vec![frag(palette_hline(left, right, inner), line, bg)]
+	}
+
+	// Row 0: top border
+	windows.push(make_row(
+		0,
+		hline_row('┌', '┐', inner, line, bg),
+	));
+
+	// Row 1: query bar
 	let query_inner = inner.saturating_sub(3);
-	let (query_str, query_color) = if editor.palette.query.is_empty() {
-		("Search buffers, files, and commands…".to_string(), dim)
+	let query_frags: Vec<UiFragment> = if query.is_empty() {
+		vec![frag(
+			palette_fit("Search buffers, files, and commands…", query_inner),
+			dim,
+			bg,
+		)]
 	} else {
-		(editor.palette.query.clone(), input_fg)
+		vec![palette_frag(
+			palette_fit(query, query_inner),
+			fg,
+			bg,
+			true,
+		)]
 	};
-	let query_text = fit(&query_str, query_inner);
-	// Place the visible terminal cursor inside the query field. cx is the
-	// column index within this row; "▌ > " is 4 cells, then count display
-	// columns of the query up to the byte cursor position (chars == cells
-	// for the typical printable input).
-	let cursor_col = editor.palette.query
+	let cursor_col = query
 		.get(..editor.palette.query_cursor)
 		.map(|s| s.chars().count())
 		.unwrap_or(0);
 	let cursor_cx = (4u16 + cursor_col as u16).min(palette_w.saturating_sub(2));
+	let mut query_content = vec![
+		frag(" ".to_string(), fg, bg),
+		palette_frag(">".to_string(), accent, bg, true),
+		frag(" ".to_string(), fg, bg),
+	];
+	query_content.extend(query_frags);
 	windows.push(Window {
-		rect: Rect { x: 0, y: 1, width: palette_w, height: palette_h },
+		rect: Rect {
+			x: 0,
+			y: 1,
+			width: palette_w,
+			height: palette_h,
+		},
 		gravity: Gravity::Center,
 		z_index: 250,
 		cursor_bounds: Some((cursor_cx, 0)),
-		fragments: vec![
-			frag("▌".to_string(), accent, bg),
-			frag(" > ".to_string(), accent, bg),
-			frag(query_text, query_color, bg),
-			frag("│".to_string(), line, bg),
-		],
+		fragments: palette_border_row(query_content, inner, line, bg),
 	});
 
-	// Row 2: separator
-	let sep = format!("{}┤", "─".repeat(inner));
-	windows.push(make_row(2, vec![
-		frag("▌".to_string(), accent, bg),
-		frag(sep, line, bg),
-	]));
+	// Row 2: separator under query
+	windows.push(make_row(
+		2,
+		hline_row('├', '┤', inner, line, bg),
+	));
 
 	// Result rows — or the dirty-buffer close prompt when close_prompt_idx is set.
 	if editor.palette.close_prompt_idx.is_some() {
-		// Prompt lines (up to visible_rows; we emit at most 5 meaningful lines
-		// and fill the rest with blank rows to maintain the border height).
 		let prompt_lines: [&str; 5] = [
 			"  Buffer has unsaved changes:",
 			"",
@@ -361,30 +577,47 @@ pub fn build_palette_window(editor: &Editor, vw: u16, vh: u16) -> Vec<Window> {
 		for screen_idx in 0..visible_rows as u16 {
 			let row_y = 3 + screen_idx;
 			let prompt_line = prompt_lines.get(screen_idx as usize).copied().unwrap_or("");
-			let line_fg = if screen_idx == 0 { theme.dirty_flag } else { fg };
-			windows.push(make_row(row_y, vec![
-				frag("▌".to_string(), accent, bg),
-				frag(fit(prompt_line, inner), line_fg, bg),
-				frag("│".to_string(), line, bg),
-			]));
+			let line_fg = if screen_idx == 0 { fg } else { dim };
+			let bold = screen_idx == 0;
+			windows.push(make_row(
+				row_y,
+				palette_border_row(
+					vec![palette_frag(
+						palette_fit(prompt_line, inner),
+						line_fg,
+						bg,
+						bold,
+					)],
+					inner,
+					line,
+					bg,
+				),
+			));
 		}
 	} else {
-		// Result rows are driven by one display-row model (items interleaved
-		// with section dividers). `scroll` is a visual-row offset into that
-		// sequence, so divider rows can no longer desync scroll from selection (1).
-		let no_matches = total == 0 && !editor.palette.query.is_empty();
+		let no_matches = total == 0 && !query.is_empty();
 		let rows = editor.palette.display_rows();
 		let mut screen_idx: u16 = 0;
 		let mut row_cursor = editor.palette.scroll;
 		while screen_idx < visible_rows as u16 {
 			let row_y = 3 + screen_idx;
-			// A divider occupies its own visible row.
-			if let Some(crate::palette::PaletteRow::Divider) = rows.get(row_cursor) {
-				let div = format!("{}┤", "─".repeat(inner));
-				windows.push(make_row(row_y, vec![
-					frag("▌".to_string(), accent, bg),
-					frag(div, line, bg),
-				]));
+			if let Some(crate::palette::PaletteRow::Section(g)) = rows.get(row_cursor) {
+				let label = format!("  {}", section_label(*g));
+				let section_fg = palette_section_fg(*g, theme);
+				windows.push(make_row(
+					row_y,
+					palette_border_row(
+						vec![palette_frag(
+							palette_fit(&label, inner),
+							section_fg,
+							bg,
+							true,
+						)],
+						inner,
+						line,
+						bg,
+					),
+				));
 				screen_idx += 1;
 				row_cursor += 1;
 				continue;
@@ -392,25 +625,29 @@ pub fn build_palette_window(editor: &Editor, vw: u16, vh: u16) -> Vec<Window> {
 			let filtered_idx = match rows.get(row_cursor) {
 				Some(&crate::palette::PaletteRow::Item(i)) => i,
 				_ => {
-					// Past the last result: "No matches" on the first row, else blank.
 					if no_matches && screen_idx == 0 {
 						let label = "No matches";
 						let body_inner = inner.saturating_sub(4);
 						let pad = body_inner.saturating_sub(label.chars().count());
-						windows.push(make_row(row_y, vec![
-							frag("▌".to_string(), accent, bg),
-							frag("   ".to_string(), fg, bg),
-							frag(label.to_string(), dim, bg),
-							frag(" ".repeat(pad), fg, bg),
-							frag(" ".to_string(), fg, bg),
-							frag("│".to_string(), line, bg),
-						]));
+						windows.push(make_row(
+							row_y,
+							palette_border_row(
+								vec![
+									frag("   ".to_string(), fg, bg),
+									frag(label.to_string(), dim, bg),
+									frag(" ".repeat(pad), fg, bg),
+									frag(" ".to_string(), fg, bg),
+								],
+								inner,
+								line,
+								bg,
+							),
+						));
 					} else {
-						windows.push(make_row(row_y, vec![
-							frag("▌".to_string(), accent, bg),
-							frag(fit("", inner), fg, bg),
-							frag("│".to_string(), line, bg),
-						]));
+						windows.push(make_row(
+							row_y,
+							palette_border_row(vec![], inner, line, bg),
+						));
 					}
 					screen_idx += 1;
 					row_cursor += 1;
@@ -420,100 +657,33 @@ pub fn build_palette_window(editor: &Editor, vw: u16, vh: u16) -> Vec<Window> {
 			let (item_index_in_all, _score) = editor.palette.filtered[filtered_idx];
 			let item = &editor.palette.all_items[item_index_in_all];
 			let is_selected = filtered_idx == editor.palette.selection;
-			let row_bg = if is_selected { theme.selection_bg } else { bg };
-			// Inner row layout: leading pad(1) + marker(1) + sep(1) + body + trailing pad(1) = inner
+			let row_bg = if is_selected { fg } else { bg };
+			let row_fg = if is_selected { bg } else { fg };
 			let body_inner = inner.saturating_sub(4);
 
-			// On the cyan selection band, every fg snaps to selection_fg
-			// (black) so the semantic colours (hotkey blue, dirty blue)
-			// don't disappear into the background.
-			let body_fg = if is_selected { theme.selection_fg } else { fg };
-			let row_hint_fg = if is_selected { theme.selection_fg } else { hint_fg };
-			let row_dirty_fg = if is_selected { Color::White } else { dirty_fg };
-
-			// Per-row body content fragments. Each (text, fg) pair becomes one
-			// fragment with `row_bg` as background. The chars must sum to
-			// AT MOST `body_inner`; remaining cells are padded after.
-			let body: Vec<(String, Color)> = match item {
-				PaletteItem::Action { label, hint, .. } => {
-					let hint_str = hint.as_deref().unwrap_or("");
-					if hint_str.is_empty() {
-						vec![(fit(label, body_inner), body_fg)]
-					} else {
-						let lcount = label.chars().count();
-						let hcount = hint_str.chars().count();
-						if lcount + 2 + hcount <= body_inner {
-							let pad = body_inner - lcount - hcount;
-							vec![
-								(label.clone(), body_fg),
-								(" ".repeat(pad), body_fg),
-								(hint_str.to_string(), row_hint_fg),
-							]
-						} else {
-							vec![(fit(label, body_inner), body_fg)]
-						}
-					}
-				}
-				PaletteItem::Buffer { path_display, dirty, .. } => {
-					// Right-aligned type label (like an action's hint slot).
-					let kind_label = "Buffer";
-					let kind_w = kind_label.chars().count();
-					let dirty_w = if *dirty { 2 } else { 0 }; // " ●"
-					// Path takes the left side, then " ●" (if dirty), then enough
-					// padding to push "Buffer" to the right edge.
-					let path_room = body_inner.saturating_sub(dirty_w + kind_w + 2);
-					let path_chars: Vec<char> = path_display.chars().collect();
-					let path_str: String = if path_chars.len() <= path_room {
-						path_display.to_string()
-					} else if path_room == 0 {
-						String::new()
-					} else {
-						let kept: String = path_chars.iter().rev().take(path_room - 1)
-							.copied().collect::<Vec<_>>().into_iter().rev().collect();
-						format!("…{}", kept)
-					};
-					let mut v: Vec<(String, Color)> = vec![(path_str.clone(), body_fg)];
-					if *dirty {
-						v.push((" ".to_string(), body_fg));
-						v.push(("●".to_string(), row_dirty_fg));
-					}
-					let used = path_str.chars().count() + dirty_w;
-					let pad = body_inner.saturating_sub(used + kind_w);
-					if pad > 0 {
-						v.push((" ".repeat(pad), body_fg));
-					}
-					// "Buffer" — dim grey when unselected, snaps to selection_fg
-					// (black) on the cyan band so it stays readable.
-					let kind_fg = if is_selected { theme.selection_fg } else { dim };
-					v.push((kind_label.to_string(), kind_fg));
-					v
-				}
-				PaletteItem::File { display, .. } => {
-					vec![(fit_left(display, body_inner), body_fg)]
-				}
-			};
-
-			let body_chars: usize = body.iter().map(|(s, _)| s.chars().count()).sum();
-			let body_pad = body_inner.saturating_sub(body_chars);
+			let body_frags =
+				palette_row_body_frags(item, query, body_inner, row_fg, row_bg, dim);
 
 			let marker_str = if is_selected { "→" } else { " " };
-			let marker_fg = if is_selected { theme.selection_fg } else { fg };
+			let content = vec![
+				palette_frag(" ".to_string(), row_fg, row_bg, false),
+				palette_frag(marker_str.to_string(), row_fg, row_bg, is_selected),
+				palette_frag(" ".to_string(), row_fg, row_bg, false),
+			]
+			.into_iter()
+			.chain(body_frags)
+			.chain(std::iter::once(palette_frag(
+				" ".to_string(),
+				row_fg,
+				row_bg,
+				false,
+			)))
+			.collect();
 
-			let mut row_frags: Vec<UiFragment> = Vec::with_capacity(7 + body.len());
-			row_frags.push(frag("▌".to_string(), accent, bg));
-			row_frags.push(frag(" ".to_string(), fg, row_bg));            // leading pad inside row_bg
-			row_frags.push(frag(marker_str.to_string(), marker_fg, row_bg));
-			row_frags.push(frag(" ".to_string(), fg, row_bg));            // sep
-			for (s, color) in body {
-				row_frags.push(frag(s, color, row_bg));
-			}
-			if body_pad > 0 {
-				row_frags.push(frag(" ".repeat(body_pad), fg, row_bg));
-			}
-			row_frags.push(frag(" ".to_string(), fg, row_bg));            // trailing pad inside row_bg
-			row_frags.push(frag("│".to_string(), line, bg));
-
-			windows.push(make_row(row_y, row_frags));
+			windows.push(make_row(
+				row_y,
+				palette_border_row(content, inner, line, bg),
+			));
 			screen_idx += 1;
 			row_cursor += 1;
 		}
@@ -521,29 +691,34 @@ pub fn build_palette_window(editor: &Editor, vw: u16, vh: u16) -> Vec<Window> {
 
 	// Footer separator
 	let footer_y = 3 + visible_rows as u16;
-	let footer_sep = format!("{}┤", "─".repeat(inner));
-	windows.push(make_row(footer_y, vec![
-		frag("▌".to_string(), accent, bg),
-		frag(footer_sep, line, bg),
-	]));
+	windows.push(make_row(
+		footer_y,
+		hline_row('├', '┤', inner, line, bg),
+	));
 
 	// Status row
 	let total_all = editor.palette.all_items.len();
-	let indexing = if editor.project_index_rx.is_some() { " · indexing…" } else { "" };
+	let indexing = if editor.project_index_rx.is_some() {
+		" · indexing…"
+	} else {
+		""
+	};
 	let status_left = format!(" {} of {}{}", total, total_all, indexing);
-	let status_inner = fit(&status_left, inner);
-	windows.push(make_row(footer_y + 1, vec![
-		frag("▌".to_string(), accent, bg),
-		frag(status_inner, dim, bg),
-		frag("│".to_string(), line, bg),
-	]));
+	windows.push(make_row(
+		footer_y + 1,
+		palette_border_row(
+			vec![frag(palette_fit(&status_left, inner), dim, bg)],
+			inner,
+			line,
+			bg,
+		),
+	));
 
 	// Bottom border
-	let bot = format!("{}┘", "─".repeat(inner));
-	windows.push(make_row(footer_y + 2, vec![
-		frag("▌".to_string(), accent, bg),
-		frag(bot, line, bg),
-	]));
+	windows.push(make_row(
+		footer_y + 2,
+		hline_row('└', '┘', inner, line, bg),
+	));
 
 	windows
 }

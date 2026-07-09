@@ -4,13 +4,24 @@ use nucleo::Matcher;
 use crate::palette::items::{ActionId, PaletteItem};
 use crate::palette::match_::score;
 
-/// One rendered row of the palette result list: either a section divider or a
-/// result item (carrying its index into `filtered`). Dividers occupy a visible
-/// row but are never selectable — selection always lands on an `Item`.
+/// One rendered row of the palette result list: a section header, or a result
+/// item (carrying its index into `filtered`). Headers occupy a visible row but
+/// are never selectable — selection always lands on an `Item`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PaletteRow {
-    Divider,
+    /// Section header for group 0 = Buffers, 1 = Files, 2 = Commands.
+    Section(u8),
     Item(usize),
+}
+
+/// Label for a palette section group (see `group_of`).
+pub fn section_label(group: u8) -> &'static str {
+    match group {
+        0 => "Buffers",
+        1 => "Files",
+        2 => "Commands",
+        _ => "",
+    }
 }
 
 /// Visual grouping used to place section dividers. Three groups, in display
@@ -141,7 +152,7 @@ impl PaletteState {
         for (vis_i, &(all_idx, _)) in self.filtered.iter().enumerate() {
             let g = group_of(&self.all_items[all_idx]);
             if prev_group.is_some_and(|p| p != g) {
-                rows.push(PaletteRow::Divider);
+                rows.push(PaletteRow::Section(g));
             }
             rows.push(PaletteRow::Item(vis_i));
             prev_group = Some(g);
@@ -243,8 +254,8 @@ mod tests {
     }
 
     #[test]
-    fn display_rows_inserts_dividers_between_groups() {
-        // (2): buffers | recent files | commands — a divider at each boundary.
+    fn display_rows_inserts_section_headers_between_groups() {
+        // buffers | files | commands — a labeled header at each boundary.
         let mut p = PaletteState::new();
         p.open_with(vec![buffer("b"), file("f"), action("cmd")]);
         let rows = p.display_rows();
@@ -252,17 +263,17 @@ mod tests {
             rows,
             vec![
                 PaletteRow::Item(0),
-                PaletteRow::Divider,
+                PaletteRow::Section(1),
                 PaletteRow::Item(1),
-                PaletteRow::Divider,
+                PaletteRow::Section(2),
                 PaletteRow::Item(2),
             ]
         );
     }
 
     #[test]
-    fn display_rows_single_divider_when_files_absent() {
-        // Buffer then commands, no files → exactly one divider.
+    fn display_rows_single_section_when_files_absent() {
+        // Buffer then commands, no files → one "Commands" header.
         let mut p = PaletteState::new();
         p.open_with(vec![buffer("b"), action("c1"), action("c2")]);
         let rows = p.display_rows();
@@ -270,7 +281,7 @@ mod tests {
             rows,
             vec![
                 PaletteRow::Item(0),
-                PaletteRow::Divider,
+                PaletteRow::Section(2),
                 PaletteRow::Item(1),
                 PaletteRow::Item(2),
             ]
@@ -278,17 +289,17 @@ mod tests {
     }
 
     #[test]
-    fn visual_index_accounts_for_dividers_above() {
+    fn visual_index_accounts_for_sections_above() {
         let mut p = PaletteState::new();
         p.open_with(vec![buffer("b"), file("f"), action("cmd")]);
         assert_eq!(p.visual_index(0), 0); // buffer
-        assert_eq!(p.visual_index(1), 2); // file, after 1 divider
-        assert_eq!(p.visual_index(2), 4); // command, after 2 dividers
+        assert_eq!(p.visual_index(1), 2); // file, after 1 section header
+        assert_eq!(p.visual_index(2), 4); // command, after 2 section headers
     }
 
     #[test]
-    fn scroll_keeps_selection_visible_with_dividers() {
-        // (1): a divider consumes a visible row, so scrolling must track the
+    fn scroll_keeps_selection_visible_with_sections() {
+        // A section header consumes a visible row, so scrolling must track the
         // selected item's *visual* row, not its item index.
         let mut p = PaletteState::new();
         let mut items = vec![buffer("b")];

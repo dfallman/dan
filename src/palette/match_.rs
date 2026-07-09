@@ -16,7 +16,6 @@ pub fn score(matcher: &mut Matcher, query: &str, haystack: &str) -> u32 {
 }
 
 /// Score and also return matched-char indices (for highlighting in the UI).
-#[allow(dead_code)]
 pub fn score_with_indices(matcher: &mut Matcher, query: &str, haystack: &str) -> Option<(u32, Vec<u32>)> {
     if query.is_empty() {
         return Some((0, Vec::new()));
