@@ -97,13 +97,11 @@ Wheel maps to existing `ScrollViewportUp` / `ScrollViewportDown` — no new scro
 
 Extend `TerminalGuard` to optionally enable mouse capture when entering, and always disable it on `restore` / `Drop` (and in the panic hook, mirror bracketed-paste cleanup).
 
-Suggested shape:
+Shape:
 
-- `TerminalGuard::enter()` stays as today for modes that are always on
-- Add `enable_mouse(&mut self) -> io::Result<()>` called from `main` when `editor.config.mouse` is true
-- Or pass a `mouse: bool` into `enter` — either is fine; prefer the smallest change that always disables on restore
-
-Panic hook must also emit `DisableMouseCapture` so a crash does not leave the terminal eating mouse events for the shell.
+- Change `TerminalGuard::enter(mouse: bool)` so mouse capture is enabled only when `mouse` is true
+- Always disable mouse capture in `restore` / `Drop` (idempotent if never enabled)
+- Panic hook must also emit `DisableMouseCapture` so a crash does not leave the terminal eating mouse events for the shell
 
 ### Input mapping
 
@@ -119,13 +117,15 @@ In `input::map_event`:
   - `ScrollDown` → `ScrollViewportDown`
   - everything else → `Noop`
 
-Config gating: either skip enabling capture when `mouse = false` (preferred primary gate), and/or have `map_event` / dispatch ignore mouse when disabled. Enabling capture only when configured is enough for normal terminals; still treat unexpected mouse events as `Noop` when disabled if the caller passes config or dispatch checks `config.mouse`.
+Config gating:
 
-Simplest consistent approach: `map_event` stays mode-aware only; `execute` for mouse commands early-returns when `!config.mouse`. Capture is not enabled when disabled, so this is belt-and-suspenders.
+1. Primary: do not enable capture when `mouse = false`
+2. Belt-and-suspenders: `execute` for `MouseDown` / `MouseDrag` / `MouseUp` early-returns when `!config.mouse`
+3. `map_event` stays mode-aware only (does not need a config parameter)
 
 ### Hit-test
 
-Add a pure function (suggested location: `src/editor/viewport.rs` or a small `src/editor/mouse.rs`):
+Add a pure function in `src/editor/mouse.rs`:
 
 ```text
 screen_to_buffer(editor, screen_col: u16, screen_row: u16) -> Option<(line, col)>
@@ -143,7 +143,7 @@ Reuse `visual_rows_for` and existing gutter / text-area width helpers so wrap an
 
 ### Dispatch
 
-New handlers in `src/editor/dispatch/` (motion or a tiny `mouse.rs` module):
+New handlers in `src/editor/dispatch/mouse.rs`:
 
 - `cmd_mouse_down`: `screen_to_buffer` → `set_cursor` + `begin_selection` (anchor = head)
 - `cmd_mouse_drag`: `screen_to_buffer` → move head only (do not move anchor); if `None`, leave state unchanged
@@ -189,8 +189,8 @@ No real terminal required.
 | Terminal | `src/terminal_guard.rs`, `src/main.rs` (panic hook + enable) |
 | Commands | `src/editor/commands.rs` |
 | Input | `src/input/mod.rs` |
-| Hit-test | `src/editor/viewport.rs` and/or `src/editor/mouse.rs` |
-| Dispatch | `src/editor/dispatch/mod.rs` + motion or `mouse.rs` |
+| Hit-test | `src/editor/mouse.rs` (uses viewport helpers) |
+| Dispatch | `src/editor/dispatch/mod.rs` + `src/editor/dispatch/mouse.rs` |
 | Audit | `doc/2026-07-09-codebase-audit.md` |
 
 ## Success criteria
