@@ -425,6 +425,16 @@ impl Buffer {
 		}
 	}
 
+	/// Replace the entire buffer text in one undo group. Prefer this over
+	/// `delete_range(0, len) + insert_str(0, …)` for whole-document transforms
+	/// so the new content can be built with `RopeBuilder` / `TextRope::from_builder`
+	/// without an intermediate full-document `String`.
+	pub fn replace_text(&mut self, new: crate::buffer::rope::TextRope) {
+		self.history.start_group(&self.text);
+		self.text.replace_with(new);
+		self.mark_mutated();
+	}
+
 	/// Commit pending edits as an undo group.
 	pub fn commit_edits(&mut self) {
 		self.history.commit();

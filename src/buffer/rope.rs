@@ -117,8 +117,53 @@ impl TextRope {
 	}
 
 	/// Get the full text as a String.
+	///
+	/// Prefer streaming APIs (`line_slice`, `chars`, `replace_with`) for
+	/// whole-buffer transforms — this allocates O(n).
 	pub fn to_string_full(&self) -> String {
 		self.rope.to_string()
+	}
+
+	/// Replace the entire rope contents. O(1) pointer swap after the caller
+	/// has built `new` (typically via [`from_builder`] / `RopeBuilder`).
+	pub fn replace_with(&mut self, new: TextRope) {
+		self.rope = new.rope;
+	}
+
+	/// Finish a [`ropey::RopeBuilder`] into a `TextRope`.
+	pub fn from_builder(builder: ropey::RopeBuilder) -> Self {
+		Self {
+			rope: builder.finish(),
+		}
+	}
+
+	/// True if the document ends with a newline (or is empty → false).
+	pub fn ends_with_newline(&self) -> bool {
+		let len = self.rope.len_chars();
+		len > 0 && self.rope.char(len - 1) == '\n'
+	}
+
+	/// Collect each logical line's content **without** its trailing newline.
+	///
+	/// Ropey's final empty line (present when the file ends in `\n`) is omitted
+	/// so the returned vec matches `text.split('\n')` after dropping a trailing
+	/// empty segment. Use [`ends_with_newline`] to restore the terminator.
+	pub fn lines_without_newline(&self) -> Vec<String> {
+		let n = self.rope.len_lines();
+		let mut out = Vec::with_capacity(n);
+		for i in 0..n {
+			let slice = self.rope.line(i);
+			// Final empty line = file ended with \n; skip it.
+			if i + 1 == n && slice.len_chars() == 0 {
+				break;
+			}
+			if slice.len_chars() > 0 && slice.char(slice.len_chars() - 1) == '\n' {
+				out.push(slice.slice(..slice.len_chars() - 1).to_string());
+			} else {
+				out.push(slice.to_string());
+			}
+		}
+		out
 	}
 
 	/// Find all non-overlapping case-insensitive occurrences of `needle` in
