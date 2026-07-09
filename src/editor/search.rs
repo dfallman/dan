@@ -1,5 +1,23 @@
 use crate::editor::Editor;
 
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum ParsedSearch<'a> {
+	Literal(&'a str),
+	RegexPattern(&'a str),
+}
+
+/// `/pattern/` with non-empty interior → regex; otherwise literal (incl. `//`).
+pub(crate) fn parse_search_query(query: &str) -> ParsedSearch<'_> {
+	let bytes = query.as_bytes();
+	if bytes.len() >= 3 && bytes[0] == b'/' && bytes[bytes.len() - 1] == b'/' {
+		let interior = &query[1..query.len() - 1];
+		if !interior.is_empty() {
+			return ParsedSearch::RegexPattern(interior);
+		}
+	}
+	ParsedSearch::Literal(query)
+}
+
 impl Editor {
 	/// Re-run the search against the buffer and jump to the nearest match.
 	pub(crate) fn refresh_search_matches(&mut self) {
@@ -34,5 +52,30 @@ impl Editor {
 			self.buffer_mut().cursors.set_cursor(line, col);
 
 		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn parse_literal_plain() {
+		assert!(matches!(parse_search_query("foo"), ParsedSearch::Literal("foo")));
+	}
+
+	#[test]
+	fn parse_regex_wrapped() {
+		assert!(matches!(parse_search_query("/foo/"), ParsedSearch::RegexPattern("foo")));
+		assert!(matches!(parse_search_query("/a|b/"), ParsedSearch::RegexPattern("a|b")));
+	}
+
+	#[test]
+	fn parse_not_regex_edge_cases() {
+		assert!(matches!(parse_search_query("//"), ParsedSearch::Literal("//")));
+		assert!(matches!(parse_search_query("/"), ParsedSearch::Literal("/")));
+		assert!(matches!(parse_search_query("/foo"), ParsedSearch::Literal("/foo")));
+		assert!(matches!(parse_search_query("foo/"), ParsedSearch::Literal("foo/")));
+		assert!(matches!(parse_search_query(""), ParsedSearch::Literal("")));
 	}
 }
