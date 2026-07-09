@@ -106,8 +106,8 @@ impl Locale for EnglishLocale {
             Message::MatchFraction(idx, total) => format!("{}/{} matches", idx, total),
             Message::ZeroMatches => "0 matches".to_string(),
             Message::InvalidRegex => "invalid regex".to_string(),
-            Message::SearchShortcuts => "^G Next, ⏎ Select, Esc Close".to_string(),
-            Message::SearchReplaceShortcuts => "^G Next, ^R Replace, ⏎ Select, Esc Close".to_string(),
+            Message::SearchShortcuts => "^G Next, ^T Prev, ⏎ Select, Esc Close".to_string(),
+            Message::SearchReplaceShortcuts => "^G Next, ^T Prev, ^R Replace, ⏎ Select, Esc Close".to_string(),
             Message::ReplaceShortcuts => "⏎ Replace, Esc Close".to_string(),
             Message::PromptReplaceWith => "Replace with:".to_string(),
             Message::PromptReplaceStep => "Replace? ^Y Yes, ^N No, ^A All, Esc Close".to_string(),
@@ -187,9 +187,9 @@ impl Locale for SwedishLocale {
             Message::MatchFraction(idx, total) => format!("{}/{} träffar", idx, total),
             Message::ZeroMatches => "0 träffar".to_string(),
             Message::InvalidRegex => "ogiltigt regex".to_string(),
-            Message::SearchShortcuts => "^G Nästa, ⏎ Markera, Esc Stäng".to_string(),
+            Message::SearchShortcuts => "^G Nästa, ^T Föreg, ⏎ Markera, Esc Stäng".to_string(),
             Message::SearchReplaceShortcuts => {
-                "^G Nästa, ^R Ersätt, ⏎ Markera, Esc Stäng".to_string()
+                "^G Nästa, ^T Föreg, ^R Ersätt, ⏎ Markera, Esc Stäng".to_string()
             }
             Message::ReplaceShortcuts => "⏎ Ersätt, Esc Stäng".to_string(),
             Message::PromptReplaceWith => "Ersätt med:".to_string(),

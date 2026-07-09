@@ -114,10 +114,100 @@ Dan uses familiar shortcuts out of the box — `Ctrl-C`/`V` to copy/paste, `Ctrl
 
 | Key | Action |
 |-----|--------|
-| `Ctrl` + `F` | Search |
+| `Ctrl` + `F` (or `F7`) | Open search |
+| `Ctrl` + `G` | Next match *(while searching)* |
+| `Ctrl` + `T` | Previous match *(while searching)* |
+| `Enter` | Select the current match and leave search |
+| `Esc` | Cancel search and restore the cursor |
 | `Ctrl` + `R` *(while searching)* | Promote to find-and-replace |
+| `Ctrl` + `Y` / `N` / `A` *(step replace)* | Replace this match / skip / replace all remaining |
 
-Wrap the search query in `/pattern/` to use regular expressions (Rust `regex` syntax). Invalid patterns clear matches and show `invalid regex`. To search for the literal text `/foo/`, use an escaped regex such as `/\/foo\//`.
+Search is incremental: matches update as you type. The prompt shows `N/M matches` when there are hits. Without surrounding slashes, search is **literal** and **case-insensitive**.
+
+#### Regex search (`/pattern/`)
+
+Wrap the query in forward slashes to switch from literal search to a regular expression:
+
+```
+/pattern/
+```
+
+Dan uses the Rust [`regex`](https://docs.rs/regex/) crate (finite automata; no lookaround or backreferences). There is no separate “regex mode” key — the slashes are the switch.
+
+**When a query counts as regex**
+
+| Query | Mode | Notes |
+|-------|------|-------|
+| `foo` | Literal | Case-insensitive substring |
+| `/foo/` | Regex | Pattern is `foo` |
+| `/\w+_id/` | Regex | Word characters before `_id` |
+| `/(?i)todo/` | Regex | Case-insensitive via inline flag |
+| `/foo` | Literal | Missing closing `/` |
+| `foo/` | Literal | Missing opening `/` |
+| `//` | Literal | Empty interior — not treated as regex |
+
+Rules: the query must start with `/`, end with `/`, and have a non-empty interior. Alternation and other Rust regex syntax work inside the slashes (e.g. `/error|warn/`). Trailing flags like `/pattern/i` are **not** supported; put flags inside the pattern instead (see below).
+
+**Case sensitivity**
+
+| Mode | Default | Override |
+|------|---------|----------|
+| Literal | Case-insensitive | — |
+| Regex | Case-sensitive | `(?i)` for insensitive, `(?-i)` to force sensitive again |
+
+Other useful inline flags (Rust `regex` syntax):
+
+| Flag | Effect |
+|------|--------|
+| `(?i)` | Case-insensitive |
+| `(?m)` | `^` / `$` match line boundaries |
+| `(?s)` | `.` matches newlines |
+
+Example: `/(?im)^\s*todo:/` finds `todo:` at the start of a line, ignoring case.
+
+**Invalid patterns**
+
+While you type, incomplete or illegal patterns (e.g. `/foo(/`) clear all highlights and show `invalid regex` in the search bar. As soon as the pattern compiles again, matches return. Promote-to-replace (`Ctrl+R`) only works when there is at least one match, so an invalid pattern cannot enter replace.
+
+**Searching for literal `/…/` text**
+
+There is no special escape for “literal slash-wrapped text.” To find the characters `/foo/`, use a regex and escape the slashes, for example:
+
+```
+/\/foo\//
+```
+
+**Regex replace (capture groups)**
+
+With a regex search that has matches, press `Ctrl+R`, type a replacement, then `Enter` to step through matches (`^Y` yes, `^N` skip, `^A` all remaining).
+
+In regex sessions the replacement string supports Rust-style expansions:
+
+| Token | Meaning |
+|-------|---------|
+| `$0` | Entire match |
+| `$1`, `$2`, … | Numbered capture groups |
+| `$name` or `${name}` | Named group (`(?P<name>…)` or `(?<name>…)`) |
+| `$$` | A literal `$` |
+
+Examples:
+
+| Search | Replace with | On text `foo_bar` |
+|--------|--------------|-------------------|
+| `/(foo)_(bar)/` | `$2-$1` | `bar-foo` |
+| `/(?P<w>\w+)/` | `[$w]` | `[foo_bar]` (one match) |
+| `/a(\d)/` | `X$1` | `a1` → `X1` |
+
+Literal (non-`/…/`) search never expands `$` — a replacement of `$1` inserts the characters `$1`.
+
+Missing groups expand to an empty string (same as the `regex` crate). Each match is expanded independently; replace-all applies from the current match onward.
+
+**Limits (v1)**
+
+- No trailing `/flags` after the closing slash — use `(?i)`, `(?m)`, `(?s)` inside the pattern.
+- No lookaround or backreferences (`fancy-regex` features are not enabled).
+- Regex search materializes the buffer once per keystroke; huge files may feel heavier than literal search.
+- Zero-width matches are skipped so next/replace cannot loop forever.
 
 **Note for macOS users**: Terminal emulators use escape sequences dating back to the late 70s and some at the time highly influential video display terminals such as VT100. Long story short, this means some "modern" key combinations available in GUI editors can't be distinguished in a terminal. Most notably, Dan (and other terminal apps) uses `Ctrl` where a Mac user might expect `⌘`. Many terminal emulators (including [iTerm2](https://iterm2.com/)) let you remap `⌘` to `Ctrl` if you prefer, although it can create side-issues. Additionally, the built-in Terminal.app is not recommended: a third-party emulator such as [iTerm2](https://iterm2.com/), [Kitty](https://sw.kovidgoyal.net/kitty/), [Ghostty](https://ghostty.dev/), or [WezTerm](https://wez.dev/) will give better results.
 

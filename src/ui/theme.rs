@@ -148,7 +148,7 @@ impl Theme {
                 selection_fg: Color::AnsiValue(16),
                 match_bg: Color::Yellow,
                 match_fg: Color::AnsiValue(16),
-                active_match_bg: Color::Green,
+                active_match_bg: Color::Rgb { r: 0xad, g: 0xd8, b: 0xe6 }, // light blue
                 active_match_fg: Color::AnsiValue(16),
 
                 prompt_info: Color::DarkGrey,
@@ -216,7 +216,7 @@ impl Theme {
                 selection_fg: Color::AnsiValue(16),
                 match_bg: Color::Yellow,
                 match_fg: Color::AnsiValue(16),
-                active_match_bg: Color::Green,
+                active_match_bg: Color::Rgb { r: 0xad, g: 0xd8, b: 0xe6 }, // light blue
                 active_match_fg: Color::AnsiValue(16),
 
                 prompt_info: Color::White,

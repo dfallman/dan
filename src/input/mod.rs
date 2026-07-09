@@ -89,9 +89,10 @@ fn map_search_key(key: &KeyEvent) -> Command {
 		KeyCode::Enter if shift => Command::SearchPrev,
 		// Enter confirms search — exits search, selects matched text
 		KeyCode::Enter => Command::SearchConfirm,
-		// Ctrl+G = next match, Ctrl+Shift+G = prev match
+		// Ctrl+G = next match; Ctrl+T / Ctrl+Shift+G = prev match
 		KeyCode::Char('g') if ctrl && shift => Command::SearchPrev,
 		KeyCode::Char('g') | KeyCode::Char('G') if ctrl => Command::SearchNext,
+		KeyCode::Char('t') | KeyCode::Char('T') if ctrl => Command::SearchPrev,
 		// Ctrl+R = elevate search matches directly into global Replace loop
 		KeyCode::Char('r') | KeyCode::Char('R') if ctrl => Command::SearchConvertToReplace,
 		// Backspace deletes from query
@@ -444,6 +445,8 @@ mod tests {
 			("shift+enter", key(KeyCode::Enter, M::SHIFT), Mode::Searching, Command::SearchPrev),
 			("ctrl+g next", key(KeyCode::Char('g'), M::CONTROL), Mode::Searching, Command::SearchNext),
 			("ctrl+G next", key(KeyCode::Char('G'), M::CONTROL), Mode::Searching, Command::SearchNext),
+			("ctrl+t prev", key(KeyCode::Char('t'), M::CONTROL), Mode::Searching, Command::SearchPrev),
+			("ctrl+T prev", key(KeyCode::Char('T'), M::CONTROL), Mode::Searching, Command::SearchPrev),
 			("ctrl+shift+g prev", key(KeyCode::Char('g'), M::CONTROL | M::SHIFT), Mode::Searching, Command::SearchPrev),
 			("ctrl+r replace", key(KeyCode::Char('r'), M::CONTROL), Mode::Searching, Command::SearchConvertToReplace),
 			("ctrl+R replace", key(KeyCode::Char('R'), M::CONTROL), Mode::Searching, Command::SearchConvertToReplace),
