@@ -43,7 +43,7 @@ For more installation options, see [Installation](#installation).
 
 ## Features
 
-Dan uses familiar shortcuts out of the box — `Ctrl-C`/`V` to copy/paste, `Ctrl-S` to save, `Ctrl-Z`/`Y` to undo/redo, `Ctrl-Q` to quit. Press `Ctrl-H` to toggle the built-in help bar at any time.
+Dan uses familiar shortcuts out of the box — `Ctrl-C`/`V` to copy/paste, `Ctrl-S` to save, `Ctrl-Z`/`Y` to undo/redo, `Ctrl-Q` to quit. Press `Ctrl-H` to toggle the built-in help bar at any time. Mouse is enabled by default: click to place the cursor, drag to select, and use the scroll wheel to move the viewport (set `mouse = false` to disable).
 
 - **Rope-Backed Text Buffer**: Utilizes a rope structure ensuring $O(\\log N)$ time complexity for insertions and deletions. Memory usage scales with edit volume rather than raw file size, permitting fluid, non-blocking navigation and manipulation of 100MB+ log files.
 - **Optimized Terminal I/O & Differential Rendering**: Implements differential rendering to minimize bandwidth by emitting ANSI escape sequences strictly for modified cells. To sustain $O(1)$ scroll performance in massive files, `dan` maintains a syntax snapshot cache every 200 lines, eliminating the need to re-lex the entire visible range during rapid vertical movement.
@@ -180,6 +180,7 @@ syntax_highlight = true     # Enable syntax highlighting (default: true)
 show_help = true            # Show shortcut bar at the bottom (default: true)
 show_encoding = true        # Show file encoding in status bar (default: true)
 show_lang = true            # Show detected language in status bar (default: true)
+mouse = true                # Click, drag-select, wheel scroll (default: true)
 
 # Theme
 theme = "default"           # Syntax highlight theme; "default" auto-detects terminal background
