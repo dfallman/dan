@@ -31,6 +31,15 @@ const MAX_PROJECT_INDEX: usize = 50_000;
 /// one tight-poll iteration.
 const INDEX_DRAIN_BATCH: usize = 50;
 
+/// Transient chrome notice when indent sniffing overrides config.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InfoBanner {
+	pub expand_tab: bool,
+	pub tab_width: usize,
+	/// When true, do not paint (e.g. while `RecoverSwap` is active).
+	pub pending: bool,
+}
+
 /// Core editor state — pico-style modeless editor.
 pub struct Editor {
 	/// Loaded configuration.
@@ -43,6 +52,8 @@ pub struct Editor {
 	pub mode: Mode,
 	/// Status message displayed in the status bar.
 	pub status_msg: Option<String>,
+	/// Sniff-override INFO bar (above help/toolbar); cleared on next key.
+	pub info_banner: Option<InfoBanner>,
 	/// Whether the editor should quit.
 	pub should_quit: bool,
 	/// Horizontal scroll offset (first visible column, used when wrap_lines=false).
@@ -210,6 +221,7 @@ impl Editor {
 			active_buffer: 0,
 			mode: Mode::Editing,
 			status_msg: None,
+			info_banner: None,
 			should_quit: false,
 			scroll_x: 0,
 			sys_clipboard: arboard::Clipboard::new().ok(),
@@ -484,6 +496,10 @@ impl Editor {
 		let (mut buffer, sniffed_expand_tab, sniffed_tab_width) = Buffer::from_file(path)?;
 
 		self.config.apply_editorconfig(path);
+
+		let before_expand = self.config.expand_tab;
+		let before_width = self.config.tab_width;
+
 		if let Some(et) = sniffed_expand_tab {
 			self.config.expand_tab = et;
 		}
@@ -491,12 +507,24 @@ impl Editor {
 			self.config.tab_width = tw;
 		}
 
-		let swp_path = crate::recovery::get_swap_path(path);
+		let changed = self.config.expand_tab != before_expand
+			|| self.config.tab_width != before_width;
 
-		if crate::recovery::check_recovery(&swp_path).is_some() {
+		let swp_path = crate::recovery::get_swap_path(path);
+		let recovering = crate::recovery::check_recovery(&swp_path).is_some();
+
+		if recovering {
 			self.mode = Mode::RecoverSwap;
 		}
 		buffer.swp_path = Some(swp_path);
+
+		if changed {
+			self.set_info_banner(
+				self.config.expand_tab,
+				self.config.tab_width,
+				recovering,
+			);
+		}
 
 		// User has explicitly chosen to open a file — the auto-created startup
 		// scratch (if it's still pristine) has served its placeholder duty.
@@ -712,6 +740,28 @@ impl Editor {
 		self.status_msg = None;
 	}
 
+	pub fn set_info_banner(&mut self, expand_tab: bool, tab_width: usize, pending: bool) {
+		self.info_banner = Some(InfoBanner {
+			expand_tab,
+			tab_width,
+			pending,
+		});
+	}
+
+	pub fn clear_info_banner(&mut self) {
+		self.info_banner = None;
+	}
+
+	pub fn promote_info_banner(&mut self) {
+		if let Some(b) = self.info_banner.as_mut() {
+			b.pending = false;
+		}
+	}
+
+	pub fn info_banner_visible(&self) -> bool {
+		matches!(self.info_banner, Some(InfoBanner { pending: false, .. }))
+	}
+
 	/// After saving or force-discarding one dirty buffer, find the next dirty
 	/// buffer and either prompt for it or exit if none remain.
 	pub(crate) fn advance_quit_cycle(&mut self) {
@@ -892,6 +942,78 @@ impl Default for Editor {
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	#[test]
+	fn sniff_override_queues_info_banner_spaces() {
+		let mut e = Editor::new();
+		e.config.expand_tab = false;
+		e.config.tab_width = 4;
+
+		let mut tmp = std::env::temp_dir();
+		tmp.push(format!("dan_sniff_spaces_{}.txt", std::process::id()));
+		// Majority space indents of width 8 -> sniff expand_tab=true, tab_width=8
+		let body = "        a\n        b\n        c\n        d\n";
+		std::fs::write(&tmp, body).unwrap();
+
+		e.open_file(&tmp).unwrap();
+		let _ = std::fs::remove_file(&tmp);
+
+		assert!(e.config.expand_tab);
+		assert_eq!(e.config.tab_width, 8);
+		let b = e.info_banner.as_ref().expect("banner queued");
+		assert!(b.expand_tab);
+		assert_eq!(b.tab_width, 8);
+		assert!(!b.pending); // no RecoverSwap
+	}
+
+	#[test]
+	fn sniff_matching_config_does_not_queue_banner() {
+		let mut e = Editor::new();
+		e.config.expand_tab = true;
+		e.config.tab_width = 4;
+
+		let mut tmp = std::env::temp_dir();
+		tmp.push(format!("dan_sniff_match_{}.txt", std::process::id()));
+		let body = "    a\n    b\n    c\n    d\n";
+		std::fs::write(&tmp, body).unwrap();
+
+		e.open_file(&tmp).unwrap();
+		let _ = std::fs::remove_file(&tmp);
+
+		assert!(e.info_banner.is_none());
+	}
+
+	#[test]
+	fn sniff_tabs_when_already_tabs_no_banner() {
+		let mut e = Editor::new();
+		e.config.expand_tab = false;
+		e.config.tab_width = 4;
+
+		let mut tmp = std::env::temp_dir();
+		tmp.push(format!("dan_sniff_tabs_{}.txt", std::process::id()));
+		let body = "\ta\n\tb\n\tc\n\td\n";
+		std::fs::write(&tmp, body).unwrap();
+
+		e.open_file(&tmp).unwrap();
+		let _ = std::fs::remove_file(&tmp);
+
+		assert!(!e.config.expand_tab);
+		assert!(e.info_banner.is_none());
+	}
+
+	#[test]
+	fn info_banner_helpers_promote_and_clear() {
+		let mut e = Editor::new();
+
+		e.set_info_banner(true, 2, true);
+		assert!(!e.info_banner_visible());
+
+		e.promote_info_banner();
+		assert!(e.info_banner_visible());
+
+		e.clear_info_banner();
+		assert!(e.info_banner.is_none());
+	}
 
 	#[test]
 	fn tab_width_never_zero() {
