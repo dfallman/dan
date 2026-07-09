@@ -1,3 +1,4 @@
+use editorconfig_parser::{EditorConfig, EditorConfigProperty, EndOfLine, IndentStyle};
 use serde::Deserialize;
 use std::path::PathBuf;
 
@@ -117,27 +118,56 @@ impl Config {
 			return; // Gracefully abort if directory structure cannot be fundamentally determined
 		};
 
-		if let Ok(conf) = editorconfig::get_config(&query_path) {
+		for conf in collect_editorconfigs(&query_path).iter().rev() {
 			if cfg!(debug_assertions) {
 				eprintln!("[DEBUG] apply_editorconfig() parsed .editorconfig applying overrides for: {}", query_path.display());
 			}
-			
-			if let Some(style) = conf.get("indent_style") {
-				self.expand_tab = style == "space";
+
+			let props = conf.resolve(&query_path);
+			if let EditorConfigProperty::Value(style) = props.indent_style {
+				self.expand_tab = style == IndentStyle::Space;
 			}
-			if let Some(size) = conf.get("indent_size") {
-				if let Ok(w) = size.parse::<usize>() {
-					self.tab_width = w;
-				}
+			if let EditorConfigProperty::Value(size) = props.indent_size {
+				self.tab_width = size;
 			}
-			if let Some(trim) = conf.get("trim_trailing_whitespace") {
-				self.trim_trailing_whitespace = Some(trim == "true");
+			if let EditorConfigProperty::Value(trim) = props.trim_trailing_whitespace {
+				self.trim_trailing_whitespace = Some(trim);
 			}
-			if let Some(eol) = conf.get("end_of_line") {
-				self.end_of_line = Some(eol.to_string());
+			if let EditorConfigProperty::Value(eol) = props.end_of_line {
+				self.end_of_line = Some(
+					match eol {
+						EndOfLine::Lf => "lf",
+						EndOfLine::Cr => "cr",
+						EndOfLine::Crlf => "crlf",
+					}
+					.to_string(),
+				);
 			}
 		}
 	}
+}
+
+/// Collect the `.editorconfig` files governing `query_path`, nearest first.
+///
+/// Walks from the file's own directory up towards the filesystem root, stopping
+/// after the first file declaring `root = true`. Each config carries the
+/// directory it was found in, so its section globs match against a path
+/// relative to that directory rather than an absolute one.
+fn collect_editorconfigs(query_path: &std::path::Path) -> Vec<EditorConfig> {
+	let mut found = Vec::new();
+	// `.ancestors()` starts at the file itself; skip(1) begins at its directory.
+	for dir in query_path.ancestors().skip(1) {
+		let Ok(source) = std::fs::read_to_string(dir.join(".editorconfig")) else {
+			continue;
+		};
+		let conf = EditorConfig::parse(&source).with_cwd(dir);
+		let is_root = conf.root();
+		found.push(conf);
+		if is_root {
+			break;
+		}
+	}
+	found
 }
 
 /// Get the config file path.
@@ -165,5 +195,107 @@ mod tests {
 	fn mouse_false_from_toml() {
 		let c: Config = toml::from_str("mouse = false").unwrap();
 		assert!(!c.mouse);
+	}
+
+	/// Scratch directory rooted in the system temp dir. The crate has no
+	/// dev-dependencies, so this stands in for `tempfile`.
+	struct TempTree(PathBuf);
+
+	impl TempTree {
+		fn new(tag: &str) -> Self {
+			let mut dir = std::env::temp_dir();
+			dir.push(format!("dan-editorconfig-{tag}-{}", std::process::id()));
+			let _ = std::fs::remove_dir_all(&dir);
+			std::fs::create_dir_all(&dir).unwrap();
+			Self(dir)
+		}
+
+		fn write(&self, rel: &str, contents: &str) -> PathBuf {
+			let path = self.0.join(rel);
+			std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+			std::fs::write(&path, contents).unwrap();
+			path
+		}
+	}
+
+	impl Drop for TempTree {
+		fn drop(&mut self) {
+			let _ = std::fs::remove_dir_all(&self.0);
+		}
+	}
+
+	#[test]
+	fn editorconfig_overlays_matching_section() {
+		let tree = TempTree::new("basic");
+		tree.write(
+			".editorconfig",
+			"root = true\n[*.rs]\nindent_style = space\nindent_size = 2\ntrim_trailing_whitespace = true\nend_of_line = crlf\n",
+		);
+		let file = tree.write("main.rs", "");
+
+		let mut config = Config::default();
+		config.apply_editorconfig(&file);
+
+		assert!(config.expand_tab);
+		assert_eq!(config.tab_width, 2);
+		assert_eq!(config.trim_trailing_whitespace, Some(true));
+		assert_eq!(config.end_of_line.as_deref(), Some("crlf"));
+	}
+
+	#[test]
+	fn editorconfig_leaves_defaults_when_glob_does_not_match() {
+		let tree = TempTree::new("nomatch");
+		tree.write(".editorconfig", "root = true\n[*.py]\nindent_size = 2\n");
+		let file = tree.write("main.rs", "");
+
+		let mut config = Config::default();
+		config.apply_editorconfig(&file);
+
+		assert_eq!(config.tab_width, 4);
+		assert!(!config.expand_tab);
+		assert_eq!(config.end_of_line, None);
+	}
+
+	/// A nested file must still match a top-level `[*.rs]` glob, and the
+	/// nearest `.editorconfig` must win on keys both files set.
+	#[test]
+	fn editorconfig_nearest_file_overrides_outer() {
+		let tree = TempTree::new("nearest");
+		tree.write(".editorconfig", "root = true\n[*.rs]\nindent_style = space\nindent_size = 2\n");
+		tree.write("src/.editorconfig", "[*.rs]\nindent_size = 8\n");
+		let file = tree.write("src/main.rs", "");
+
+		let mut config = Config::default();
+		config.apply_editorconfig(&file);
+
+		assert_eq!(config.tab_width, 8, "nearer .editorconfig should win on indent_size");
+		assert!(config.expand_tab, "unset keys should still inherit from the outer file");
+	}
+
+	/// `root = true` stops the upward walk, so the outer file is never read.
+	#[test]
+	fn editorconfig_root_halts_upward_walk() {
+		let tree = TempTree::new("rootstop");
+		tree.write(".editorconfig", "[*.rs]\nindent_size = 2\n");
+		tree.write("inner/.editorconfig", "root = true\n[*.rs]\nindent_style = tab\n");
+		let file = tree.write("inner/main.rs", "");
+
+		let mut config = Config::default();
+		config.apply_editorconfig(&file);
+
+		assert_eq!(config.tab_width, 4, "outer indent_size must not leak past root = true");
+		assert!(!config.expand_tab);
+	}
+
+	#[test]
+	fn editorconfig_maps_lf_end_of_line() {
+		let tree = TempTree::new("eol");
+		tree.write(".editorconfig", "root = true\n[*]\nend_of_line = lf\n");
+		let file = tree.write("main.rs", "");
+
+		let mut config = Config::default();
+		config.apply_editorconfig(&file);
+
+		assert_eq!(config.end_of_line.as_deref(), Some("lf"));
 	}
 }

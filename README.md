@@ -213,7 +213,7 @@ Missing groups expand to an empty string (same as the `regex` crate). Each match
 
 # Installation
 
-Dan requires Rust 1.83 or later. We recommend installing via [rustup](https://rustup.rs/) rather than your system package manager, which often provides an older version:
+Dan requires Rust 1.88 or later. We recommend installing via [rustup](https://rustup.rs/) rather than your system package manager, which often provides an older version:
 
 ```
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh

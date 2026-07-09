@@ -1,10 +1,10 @@
 [package]
 name = "dan"
-version = "0.2.160"
+version = "0.2.161"
 edition = "2021"
 authors = ["Daniel Fallman <dfallman@gmail.com>"]
 description = "Dan is a fast, friendly, and zero-fuss terminal text editor written in Rust"
-rust-version = "1.83"
+rust-version = "1.88"
 documentation = "https://github.com/dfallman/dan"
 repository = "https://github.com/dfallman/dan"
 readme = "README.md"
@@ -27,7 +27,7 @@ syntect = { version = "5.3.0", default-features = false, features = ["default-fa
 arboard = "3.4"
 chardetng = "0.1"
 encoding_rs = "0.8"
-editorconfig = "1.0.0"
+editorconfig-parser = "0.0.4"
 terminal-light = "1.8.0"
 terminal-colorsaurus = "1.0.3"
 syntect-assets = "0.23.6"
