@@ -80,7 +80,7 @@ impl Locale for EnglishLocale {
             Message::SelectionModeLabel => "Select".to_string(),
             Message::ModeLabelEditing => "Edit".to_string(),
             Message::FilenameLabel(name) => name,
-            Message::LineCol(ln, col) => format!("Ln {:2}, Col {:2}", ln, col),
+            Message::LineCol(ln, col) => format!("Ln {:3}, Col {:3}", ln, col),
             Message::Version(ver, hash) => format!("· Dan v{} ({})", ver, hash),
             Message::HelpTitle => "Help".to_string(),
             Message::HelpShortcutSave => "Save".to_string(),
@@ -161,7 +161,7 @@ impl Locale for SwedishLocale {
             Message::SelectionModeLabel => "Markera".to_string(),
             Message::ModeLabelEditing => "Redigera".to_string(),
             Message::FilenameLabel(name) => name,
-            Message::LineCol(ln, col) => format!("Rad {:2}, Kol {:2}", ln, col),
+            Message::LineCol(ln, col) => format!("Rad {:3}, Kol {:3}", ln, col),
             Message::Version(ver, hash) => format!("· Dan v{} ({})", ver, hash),
             Message::HelpTitle => "Hjälp".to_string(),
             Message::HelpShortcutSave => "Spara".to_string(),
@@ -349,6 +349,35 @@ mod tests {
             en.translate(Message::StatusMessage("hi".into())),
             sv.translate(Message::StatusMessage("hi".into()))
         );
+    }
+
+    /// The status bar is right-aligned, so the line/column readout must keep a
+    /// constant width up to three digits or the whole right edge shifts while
+    /// scrolling. Beyond 999 it is allowed to grow.
+    #[test]
+    fn line_col_width_is_stable_through_three_digits() {
+        for locale in [
+            &EnglishLocale as &dyn Locale,
+            &SwedishLocale as &dyn Locale,
+        ] {
+            let baseline = locale.translate(Message::LineCol(1, 1)).chars().count();
+            for (ln, col) in [(1, 1), (9, 9), (10, 10), (99, 99), (100, 100), (999, 999)] {
+                let rendered = locale.translate(Message::LineCol(ln, col));
+                assert_eq!(
+                    rendered.chars().count(),
+                    baseline,
+                    "width changed at Ln {ln}, Col {col}: {rendered:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn line_col_reserves_three_digit_columns() {
+        assert_eq!(EnglishLocale.translate(Message::LineCol(1, 1)), "Ln   1, Col   1");
+        assert_eq!(EnglishLocale.translate(Message::LineCol(123, 456)), "Ln 123, Col 456");
+        // Past the reserved width it grows rather than truncating.
+        assert_eq!(EnglishLocale.translate(Message::LineCol(1234, 1)), "Ln 1234, Col   1");
     }
 
     #[test]

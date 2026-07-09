@@ -109,7 +109,7 @@ mod tests {
 
     #[test]
     fn detect_project_root_finds_git_dir() {
-        let temp = tempdir_for_test();
+        let temp = tempdir_for_test("finds_git_dir");
         std::fs::create_dir_all(temp.join("a/b/c")).unwrap();
         std::fs::create_dir_all(temp.join(".git")).unwrap();
         let found = detect_project_root(&temp.join("a/b/c"));
@@ -118,7 +118,7 @@ mod tests {
 
     #[test]
     fn detect_project_root_falls_back_to_start_when_no_git() {
-        let temp = tempdir_for_test();
+        let temp = tempdir_for_test("falls_back_no_git");
         let inner = temp.join("inner");
         std::fs::create_dir_all(&inner).unwrap();
         let found = detect_project_root(&inner);
@@ -146,9 +146,11 @@ mod tests {
         assert_eq!(back[0].path, PathBuf::from("/tmp/a"));
     }
 
-    fn tempdir_for_test() -> PathBuf {
+    /// `tag` must be unique per test: tests share a process, so keying only on
+    /// the pid lets concurrent tests clobber each other's scratch directory.
+    fn tempdir_for_test(tag: &str) -> PathBuf {
         let mut d = std::env::temp_dir();
-        d.push(format!("dan_palette_test_{}", std::process::id()));
+        d.push(format!("dan_palette_test_{}_{tag}", std::process::id()));
         // Ensure clean slate.
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
