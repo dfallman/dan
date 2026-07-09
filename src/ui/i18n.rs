@@ -30,6 +30,7 @@ pub enum Message {
     HelpShortcutHelp,
     MatchFraction(usize, usize),
     ZeroMatches,
+    InvalidRegex,
     SearchShortcuts,
     SearchReplaceShortcuts,
     ReplaceShortcuts,
@@ -104,6 +105,7 @@ impl Locale for EnglishLocale {
             Message::HelpShortcutHelp => "Help".to_string(),
             Message::MatchFraction(idx, total) => format!("{}/{} matches", idx, total),
             Message::ZeroMatches => "0 matches".to_string(),
+            Message::InvalidRegex => "invalid regex".to_string(),
             Message::SearchShortcuts => "^G Next, ⏎ Select, Esc Close".to_string(),
             Message::SearchReplaceShortcuts => "^G Next, ^R Replace, ⏎ Select, Esc Close".to_string(),
             Message::ReplaceShortcuts => "⏎ Replace, Esc Close".to_string(),
@@ -184,6 +186,7 @@ impl Locale for SwedishLocale {
             Message::HelpShortcutHelp => "Hjälp".to_string(),
             Message::MatchFraction(idx, total) => format!("{}/{} träffar", idx, total),
             Message::ZeroMatches => "0 träffar".to_string(),
+            Message::InvalidRegex => "ogiltigt regex".to_string(),
             Message::SearchShortcuts => "^G Nästa, ⏎ Markera, Esc Stäng".to_string(),
             Message::SearchReplaceShortcuts => {
                 "^G Nästa, ^R Ersätt, ⏎ Markera, Esc Stäng".to_string()
@@ -271,6 +274,7 @@ fn all_message_samples() -> Vec<Message> {
         Message::HelpShortcutHelp,
         Message::MatchFraction(1, 3),
         Message::ZeroMatches,
+        Message::InvalidRegex,
         Message::SearchShortcuts,
         Message::SearchReplaceShortcuts,
         Message::ReplaceShortcuts,

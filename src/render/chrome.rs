@@ -966,6 +966,9 @@ pub fn build_prompt(editor: &Editor, width: u16, h: u16) -> Option<Vec<Window>> 
 			if editor.buffer().search_matches.is_empty() {
 				if editor.search_query.is_empty() {
 					info_suffix = format!(" {} ", editor.locale.translate(Message::EscToClose));
+				} else if editor.search_regex_error {
+					info_prefix = editor.locale.translate(Message::InvalidRegex);
+					info_suffix = format!(" {} ", editor.locale.translate(Message::EscToClose));
 				} else {
 					info_prefix = editor.locale.translate(Message::ZeroMatches);
 					info_suffix = editor.locale.translate(Message::SearchShortcuts);
