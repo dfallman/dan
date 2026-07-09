@@ -46,6 +46,8 @@ pub struct Config {
 	/// Line termination style requested statically (LF / CRLF).
 	#[serde(skip)]
 	pub end_of_line: Option<String>,
+	/// Enable terminal mouse capture (click, drag-select, wheel).
+	pub mouse: bool,
 }
 
 impl Default for Config {
@@ -72,6 +74,7 @@ impl Default for Config {
 			show_whitespace: false,
 			trim_trailing_whitespace: None,
 			end_of_line: None,
+			mouse: true,
 		}
 	}
 }
@@ -134,6 +137,22 @@ impl Config {
 				self.end_of_line = Some(eol.to_string());
 			}
 		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn mouse_defaults_to_true() {
+		assert!(Config::default().mouse);
+	}
+
+	#[test]
+	fn mouse_false_from_toml() {
+		let c: Config = toml::from_str("mouse = false").unwrap();
+		assert!(!c.mouse);
 	}
 }
 
