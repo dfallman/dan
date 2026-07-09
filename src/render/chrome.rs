@@ -460,6 +460,25 @@ fn help_shortcuts(editor: &Editor) -> Vec<(String, String)> {
 
 
 
+/// Palette modal size `(width, height)` in terminal cells, or `None` if too small.
+pub fn palette_modal_size(vw: u16, vh: u16) -> Option<(u16, u16)> {
+	let width = vw.saturating_sub(4).min(80);
+	let height = vh.saturating_sub(4).min(20);
+	if width < 30 || height < 6 {
+		None
+	} else {
+		Some((width, height))
+	}
+}
+
+/// Centered bounding box `(x, y, width, height)` for the palette modal.
+pub fn palette_modal_rect(vw: u16, vh: u16) -> Option<(u16, u16, u16, u16)> {
+	let (w, h) = palette_modal_size(vw, vh)?;
+	let x = vw.saturating_sub(w) / 2;
+	let y = vh.saturating_sub(h) / 2;
+	Some((x, y, w, h))
+}
+
 /// Build a centered modal window for the command palette.
 ///
 /// Returns one `Window` per row (top border, query bar, separator, result rows,
@@ -472,16 +491,9 @@ fn help_shortcuts(editor: &Editor) -> Vec<(String, String)> {
 pub fn build_palette_window(editor: &Editor, vw: u16, vh: u16) -> Vec<Window> {
 	let mut windows: Vec<Window> = Vec::new();
 
-	let width = vw.saturating_sub(4).min(80);
-	let max_height = vh.saturating_sub(4).min(20);
-	if width < 30 || max_height < 6 {
-		return windows; // too small — caller treats as no-op
-	}
-
-	// Layout (rows): top border | query | separator | results... | footer-sep | status | bottom
-	// Fixed chrome rows = 6; remaining rows are for results.
-	let palette_h = max_height;
-	let palette_w = width;
+	let Some((palette_w, palette_h)) = palette_modal_size(vw, vh) else {
+		return windows;
+	};
 	let visible_rows = (palette_h as usize).saturating_sub(6);
 	let total = editor.palette.filtered.len();
 	let query = &editor.palette.query;
@@ -542,7 +554,7 @@ pub fn build_palette_window(editor: &Editor, vw: u16, vh: u16) -> Vec<Window> {
 	let cursor_cx = (4u16 + cursor_col as u16).min(palette_w.saturating_sub(2));
 	let mut query_content = vec![
 		frag(" ".to_string(), fg, bg),
-		palette_frag(">".to_string(), accent, bg, true),
+		palette_frag("▶".to_string(), accent, bg, true),
 		frag(" ".to_string(), fg, bg),
 	];
 	query_content.extend(query_frags);
@@ -696,22 +708,32 @@ pub fn build_palette_window(editor: &Editor, vw: u16, vh: u16) -> Vec<Window> {
 		hline_row('├', '┤', inner, line, bg),
 	));
 
-	// Status row
+	// Status row: keyboard hints left, match count right.
 	let total_all = editor.palette.all_items.len();
 	let indexing = if editor.project_index_rx.is_some() {
 		" · indexing…"
 	} else {
 		""
 	};
-	let status_left = format!(" {} of {}{}", total, total_all, indexing);
+	let hints = if editor.palette.close_prompt_idx.is_some() {
+		" ^S save  ^D discard  esc cancel"
+	} else {
+		" ↑↓ navigate  ↵ open  esc close"
+	};
+	let count = format!("{} of {}{}", total, total_all, indexing);
+	let count_len = count.chars().count();
+	let hints_room = inner.saturating_sub(count_len + 1);
+	let hints_display = palette_fit(hints, hints_room);
+	let hints_len = hints_display.chars().count();
+	let pad = inner.saturating_sub(hints_len + count_len);
+	let footer_content = vec![
+		frag(hints_display, dim, bg),
+		frag(" ".repeat(pad), dim, bg),
+		frag(count, dim, bg),
+	];
 	windows.push(make_row(
 		footer_y + 1,
-		palette_border_row(
-			vec![frag(palette_fit(&status_left, inner), dim, bg)],
-			inner,
-			line,
-			bg,
-		),
+		palette_border_row(footer_content, inner, line, bg),
 	));
 
 	// Bottom border

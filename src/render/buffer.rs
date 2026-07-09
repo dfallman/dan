@@ -131,6 +131,27 @@ impl ScreenBuffer {
 		}
 	}
 
+	/// Mute cells outside `rect` (x, y, width, height) — used to dim the editor
+	/// behind the command palette modal.
+	pub fn dim_outside_rect(&mut self, rect: (u16, u16, u16, u16), dim_fg: Color) {
+		let (rx, ry, rw, rh) = rect;
+		let x_end = rx.saturating_add(rw);
+		let y_end = ry.saturating_add(rh);
+		for cy in 0..self.height {
+			for cx in 0..self.width {
+				if cx >= rx && cx < x_end && cy >= ry && cy < y_end {
+					continue;
+				}
+				let idx = (cy as usize) * (self.width as usize) + (cx as usize);
+				let cell = &mut self.grid[idx];
+				cell.fg = dim_fg;
+				cell.bold = false;
+				cell.italic = false;
+				cell.underline = false;
+			}
+		}
+	}
+
 	#[allow(unused_assignments)]
 	pub fn diff<W: Write>(&self, old: &ScreenBuffer, w: &mut W) -> io::Result<()> {
 		// Assemble the entire frame into a local Vec before writing to `w`.
