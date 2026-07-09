@@ -1,0 +1,48 @@
+name: Security audit
+
+on:
+  push:
+    branches: [ "master" ]
+    paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/audit.yml'
+  pull_request:
+    branches: [ "master" ]
+    paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/audit.yml'
+  # Advisories are published against code that already merged, so a
+  # dependency-triggered run alone would never see them. Re-check weekly.
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    # Building cargo-audit from source costs minutes; cache the binary.
+    # Bump the key suffix to force a reinstall on a newer release.
+    - name: Cache cargo-audit
+      uses: actions/cache@v4
+      with:
+        path: ~/.cargo/bin/cargo-audit
+        key: cargo-audit-${{ runner.os }}-v1
+    - name: Install cargo-audit
+      run: command -v cargo-audit >/dev/null || cargo install cargo-audit --locked
+    # Exits non-zero on vulnerabilities. Unmaintained-crate notices stay
+    # warnings: bincode and yaml-rust reach us via syntect and have no fix yet.
+    - name: Audit dependencies
+      run: cargo audit

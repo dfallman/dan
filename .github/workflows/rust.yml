@@ -28,3 +28,26 @@ jobs:
       run: cargo clippy --all-targets -- -D warnings
     - name: Build (release)
       run: cargo build --release --verbose
+
+  msrv:
+    name: MSRV
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Read rust-version from Cargo.toml
+      id: msrv
+      run: |
+        version=$(sed -n 's/^rust-version *= *"\(.*\)"/\1/p' Cargo.toml)
+        if [ -z "$version" ]; then
+          echo "::error::no rust-version key in Cargo.toml" >&2
+          exit 1
+        fi
+        echo "version=$version" >> "$GITHUB_OUTPUT"
+    - name: Install Rust ${{ steps.msrv.outputs.version }}
+      run: rustup toolchain install ${{ steps.msrv.outputs.version }} --profile minimal --no-self-update
+    # No --locked: the commit-msg hook bumps Cargo.toml's version without
+    # regenerating Cargo.lock, so the two legitimately disagree on many commits.
+    - name: Check against declared MSRV
+      run: cargo +${{ steps.msrv.outputs.version }} check --all-targets
