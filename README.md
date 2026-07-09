@@ -74,6 +74,7 @@ Dan uses familiar shortcuts out of the box — `Ctrl-C`/`V` to copy/paste, `Ctrl
 | `Ctrl` + `Q` | Quit (prompts if there are unsaved changes) |
 | `Ctrl` + `H` | Toggle help bar |
 | `Ctrl` + `P` | Command palette (actions, buffers, project files) |
+| `Ctrl` + `N` | New buffer |
 
 ### Text editing
 
@@ -120,7 +121,7 @@ Dan uses familiar shortcuts out of the box — `Ctrl-C`/`V` to copy/paste, `Ctrl
 
 # Installation
 
-Dan requires Rust v1.94 or later. We recommend installing via [rustup](https://rustup.rs/) rather than your system package manager, which often provides an older version:
+Dan requires Rust 1.83 or later. We recommend installing via [rustup](https://rustup.rs/) rather than your system package manager, which often provides an older version:
 
 ```
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
@@ -168,6 +169,7 @@ highlight_active = true     # Highlight the current line (default: true)
 scroll_off = 5              # Lines to keep visible above/below cursor (default: 5)
 fast_scroll_steps = 10      # Lines jumped per fast-scroll keypress (default: 10)
 show_full_path = false      # Show full file path in toolbar (default: false)
+show_whitespace = false     # Show visible markers for spaces/tabs/EOL (default: false; toggle with Ctrl-R)
 
 # Editing
 auto_indent = true          # Match indentation of the previous line (default: true)

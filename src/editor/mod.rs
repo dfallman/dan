@@ -714,7 +714,7 @@ impl Editor {
 
 	/// After saving or force-discarding one dirty buffer, find the next dirty
 	/// buffer and either prompt for it or exit if none remain.
-	fn advance_quit_cycle(&mut self) {
+	pub(crate) fn advance_quit_cycle(&mut self) {
 		let next = self.buffers.iter().position(|b| b.dirty);
 		match next {
 			None => {
@@ -729,12 +729,14 @@ impl Editor {
 		}
 	}
 
-	/// Toggle comments for the selected lines (or current line) using syntax-aware prefixes.
+	/// Toggle comments for the selected lines (or current line) using syntax-aware
+	/// delimiters. Line comments use a prefix only; block styles (HTML/XML/Markdown,
+	/// CSS) wrap each non-empty line with prefix + suffix.
 	pub fn toggle_comment(&mut self) {
 		let syntax = self
 			.highlighter
 			.detect_syntax(self.buffer().file_path.as_deref());
-		let prefix = match syntax.name.as_str() {
+		let (prefix, suffix): (&str, &str) = match syntax.name.as_str() {
 			"Python"
 			| "Ruby"
 			| "Shell-Unix-Generic"
@@ -745,11 +747,11 @@ impl Editor {
 			| "Perl"
 			| "PowerShell"
 			| "R"
-			| "Elixir" => "#",
-			"Lua" | "SQL" | "Haskell" | "Ada" | "AppleScript" => "--",
-			"HTML" | "XML" | "Markdown" => "<!--", // Note: HTML usually requires `-->` block suffix, simplistic fallback used
-			"CSS" => "/*",                         // simplistic fallback used
-			_ => "//",                             // Rust, C, C++, JS, TS, Java, Go, Swift, PHP, D, etc.
+			| "Elixir" => ("#", ""),
+			"Lua" | "SQL" | "Haskell" | "Ada" | "AppleScript" => ("--", ""),
+			"HTML" | "XML" | "Markdown" => ("<!-- ", " -->"),
+			"CSS" => ("/* ", " */"),
+			_ => ("//", ""), // Rust, C, C++, JS, TS, Java, Go, Swift, PHP, D, etc.
 		};
 
 		let (start_line, end_line) = if self.has_selection() {
@@ -760,6 +762,16 @@ impl Editor {
 			(l, l)
 		};
 
+		let is_commented = |stripped: &str| -> bool {
+			if !stripped.starts_with(prefix) {
+				return false;
+			}
+			if suffix.is_empty() {
+				return true;
+			}
+			stripped.trim_end().ends_with(suffix)
+		};
+
 		// Toggle is uncomment-if-all-already-commented, else comment-all.
 		let mut all_commented = true;
 		for line_idx in start_line..=end_line {
@@ -767,7 +779,7 @@ impl Editor {
 			if line_text.trim_end().is_empty() {
 				continue;
 			}
-			if !line_text.trim_start().starts_with(prefix) {
+			if !is_commented(line_text.trim_start()) {
 				all_commented = false;
 				break;
 			}
@@ -783,20 +795,43 @@ impl Editor {
 			}
 
 			let indent_len = line_text.chars().count() - stripped.chars().count();
-			let insert_pos = self.buffer().text.line_to_char(line_idx) + indent_len;
+			let line_start = self.buffer().text.line_to_char(line_idx);
+			let insert_pos = line_start + indent_len;
 
 			if all_commented {
-				// Also consume the space we inserted alongside the prefix, if present.
-				let to_remove = if stripped.starts_with(&format!("{} ", prefix)) {
-					prefix.chars().count() + 1
+				if suffix.is_empty() {
+					// Line comment: also consume the space we inserted after the
+					// prefix, if present (legacy `// foo` / `# foo` form).
+					let to_remove = if stripped.starts_with(&format!("{} ", prefix)) {
+						prefix.chars().count() + 1
+					} else {
+						prefix.chars().count()
+					};
+					self.buffer_mut()
+						.delete_range(insert_pos, insert_pos + to_remove);
 				} else {
-					prefix.chars().count()
-				};
-				self.buffer_mut()
-					.delete_range(insert_pos, insert_pos + to_remove);
-			} else {
+					// Block comment: strip trailing suffix first (from end of
+					// content, before newline), then the leading prefix.
+					let content_end = {
+						let trimmed = stripped.trim_end();
+						let trail_ws = stripped.chars().count() - trimmed.chars().count();
+						insert_pos + stripped.chars().count() - trail_ws
+					};
+					let suffix_len = suffix.chars().count();
+					self.buffer_mut()
+						.delete_range(content_end - suffix_len, content_end);
+					self.buffer_mut()
+						.delete_range(insert_pos, insert_pos + prefix.chars().count());
+				}
+			} else if suffix.is_empty() {
 				self.buffer_mut()
 					.insert_str(insert_pos, &format!("{} ", prefix));
+			} else {
+				// Wrap: prefix at indent, suffix after the last non-newline char.
+				let content = stripped.trim_end_matches(['\n', '\r']);
+				let content_end = insert_pos + content.chars().count();
+				self.buffer_mut().insert_str(content_end, suffix);
+				self.buffer_mut().insert_str(insert_pos, prefix);
 			}
 		}
 
@@ -1128,5 +1163,44 @@ mod tests {
 			cursor_line,
 			line_count
 		);
+	}
+
+	#[test]
+	fn toggle_comment_line_style_round_trips() {
+		let mut e = Editor::new();
+		e.buffer_mut().file_path = Some(std::path::PathBuf::from("main.rs"));
+		e.buffer_mut().text = crate::buffer::rope::TextRope::from_str("  let x = 1;\n");
+		e.buffer_mut().cursors.set_cursor(0, 2);
+		e.toggle_comment();
+		assert_eq!(e.buffer().text.to_string_full(), "  // let x = 1;\n");
+		e.toggle_comment();
+		assert_eq!(e.buffer().text.to_string_full(), "  let x = 1;\n");
+	}
+
+	#[test]
+	fn toggle_comment_html_wraps_with_suffix() {
+		let mut e = Editor::new();
+		e.buffer_mut().file_path = Some(std::path::PathBuf::from("index.html"));
+		e.buffer_mut().text = crate::buffer::rope::TextRope::from_str("  <div></div>\n");
+		e.buffer_mut().cursors.set_cursor(0, 2);
+		e.toggle_comment();
+		assert_eq!(
+			e.buffer().text.to_string_full(),
+			"  <!-- <div></div> -->\n"
+		);
+		e.toggle_comment();
+		assert_eq!(e.buffer().text.to_string_full(), "  <div></div>\n");
+	}
+
+	#[test]
+	fn toggle_comment_css_wraps_with_suffix() {
+		let mut e = Editor::new();
+		e.buffer_mut().file_path = Some(std::path::PathBuf::from("style.css"));
+		e.buffer_mut().text = crate::buffer::rope::TextRope::from_str("color: red;\n");
+		e.buffer_mut().cursors.set_cursor(0, 0);
+		e.toggle_comment();
+		assert_eq!(e.buffer().text.to_string_full(), "/* color: red; */\n");
+		e.toggle_comment();
+		assert_eq!(e.buffer().text.to_string_full(), "color: red;\n");
 	}
 }

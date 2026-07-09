@@ -56,7 +56,9 @@ impl Default for Config {
 			line_numbers: true,
 			highlight_active: true,
 			scroll_off: 5,
-			theme: "OneHalfDark".to_string(),
+			// "default" triggers terminal-background auto-detect in Editor::new
+			// (OneHalfDark / OneHalfLight). Explicit theme names skip that.
+			theme: "default".to_string(),
 			wrap_lines: true,
 			syntax_highlight: true,
 			auto_indent: true,
@@ -66,7 +68,7 @@ impl Default for Config {
 			show_full_path: false,
 			fast_scroll_steps: 10,
 			auto_close: true,
-			comments_are_italics: false,
+			comments_are_italics: true,
 			show_whitespace: false,
 			trim_trailing_whitespace: None,
 			end_of_line: None,

@@ -447,6 +447,8 @@ fn help_shortcuts(editor: &Editor) -> Vec<(String, String)> {
 		("^V".to_string(), editor.locale.translate(Message::HelpShortcutPaste)),
 		("^F".to_string(), editor.locale.translate(Message::HelpShortcutFind)),
 		("^G".to_string(), editor.locale.translate(Message::HelpShortcutGoto)),
+		("^P".to_string(), editor.locale.translate(Message::HelpShortcutPalette)),
+		("^N".to_string(), editor.locale.translate(Message::HelpShortcutNewBuffer)),
 		("^D".to_string(), editor.locale.translate(Message::HelpShortcutDuplicate)),
 		("^K".to_string(), editor.locale.translate(Message::HelpShortcutDelete)),
 		("^W".to_string(), editor.locale.translate(Message::HelpShortcutWrap)),
