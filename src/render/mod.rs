@@ -84,13 +84,16 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 	let vp = Viewport::from_editor(editor);
 	let text_height = vp.text_height() as usize;
 
-	// Adjust scroll to keep cursor visible (with scroll_off padding)
+	// Adjust scroll to keep cursor visible (with scroll_off padding).
+	// Skip while a selection is active so wheel / Ctrl+↑↓ can pan without
+	// yanking the viewport back to the selection head.
 	let cursor_line = editor.buffer().cursors.cursor().line;
 	let scroll_off = if vp.height <= 20 {
 		0
 	} else {
 		editor.config.scroll_off
 	};
+	if !editor.has_selection() {
 	if editor.config.wrap_lines {
 		// Wrap mode: scroll must account for visual rows, not just buffer lines.
 		// Re-derive text_area_width for the helper (gutter not computed yet, use temp)
@@ -233,6 +236,7 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 			editor.buffer_mut().scroll_y = (cursor_line + scroll_off).saturating_sub(visible_height) + 1;
 		}
 	}
+	} // !has_selection()
 
 	// -- Horizontal scroll adjustment (only when wrap_lines = false) --
 	let line_count = editor.buffer().line_count();

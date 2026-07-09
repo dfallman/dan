@@ -124,4 +124,28 @@ mod tests {
 		assert_eq!(e.buffer().scroll_y, 4);
 		assert_eq!(e.buffer().cursors.cursor(), cur);
 	}
+
+	#[test]
+	fn wheel_preserves_selection() {
+		let mut e = editor_with_lines(
+			&["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"],
+			40,
+			20,
+		);
+		e.config.scroll_off = 0;
+		let gw = (e.gutter_width() + 1) as u16;
+		e.execute(Command::MouseDown { col: gw, row: 0 });
+		e.execute(Command::MouseDrag {
+			col: gw + 1,
+			row: 2,
+		});
+		assert!(e.buffer().cursors.has_selection());
+		let before = *e.buffer().cursors.primary();
+		e.buffer_mut().scroll_y = 0;
+		e.execute(Command::ScrollViewportDown);
+		e.execute(Command::ScrollViewportDown);
+		assert!(e.buffer().cursors.has_selection());
+		assert_eq!(*e.buffer().cursors.primary(), before);
+		assert_eq!(e.buffer().scroll_y, 2);
+	}
 }

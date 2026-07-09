@@ -99,27 +99,35 @@ impl Editor {
 	}
 
 	pub(crate) fn cmd_scroll_viewport_up(&mut self) {
+		let keep_sel = self.has_selection();
 		let new_scroll_y = self.buffer().scroll_y.saturating_sub(1);
 		self.buffer_mut().scroll_y = new_scroll_y;
-		let visible_height = self.terminal_height.saturating_sub(2) as usize;
-		let cursor_line = self.buffer().cursors.cursor().line;
-		// Maintain VSCode-style viewport tether: push cursor back up if it would fall out of the bottom bound
-		if cursor_line
-			>= self.buffer_mut().scroll_y + visible_height.saturating_sub(self.config.scroll_off)
-		{
-			self.move_cursor_vertical(-1);
+		// While a selection is active, leave the cursor (selection head) alone so
+		// wheel / Ctrl+↑ scroll can pan without collapsing or reshaping the range.
+		if !keep_sel {
+			let visible_height = self.terminal_height.saturating_sub(2) as usize;
+			let cursor_line = self.buffer().cursors.cursor().line;
+			// Maintain VSCode-style viewport tether: push cursor back up if it would fall out of the bottom bound
+			if cursor_line
+				>= self.buffer_mut().scroll_y + visible_height.saturating_sub(self.config.scroll_off)
+			{
+				self.move_cursor_vertical(-1);
+			}
+			self.clear_selection();
 		}
-		self.clear_selection();
 	}
 
 	pub(crate) fn cmd_scroll_viewport_down(&mut self) {
+		let keep_sel = self.has_selection();
 		self.buffer_mut().scroll_y += 1;
-		let cursor_line = self.buffer().cursors.cursor().line;
-		// Maintain VSCode-style viewport tether: pull cursor down if it would fall out of the top bound
-		if cursor_line < self.buffer_mut().scroll_y + self.config.scroll_off {
-			self.move_cursor_vertical(1);
+		if !keep_sel {
+			let cursor_line = self.buffer().cursors.cursor().line;
+			// Maintain VSCode-style viewport tether: pull cursor down if it would fall out of the top bound
+			if cursor_line < self.buffer_mut().scroll_y + self.config.scroll_off {
+				self.move_cursor_vertical(1);
+			}
+			self.clear_selection();
 		}
-		self.clear_selection();
 	}
 
 	pub(crate) fn cmd_move_fast_up(&mut self) {
