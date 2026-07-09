@@ -53,7 +53,7 @@ Dan uses familiar shortcuts out of the box — `Ctrl-C`/`V` to copy/paste, `Ctrl
 - **Multiple Buffers**: Concurrent support for multiple active buffers, indexed and managed via the command palette.
 - **Context-Aware Syntax Highlighting**: Powered by `syntect` with broad language grammar support. Queries the terminal background at startup to apply adaptive themes (OneHalfDark/OneHalfLight) automatically, with immediate toggling via `Ctrl-T`.
 - **Background Auto-Formatter (`Ctrl-L`)**: Pipes buffer contents to external formatters (Prettier, Rustfmt, Ruff) on a background thread. Formatted output is applied transactionally only if the buffer was not modified during execution.
-- **Fuzzy Search & Destructive Replace**: Instant buffer-wide searching with `Ctrl-F`, easily promoted to standard find-and-replace using `Ctrl-R`.
+- **Fuzzy Search & Destructive Replace**: Instant buffer-wide searching with `Ctrl-F`, easily promoted to find-and-replace with `Ctrl-R`. Wrap the query in `/pattern/` for regex (case-sensitive; use `(?i)` for insensitive). Regex replace supports `$0`, `$1`, `$name`, and `$$`.
 - **Unicode & CJK Support**: Correct visual alignment, cell measurements, and cursor positioning for double-width characters and complex emoji.
 - **Native Clipboard Integration**: Cross-platform clipboard access using `arboard`, falling back gracefully to an internal in-memory buffer on headless SSH sessions without display servers.
 - **Auto-Pairs & Wrap-on-Type**: Automated closure insertion for brackets and quotes, with contextual wrap behavior when keys are typed over an active selection.
@@ -116,6 +116,8 @@ Dan uses familiar shortcuts out of the box — `Ctrl-C`/`V` to copy/paste, `Ctrl
 |-----|--------|
 | `Ctrl` + `F` | Search |
 | `Ctrl` + `R` *(while searching)* | Promote to find-and-replace |
+
+Wrap the search query in `/pattern/` to use regular expressions (Rust `regex` syntax). Invalid patterns clear matches and show `invalid regex`. To search for the literal text `/foo/`, use an escaped regex such as `/\/foo\//`.
 
 **Note for macOS users**: Terminal emulators use escape sequences dating back to the late 70s and some at the time highly influential video display terminals such as VT100. Long story short, this means some "modern" key combinations available in GUI editors can't be distinguished in a terminal. Most notably, Dan (and other terminal apps) uses `Ctrl` where a Mac user might expect `⌘`. Many terminal emulators (including [iTerm2](https://iterm2.com/)) let you remap `⌘` to `Ctrl` if you prefer, although it can create side-issues. Additionally, the built-in Terminal.app is not recommended: a third-party emulator such as [iTerm2](https://iterm2.com/), [Kitty](https://sw.kovidgoyal.net/kitty/), [Ghostty](https://ghostty.dev/), or [WezTerm](https://wez.dev/) will give better results.
 
