@@ -306,3 +306,236 @@ fn map_palette_key(key: &KeyEvent) -> Command {
 		_ => Command::Noop,
 	}
 }
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+	fn key(code: KeyCode, mods: KeyModifiers) -> Event {
+		Event::Key(KeyEvent::new(code, mods))
+	}
+
+	fn assert_map(cases: &[(&str, Event, Mode, Command)]) {
+		for (label, event, mode, expected) in cases {
+			let got = map_event(event, *mode);
+			assert_eq!(
+				got, *expected,
+				"case `{label}`: mode={mode:?} event={event:?}\n  expected: {expected:?}\n  got:      {got:?}"
+			);
+		}
+	}
+
+	#[test]
+	fn editing_mode_core_bindings() {
+		use KeyModifiers as M;
+		assert_map(&[
+			// Motion
+			("left", key(KeyCode::Left, M::NONE), Mode::Editing, Command::MoveLeft),
+			("right", key(KeyCode::Right, M::NONE), Mode::Editing, Command::MoveRight),
+			("up", key(KeyCode::Up, M::NONE), Mode::Editing, Command::MoveUp),
+			("down", key(KeyCode::Down, M::NONE), Mode::Editing, Command::MoveDown),
+			("home", key(KeyCode::Home, M::NONE), Mode::Editing, Command::MoveLineStart),
+			("end", key(KeyCode::End, M::NONE), Mode::Editing, Command::MoveLineEnd),
+			("pageup", key(KeyCode::PageUp, M::NONE), Mode::Editing, Command::PageUp),
+			("pagedown", key(KeyCode::PageDown, M::NONE), Mode::Editing, Command::PageDown),
+			// Editing
+			("enter", key(KeyCode::Enter, M::NONE), Mode::Editing, Command::InsertNewline),
+			("tab", key(KeyCode::Tab, M::NONE), Mode::Editing, Command::InsertTab),
+			("backtab", key(KeyCode::BackTab, M::NONE), Mode::Editing, Command::Dedent),
+			("backspace", key(KeyCode::Backspace, M::NONE), Mode::Editing, Command::DeleteBackward),
+			("delete", key(KeyCode::Delete, M::NONE), Mode::Editing, Command::DeleteForward),
+			("char a", key(KeyCode::Char('a'), M::NONE), Mode::Editing, Command::InsertChar('a')),
+			("char é", key(KeyCode::Char('é'), M::NONE), Mode::Editing, Command::InsertChar('é')),
+			("f7 search", key(KeyCode::F(7), M::NONE), Mode::Editing, Command::SearchForward),
+			("esc noop", key(KeyCode::Esc, M::NONE), Mode::Editing, Command::Noop),
+			// Shift+arrow selection
+			("shift+left", key(KeyCode::Left, M::SHIFT), Mode::Editing, Command::SelectLeft),
+			("shift+right", key(KeyCode::Right, M::SHIFT), Mode::Editing, Command::SelectRight),
+			("shift+up", key(KeyCode::Up, M::SHIFT), Mode::Editing, Command::SelectUp),
+			("shift+down", key(KeyCode::Down, M::SHIFT), Mode::Editing, Command::SelectDown),
+			("shift+home", key(KeyCode::Home, M::SHIFT), Mode::Editing, Command::SelectLineStart),
+			("shift+end", key(KeyCode::End, M::SHIFT), Mode::Editing, Command::SelectLineEnd),
+			("shift+backtab", key(KeyCode::BackTab, M::SHIFT), Mode::Editing, Command::Dedent),
+			("shift+A", key(KeyCode::Char('A'), M::SHIFT), Mode::Editing, Command::InsertChar('A')),
+			// Ctrl chords
+			("ctrl+c", key(KeyCode::Char('c'), M::CONTROL), Mode::Editing, Command::Copy),
+			("ctrl+s", key(KeyCode::Char('s'), M::CONTROL), Mode::Editing, Command::Save),
+			("ctrl+\\", key(KeyCode::Char('\\'), M::CONTROL), Mode::Editing, Command::SelectAll),
+			("ctrl+q", key(KeyCode::Char('q'), M::CONTROL), Mode::Editing, Command::Quit),
+			("ctrl+z", key(KeyCode::Char('z'), M::CONTROL), Mode::Editing, Command::Undo),
+			("ctrl+y", key(KeyCode::Char('y'), M::CONTROL), Mode::Editing, Command::Redo),
+			("ctrl+x", key(KeyCode::Char('x'), M::CONTROL), Mode::Editing, Command::Cut),
+			("ctrl+v", key(KeyCode::Char('v'), M::CONTROL), Mode::Editing, Command::Paste),
+			("ctrl+a", key(KeyCode::Char('a'), M::CONTROL), Mode::Editing, Command::SaveAsOpen),
+			("ctrl+f", key(KeyCode::Char('f'), M::CONTROL), Mode::Editing, Command::SearchForward),
+			("ctrl+e comment", key(KeyCode::Char('e'), M::CONTROL), Mode::Editing, Command::ToggleComment),
+			("ctrl+/ comment", key(KeyCode::Char('/'), M::CONTROL), Mode::Editing, Command::ToggleComment),
+			("ctrl+g", key(KeyCode::Char('g'), M::CONTROL), Mode::Editing, Command::GoToLineOpen),
+			("ctrl+left", key(KeyCode::Left, M::CONTROL), Mode::Editing, Command::MoveWordBackward),
+			("ctrl+right", key(KeyCode::Right, M::CONTROL), Mode::Editing, Command::MoveWordForward),
+			("ctrl+up", key(KeyCode::Up, M::CONTROL), Mode::Editing, Command::ScrollViewportUp),
+			("ctrl+down", key(KeyCode::Down, M::CONTROL), Mode::Editing, Command::ScrollViewportDown),
+			("ctrl+home", key(KeyCode::Home, M::CONTROL), Mode::Editing, Command::MoveBufferTop),
+			("ctrl+end", key(KeyCode::End, M::CONTROL), Mode::Editing, Command::MoveBufferBottom),
+			("ctrl+k", key(KeyCode::Char('k'), M::CONTROL), Mode::Editing, Command::DeleteLine),
+			("ctrl+d", key(KeyCode::Char('d'), M::CONTROL), Mode::Editing, Command::DuplicateLineOrSelection),
+			("ctrl+r whitespace", key(KeyCode::Char('r'), M::CONTROL), Mode::Editing, Command::ToggleWhitespace),
+			("ctrl+w", key(KeyCode::Char('w'), M::CONTROL), Mode::Editing, Command::ToggleWrap),
+			("ctrl+h", key(KeyCode::Char('h'), M::CONTROL), Mode::Editing, Command::ToggleHelp),
+			("ctrl+l", key(KeyCode::Char('l'), M::CONTROL), Mode::Editing, Command::FormatDocument),
+			("ctrl+t", key(KeyCode::Char('t'), M::CONTROL), Mode::Editing, Command::ToggleSyntax),
+			("ctrl+p", key(KeyCode::Char('p'), M::CONTROL), Mode::Editing, Command::PaletteOpen),
+			("ctrl+n", key(KeyCode::Char('n'), M::CONTROL), Mode::Editing, Command::NewBuffer),
+			// Ctrl+Shift
+			("ctrl+shift+c forcequit", key(KeyCode::Char('c'), M::CONTROL | M::SHIFT), Mode::Editing, Command::ForceQuitAll),
+			("ctrl+shift+\\ selectall", key(KeyCode::Char('\\'), M::CONTROL | M::SHIFT), Mode::Editing, Command::SelectAll),
+			("ctrl+shift+| selectall", key(KeyCode::Char('|'), M::CONTROL | M::SHIFT), Mode::Editing, Command::SelectAll),
+			("ctrl+shift+left", key(KeyCode::Left, M::CONTROL | M::SHIFT), Mode::Editing, Command::SelectWordBackward),
+			("ctrl+shift+right", key(KeyCode::Right, M::CONTROL | M::SHIFT), Mode::Editing, Command::SelectWordForward),
+			("ctrl+shift+up", key(KeyCode::Up, M::CONTROL | M::SHIFT), Mode::Editing, Command::MoveFastUp),
+			("ctrl+shift+down", key(KeyCode::Down, M::CONTROL | M::SHIFT), Mode::Editing, Command::MoveFastDown),
+			("ctrl+shift+e comment", key(KeyCode::Char('e'), M::CONTROL | M::SHIFT), Mode::Editing, Command::ToggleComment),
+			// Alt
+			("alt+left", key(KeyCode::Left, M::ALT), Mode::Editing, Command::MoveWordBackward),
+			("alt+right", key(KeyCode::Right, M::ALT), Mode::Editing, Command::MoveWordForward),
+			("alt+up", key(KeyCode::Up, M::ALT), Mode::Editing, Command::SwapLineUp),
+			("alt+down", key(KeyCode::Down, M::ALT), Mode::Editing, Command::SwapLineDown),
+			// Alt+Shift
+			("alt+shift+left", key(KeyCode::Left, M::ALT | M::SHIFT), Mode::Editing, Command::SelectWordBackward),
+			("alt+shift+right", key(KeyCode::Right, M::ALT | M::SHIFT), Mode::Editing, Command::SelectWordForward),
+			("alt+shift+up", key(KeyCode::Up, M::ALT | M::SHIFT), Mode::Editing, Command::SelectUp),
+			("alt+shift+down", key(KeyCode::Down, M::ALT | M::SHIFT), Mode::Editing, Command::SelectDown),
+		]);
+	}
+
+	#[test]
+	fn search_mode_bindings() {
+		use KeyModifiers as M;
+		assert_map(&[
+			("esc", key(KeyCode::Esc, M::NONE), Mode::Searching, Command::SearchCancel),
+			("enter", key(KeyCode::Enter, M::NONE), Mode::Searching, Command::SearchConfirm),
+			("shift+enter", key(KeyCode::Enter, M::SHIFT), Mode::Searching, Command::SearchPrev),
+			("ctrl+g next", key(KeyCode::Char('g'), M::CONTROL), Mode::Searching, Command::SearchNext),
+			("ctrl+G next", key(KeyCode::Char('G'), M::CONTROL), Mode::Searching, Command::SearchNext),
+			("ctrl+shift+g prev", key(KeyCode::Char('g'), M::CONTROL | M::SHIFT), Mode::Searching, Command::SearchPrev),
+			("ctrl+r replace", key(KeyCode::Char('r'), M::CONTROL), Mode::Searching, Command::SearchConvertToReplace),
+			("ctrl+R replace", key(KeyCode::Char('R'), M::CONTROL), Mode::Searching, Command::SearchConvertToReplace),
+			("backspace", key(KeyCode::Backspace, M::NONE), Mode::Searching, Command::SearchDeleteChar),
+			("left", key(KeyCode::Left, M::NONE), Mode::Searching, Command::PromptCursorLeft),
+			("right", key(KeyCode::Right, M::NONE), Mode::Searching, Command::PromptCursorRight),
+			("char x", key(KeyCode::Char('x'), M::NONE), Mode::Searching, Command::SearchInsertChar('x')),
+			("shift+X", key(KeyCode::Char('X'), M::SHIFT), Mode::Searching, Command::SearchInsertChar('X')),
+			("ctrl+s noop", key(KeyCode::Char('s'), M::CONTROL), Mode::Searching, Command::Noop),
+		]);
+	}
+
+	#[test]
+	fn prompt_modes_bindings() {
+		use KeyModifiers as M;
+		assert_map(&[
+			// GoToLine
+			("goto esc", key(KeyCode::Esc, M::NONE), Mode::GoToLine, Command::GoToLineCancel),
+			("goto enter", key(KeyCode::Enter, M::NONE), Mode::GoToLine, Command::GoToLineConfirm),
+			("goto bs", key(KeyCode::Backspace, M::NONE), Mode::GoToLine, Command::GoToLineDeleteChar),
+			("goto left", key(KeyCode::Left, M::NONE), Mode::GoToLine, Command::PromptCursorLeft),
+			("goto right", key(KeyCode::Right, M::NONE), Mode::GoToLine, Command::PromptCursorRight),
+			("goto 4", key(KeyCode::Char('4'), M::NONE), Mode::GoToLine, Command::GoToLineInsertChar('4')),
+			("goto ctrl+a noop", key(KeyCode::Char('a'), M::CONTROL), Mode::GoToLine, Command::Noop),
+			// SaveAs
+			("saveas esc", key(KeyCode::Esc, M::NONE), Mode::SaveAs, Command::SaveAsCancel),
+			("saveas enter", key(KeyCode::Enter, M::NONE), Mode::SaveAs, Command::SaveAsConfirm),
+			("saveas bs", key(KeyCode::Backspace, M::NONE), Mode::SaveAs, Command::SaveAsDeleteChar),
+			("saveas left", key(KeyCode::Left, M::NONE), Mode::SaveAs, Command::PromptCursorLeft),
+			("saveas right", key(KeyCode::Right, M::NONE), Mode::SaveAs, Command::PromptCursorRight),
+			("saveas /", key(KeyCode::Char('/'), M::NONE), Mode::SaveAs, Command::SaveAsInsertChar('/')),
+			// ConfirmOverwrite
+			("overwrite ctrl+o", key(KeyCode::Char('o'), M::CONTROL), Mode::ConfirmOverwrite, Command::ConfirmOverwrite),
+			("overwrite esc cancel", key(KeyCode::Esc, M::NONE), Mode::ConfirmOverwrite, Command::CancelOverwrite),
+			("overwrite a cancel", key(KeyCode::Char('a'), M::NONE), Mode::ConfirmOverwrite, Command::CancelOverwrite),
+			// ConfirmQuit
+			("quit ctrl+s", key(KeyCode::Char('s'), M::CONTROL), Mode::ConfirmQuit, Command::SaveAndQuit),
+			("quit ctrl+S", key(KeyCode::Char('S'), M::CONTROL), Mode::ConfirmQuit, Command::SaveAndQuit),
+			("quit ctrl+f", key(KeyCode::Char('f'), M::CONTROL), Mode::ConfirmQuit, Command::ForceQuit),
+			("quit ctrl+q", key(KeyCode::Char('q'), M::CONTROL), Mode::ConfirmQuit, Command::CancelQuit),
+			("quit esc", key(KeyCode::Esc, M::NONE), Mode::ConfirmQuit, Command::CancelQuit),
+			("quit a noop", key(KeyCode::Char('a'), M::NONE), Mode::ConfirmQuit, Command::Noop),
+			// ReplacingWith
+			("replwith esc", key(KeyCode::Esc, M::NONE), Mode::ReplacingWith, Command::ReplaceCancel),
+			("replwith enter", key(KeyCode::Enter, M::NONE), Mode::ReplacingWith, Command::ReplaceWithConfirm),
+			("replwith bs", key(KeyCode::Backspace, M::NONE), Mode::ReplacingWith, Command::ReplaceDeleteChar),
+			("replwith left", key(KeyCode::Left, M::NONE), Mode::ReplacingWith, Command::PromptCursorLeft),
+			("replwith right", key(KeyCode::Right, M::NONE), Mode::ReplacingWith, Command::PromptCursorRight),
+			("replwith x", key(KeyCode::Char('x'), M::NONE), Mode::ReplacingWith, Command::ReplaceInsertChar('x')),
+			// ReplacingStep
+			("replstep ctrl+y", key(KeyCode::Char('y'), M::CONTROL), Mode::ReplacingStep, Command::ReplaceActionYes),
+			("replstep ctrl+n", key(KeyCode::Char('n'), M::CONTROL), Mode::ReplacingStep, Command::ReplaceActionNo),
+			("replstep ctrl+a", key(KeyCode::Char('a'), M::CONTROL), Mode::ReplacingStep, Command::ReplaceActionAll),
+			("replstep esc", key(KeyCode::Esc, M::NONE), Mode::ReplacingStep, Command::ReplaceCancel),
+			("replstep y noop", key(KeyCode::Char('y'), M::NONE), Mode::ReplacingStep, Command::Noop),
+			// RecoverSwap
+			("recover ctrl+y", key(KeyCode::Char('y'), M::CONTROL), Mode::RecoverSwap, Command::RecoverSwapAccept),
+			("recover ctrl+n", key(KeyCode::Char('n'), M::CONTROL), Mode::RecoverSwap, Command::RecoverSwapDecline),
+			("recover ctrl+q", key(KeyCode::Char('q'), M::CONTROL), Mode::RecoverSwap, Command::ForceQuitAll),
+			("recover esc", key(KeyCode::Esc, M::NONE), Mode::RecoverSwap, Command::ForceQuitAll),
+			("recover a noop", key(KeyCode::Char('a'), M::NONE), Mode::RecoverSwap, Command::Noop),
+		]);
+	}
+
+	#[test]
+	fn palette_mode_bindings() {
+		use KeyModifiers as M;
+		assert_map(&[
+			("esc", key(KeyCode::Esc, M::NONE), Mode::Palette, Command::PaletteCancel),
+			("enter", key(KeyCode::Enter, M::NONE), Mode::Palette, Command::PaletteConfirm),
+			("up", key(KeyCode::Up, M::NONE), Mode::Palette, Command::PaletteUp),
+			("down", key(KeyCode::Down, M::NONE), Mode::Palette, Command::PaletteDown),
+			("pageup", key(KeyCode::PageUp, M::NONE), Mode::Palette, Command::PalettePageUp),
+			("pagedown", key(KeyCode::PageDown, M::NONE), Mode::Palette, Command::PalettePageDown),
+			("backspace", key(KeyCode::Backspace, M::NONE), Mode::Palette, Command::PaletteDeleteChar),
+			("ctrl+s save", key(KeyCode::Char('s'), M::CONTROL), Mode::Palette, Command::PaletteClosePromptSave),
+			("ctrl+d close", key(KeyCode::Char('d'), M::CONTROL), Mode::Palette, Command::PaletteCloseBuffer),
+			("char f", key(KeyCode::Char('f'), M::NONE), Mode::Palette, Command::PaletteInsertChar('f')),
+			("ctrl+p noop", key(KeyCode::Char('p'), M::CONTROL), Mode::Palette, Command::Noop),
+		]);
+	}
+
+	#[test]
+	fn paste_and_non_key_events() {
+		assert_map(&[
+			(
+				"paste",
+				Event::Paste("hello".into()),
+				Mode::Editing,
+				Command::InsertString("hello".into()),
+			),
+			(
+				"paste in search still inserts",
+				Event::Paste("x".into()),
+				Mode::Searching,
+				Command::InsertString("x".into()),
+			),
+			("resize noop", Event::Resize(80, 24), Mode::Editing, Command::Noop),
+		]);
+	}
+
+	#[test]
+	fn ctrl_r_overload_depends_on_mode() {
+		// Editing: whitespace toggle. Searching: promote to replace.
+		use KeyModifiers as M;
+		assert_map(&[
+			(
+				"editing ctrl+r",
+				key(KeyCode::Char('r'), M::CONTROL),
+				Mode::Editing,
+				Command::ToggleWhitespace,
+			),
+			(
+				"searching ctrl+r",
+				key(KeyCode::Char('r'), M::CONTROL),
+				Mode::Searching,
+				Command::SearchConvertToReplace,
+			),
+		]);
+	}
+}

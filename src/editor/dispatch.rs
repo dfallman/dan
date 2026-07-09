@@ -208,25 +208,27 @@ impl Editor {
 						_ => None,
 					};
 					if let Some((open, close)) = pair {
-						// Functional wrapper logic: extract selection, delete it symmetrically, then substitute wrapped
-						let (start, end) = self.selection_range().unwrap();
-						let text = self.buffer().text.slice_to_string(start..end);
-						self.buffer_mut().delete_range(start, end);
+						// Wrap selection in the pair. Guard with Option even though
+						// has_selection() was true — avoid panic if invariants regress.
+						if let Some((start, end)) = self.selection_range() {
+							let text = self.buffer().text.slice_to_string(start..end);
+							self.buffer_mut().delete_range(start, end);
 
-						let wrapped = format!("{}{}{}", open, text, close);
-						self.buffer_mut().insert_str(start, &wrapped);
+							let wrapped = format!("{}{}{}", open, text, close);
+							self.buffer_mut().insert_str(start, &wrapped);
 
-						// Char count, not byte length: `start` is a char offset.
-						let new_end = start + wrapped.chars().count();
-						let end_line = self.buffer().text.char_to_line(new_end);
-						let end_col = new_end - self.buffer().text.line_to_char(end_line);
+							// Char count, not byte length: `start` is a char offset.
+							let new_end = start + wrapped.chars().count();
+							let end_line = self.buffer().text.char_to_line(new_end);
+							let end_col = new_end - self.buffer().text.line_to_char(end_line);
 
-						let start_line = self.buffer().text.char_to_line(start);
-						let start_col = start - self.buffer().text.line_to_char(start_line);
+							let start_line = self.buffer().text.char_to_line(start);
+							let start_col = start - self.buffer().text.line_to_char(start_line);
 
-						self.buffer_mut().cursors.primary_mut().anchor = Cursor::new(start_line, start_col);
-						self.buffer_mut().cursors.primary_mut().head = Cursor::new(end_line, end_col);
-						return;
+							self.buffer_mut().cursors.primary_mut().anchor = Cursor::new(start_line, start_col);
+							self.buffer_mut().cursors.primary_mut().head = Cursor::new(end_line, end_col);
+							return;
+						}
 					}
 				}
 
@@ -499,40 +501,42 @@ impl Editor {
 				}
 			}
 			Command::DuplicateLineOrSelection => {
-				if let Some(text) = self.get_selected_text() {
-					// Duplicate the selected text right after the selection.
-					let (_, end) = self.selection_range().unwrap();
-					self.clear_selection();
-					self.buffer_mut().insert_str(end, &text);
-					// Place cursor at the end of the inserted duplicate.
-					// Char count, not byte length: `end` is a char offset.
-					let new_pos = end + text.chars().count();
-					let line = self.buffer().text.char_to_line(new_pos);
-					let line_start = self.buffer().text.line_to_char(line);
-					let col = new_pos - line_start;
-					self.buffer_mut().cursors.set_cursor(line, col);
-					self.set_status("Selection duplicated");
-				} else {
-					// No selection — duplicate the current line.
-					let c = self.buffer().cursors.cursor();
-					let line_start = self.buffer().text.line_to_char(c.line);
-					let line_end = if c.line + 1 < self.buffer().line_count() {
-						self.buffer().text.line_to_char(c.line + 1)
-					} else {
-						self.buffer().text.len_chars()
-					};
-					let line_text = self.buffer().text.slice_to_string(line_start..line_end);
-					// If the line doesn't end with newline (last line), prepend one.
-					let insert_text = if line_text.ends_with('\n') {
-						line_text
-					} else {
-						format!("\n{}", line_text)
-					};
-					self.buffer_mut().insert_str(line_end, &insert_text);
-					// Move cursor to the same column on the new duplicate line.
-					self.buffer_mut().cursors.set_cursor(c.line + 1, c.col);
-					self.set_status("Line duplicated");
+				if let Some((start, end)) = self.selection_range() {
+					if start < end {
+						let text = self.buffer().text.slice_to_string(start..end);
+						// Duplicate the selected text right after the selection.
+						self.clear_selection();
+						self.buffer_mut().insert_str(end, &text);
+						// Place cursor at the end of the inserted duplicate.
+						// Char count, not byte length: `end` is a char offset.
+						let new_pos = end + text.chars().count();
+						let line = self.buffer().text.char_to_line(new_pos);
+						let line_start = self.buffer().text.line_to_char(line);
+						let col = new_pos - line_start;
+						self.buffer_mut().cursors.set_cursor(line, col);
+						self.set_status("Selection duplicated");
+						return;
+					}
 				}
+				// No (non-empty) selection — duplicate the current line.
+				let c = self.buffer().cursors.cursor();
+				let line_start = self.buffer().text.line_to_char(c.line);
+				let line_end = if c.line + 1 < self.buffer().line_count() {
+					self.buffer().text.line_to_char(c.line + 1)
+				} else {
+					self.buffer().text.len_chars()
+				};
+				let line_text = self.buffer().text.slice_to_string(line_start..line_end);
+				// If the line doesn't end with newline (last line), prepend one.
+				let insert_text = if line_text.ends_with('\n') {
+					line_text
+				} else {
+					format!("\n{}", line_text)
+				};
+				self.buffer_mut().insert_str(line_end, &insert_text);
+				// Move cursor to the same column on the new duplicate line.
+				self.buffer_mut().cursors.set_cursor(c.line + 1, c.col);
+				self.set_status("Line duplicated");
 			}
 
 			// -- Undo / Redo --
