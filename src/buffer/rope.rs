@@ -346,7 +346,9 @@ mod tests {
 		let r = TextRope::from_str("abc");
 		assert_eq!(r.slice_to_string(0..99), "abc");
 		assert_eq!(r.slice_to_string(2..99), "c");
-		assert_eq!(r.slice_to_string(5..2), ""); // start > end
+		#[allow(clippy::reversed_empty_ranges)] // intentional: start > end must clamp, not panic
+		let reversed = r.slice_to_string(5..2);
+		assert_eq!(reversed, "");
 	}
 
 	#[test]

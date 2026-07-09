@@ -48,7 +48,6 @@ pub(crate) fn screen_to_buffer(
 			text_area_width,
 			tab_w,
 			line_count,
-			gutter,
 		)
 	} else {
 		screen_to_buffer_nowrap(
@@ -58,7 +57,6 @@ pub(crate) fn screen_to_buffer(
 			text_start,
 			tab_w,
 			line_count,
-			gutter,
 		)
 	}
 }
@@ -70,7 +68,6 @@ fn screen_to_buffer_nowrap(
 	text_start: usize,
 	tab_w: usize,
 	line_count: usize,
-	_gutter: usize,
 ) -> Option<(usize, usize)> {
 	let line = editor.buffer().scroll_y + target_row;
 	if line >= line_count {
@@ -105,7 +102,6 @@ fn screen_to_buffer_wrap(
 	text_area_width: usize,
 	tab_w: usize,
 	line_count: usize,
-	_gutter: usize,
 ) -> Option<(usize, usize)> {
 	let mut remaining = target_row;
 	let mut buf_line = editor.buffer().scroll_y;

@@ -140,6 +140,18 @@ impl Config {
 	}
 }
 
+/// Get the config file path.
+fn config_path() -> Option<PathBuf> {
+	let preferred = dirs::home_dir().map(|d| d.join(".config").join("dan").join("config.toml"));
+	if let Some(p) = &preferred {
+		if p.exists() {
+			return preferred;
+		}
+	}
+	// Fallback to OS native (e.g. ~/Library/Application Support/dan/config.toml on macOS)
+	dirs::config_dir().map(|d| d.join("dan").join("config.toml"))
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -154,16 +166,4 @@ mod tests {
 		let c: Config = toml::from_str("mouse = false").unwrap();
 		assert!(!c.mouse);
 	}
-}
-
-/// Get the config file path.
-fn config_path() -> Option<PathBuf> {
-	let preferred = dirs::home_dir().map(|d| d.join(".config").join("dan").join("config.toml"));
-	if let Some(p) = &preferred {
-		if p.exists() {
-			return preferred;
-		}
-	}
-	// Fallback to OS native (e.g. ~/Library/Application Support/dan/config.toml on macOS)
-	dirs::config_dir().map(|d| d.join("dan").join("config.toml"))
 }
