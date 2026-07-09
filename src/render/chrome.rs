@@ -823,6 +823,70 @@ pub fn build_help_bar(editor: &Editor, width: u16, h: u16) -> Vec<Window> {
 	builder.build(width, h.saturating_sub(2))
 }
 
+pub fn build_info_banner(editor: &Editor, width: u16, base_y: u16) -> Vec<Window> {
+	let Some(banner) = editor.info_banner.as_ref() else {
+		return Vec::new();
+	};
+	if banner.pending {
+		return Vec::new();
+	}
+
+	let desc = if banner.expand_tab {
+		editor
+			.locale
+			.translate(Message::InfoBannerIndentSpaces(banner.tab_width))
+	} else {
+		editor.locale.translate(Message::InfoBannerIndentTabs)
+	};
+	let label = editor.locale.translate(Message::InfoBannerLabel);
+	let body = editor.locale.translate(Message::InfoBannerBody(desc));
+	let prefix_str = editor.locale.translate(Message::ToolbarPrefix);
+
+	let mut builder = OverlayBuilder::new(editor.theme.toolbar_bg, 1)
+		.with_prefix(UiFragment {
+			text: prefix_str.clone(),
+			fg: editor.theme.status_bg,
+			bg: editor.theme.toolbar_bg,
+			is_flex: false,
+			is_bold: false,
+		})
+		.with_overflow_prefix(UiFragment {
+			text: prefix_str,
+			fg: editor.theme.status_bg,
+			bg: editor.theme.toolbar_bg,
+			is_flex: false,
+			is_bold: false,
+		});
+
+	builder.add_block(OverlayBlock {
+		fragments: vec![
+			UiFragment {
+				text: " ".to_string(),
+				fg: editor.theme.toolbar_fg,
+				bg: editor.theme.toolbar_bg,
+				is_flex: false,
+				is_bold: false,
+			},
+			UiFragment {
+				text: label,
+				fg: editor.theme.toolbar_fg,
+				bg: editor.theme.toolbar_bg,
+				is_flex: false,
+				is_bold: true,
+			},
+			UiFragment {
+				text: body,
+				fg: editor.theme.toolbar_fg,
+				bg: editor.theme.toolbar_bg,
+				is_flex: false,
+				is_bold: false,
+			},
+		],
+	});
+
+	builder.build(width, base_y)
+}
+
 pub fn build_prompt(editor: &Editor, width: u16, h: u16) -> Option<Vec<Window>> {
 	if width == 0 {
 		return None;
@@ -1023,13 +1087,22 @@ pub fn render_ui(
 	windows.push(build_status_bar(editor, vp));
 
 	let prompt = build_prompt(editor, vp.width, vp.height);
+	let mut bottom_overlay: u16 = 0;
 
 	if prompt.is_none() && editor.show_help && !editor.palette.open {
-		windows.extend(build_help_bar(editor, vp.width, vp.height));
+		let help = build_help_bar(editor, vp.width, vp.height);
+		bottom_overlay = help.len() as u16;
+		windows.extend(help);
 	}
 
 	if let Some(p) = prompt {
+		bottom_overlay = p.len() as u16;
 		windows.extend(p);
+	}
+
+	if editor.info_banner_visible() {
+		let base_y = vp.height.saturating_sub(1 + bottom_overlay + 1);
+		windows.extend(build_info_banner(editor, vp.width, base_y));
 	}
 
 	if editor.palette.open {
@@ -1177,4 +1250,42 @@ fn parse_hotkeys(text: &str, bg: Color, text_color: Color, instruction_color: Op
 	}
 
 	fragments
+}
+
+#[cfg(test)]
+mod info_banner_tests {
+	use super::*;
+	use crate::editor::Editor;
+	use crate::editor::InfoBanner;
+
+	#[test]
+	fn build_info_banner_none_when_pending_or_absent() {
+		let mut e = Editor::new();
+		assert!(build_info_banner(&e, 80, 10).is_empty());
+		e.info_banner = Some(InfoBanner {
+			expand_tab: true,
+			tab_width: 4,
+			pending: true,
+		});
+		assert!(build_info_banner(&e, 80, 10).is_empty());
+	}
+
+	#[test]
+	fn build_info_banner_paints_full_width_row() {
+		let mut e = Editor::new();
+		e.info_banner = Some(InfoBanner {
+			expand_tab: true,
+			tab_width: 4,
+			pending: false,
+		});
+		let wins = build_info_banner(&e, 80, 10);
+		assert!(!wins.is_empty());
+		assert_eq!(wins[0].rect.width, 80);
+		let has_bold_info = wins.iter().any(|w| {
+			w.fragments
+				.iter()
+				.any(|f| f.is_bold && f.text.contains("INFO"))
+		});
+		assert!(has_bold_info);
+	}
 }

@@ -39,6 +39,10 @@ impl Viewport {
 		} else if editor.show_help && !editor.palette.open {
 			overlay += chrome::build_help_bar(&*editor, w, h).len() as u16;
 		}
+		if editor.info_banner_visible() {
+			let base_y = h.saturating_sub(1 + overlay + 1);
+			overlay += chrome::build_info_banner(&*editor, w, base_y).len() as u16;
+		}
 		Self {
 			width: w,
 			height: h,
