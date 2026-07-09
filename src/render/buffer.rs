@@ -4,6 +4,7 @@ use crossterm::{
 	QueueableCommand,
 };
 use std::io::{self, Write};
+use unicode_width::UnicodeWidthChar;
 
 use crate::sanitize::sanitize_char;
 
@@ -17,6 +18,10 @@ pub struct Cell {
 	pub italic: bool,
 	/// True if this cell contains a sanitized control character
 	pub sanitized: bool,
+	/// True if this cell is the trailing half of a wide (width-2) grapheme
+	/// written into the previous column. Never printed to the terminal —
+	/// the wide char already advanced the cursor past this column.
+	pub wide_cont: bool,
 }
 
 impl Default for Cell {
@@ -29,7 +34,20 @@ impl Default for Cell {
 			bold: false,
 			italic: false,
 			sanitized: false,
+			wide_cont: false,
 		}
+	}
+}
+
+/// Terminal columns occupied by a single `char` when printed.
+/// Tabs are always 1 here — callers expand tabs into multiple cells.
+fn cell_print_width(ch: char) -> u16 {
+	match ch {
+		'\t' => 1,
+		c => match UnicodeWidthChar::width(c) {
+			Some(0) | None => 0,
+			Some(n) => (n as u16).max(1),
+		},
 	}
 }
 
@@ -108,8 +126,18 @@ impl ScreenBuffer {
 
 	pub fn put_char(&mut self, ch: char) {
 		let (sanitized_ch, was_sanitized) = sanitize_char(ch);
+		let w = cell_print_width(sanitized_ch);
+		// Zero-width (combining marks, variation selectors): do not consume a
+		// column. Skipping avoids desync; terminals attach these to the prior
+		// base character when present in the output stream as a grapheme.
+		if w == 0 {
+			return;
+		}
+
 		if self.cursor_y < self.height && self.cursor_x < self.width {
-			let idx = (self.cursor_y as usize) * (self.width as usize) + (self.cursor_x as usize);
+			let row_base = (self.cursor_y as usize) * (self.width as usize);
+			let x = self.cursor_x as usize;
+			let idx = row_base + x;
 			if idx < self.grid.len() {
 				self.grid[idx] = Cell {
 					ch: sanitized_ch,
@@ -119,10 +147,32 @@ impl ScreenBuffer {
 					bold: self.bold,
 					italic: self.italic,
 					sanitized: was_sanitized,
+					wide_cont: false,
 				};
 			}
+			// Reserve the trailing column(s) of a wide glyph so layout and the
+			// grid agree. Diff skips these cells when printing.
+			for dx in 1..w as usize {
+				let cx = x + dx;
+				if cx >= self.width as usize {
+					break;
+				}
+				let cidx = row_base + cx;
+				if cidx < self.grid.len() {
+					self.grid[cidx] = Cell {
+						ch: ' ',
+						fg: self.fg,
+						bg: self.bg,
+						underline: self.underline,
+						bold: self.bold,
+						italic: self.italic,
+						sanitized: false,
+						wide_cont: true,
+					};
+				}
+			}
 		}
-		self.cursor_x = self.cursor_x.saturating_add(1);
+		self.cursor_x = self.cursor_x.saturating_add(w);
 	}
 
 	pub fn put_str(&mut self, s: &str) {
@@ -203,7 +253,8 @@ impl ScreenBuffer {
 
 		for y in 0..self.height {
 			let mut changed_run = false;
-			for x in 0..self.width {
+			let mut x: u16 = 0;
+			while x < self.width {
 				let idx = (y as usize) * (self.width as usize) + (x as usize);
 				let new_cell = &self.grid[idx];
 				let old_cell = if self.width == old.width && self.height == old.height {
@@ -212,9 +263,22 @@ impl ScreenBuffer {
 					None
 				};
 
+				// Continuation columns are covered by the preceding wide
+				// glyph. Never Print them — a space here would overwrite the
+				// right half of the emoji. Also never re-Print the primary
+				// glyph from here: the primary cell is visited first (LTR),
+				// and re-emitting on cont-change was double-painting every
+				// emoji whenever active-row / selection restyled the line
+				// (terminals are ~10× slower at emoji than ASCII).
+				if new_cell.wide_cont {
+					x = x.saturating_add(1);
+					continue;
+				}
+
 				if let Some(old_c) = old_cell {
 					if new_cell == old_c {
 						changed_run = false;
+						x = x.saturating_add(1);
 						continue;
 					}
 				}
@@ -275,8 +339,12 @@ impl ScreenBuffer {
 					}
 				}
 
+				let print_w = cell_print_width(new_cell.ch).max(1);
 				frame.queue(style::Print(new_cell.ch))?;
-				current_x = Some(x.saturating_add(1));
+				// Terminal advances by the glyph's display width, not by 1.
+				// Skip continuation columns in the scan so we don't revisit them.
+				current_x = Some(x.saturating_add(print_w));
+				x = x.saturating_add(print_w);
 			}
 		}
 
@@ -324,5 +392,104 @@ impl ScreenBuffer {
 		}
 
 		Ok(())
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn put_char_ascii_advances_one() {
+		let mut s = ScreenBuffer::new(10, 1);
+		s.put_char('a');
+		s.put_char('b');
+		assert_eq!(s.cursor_x, 2);
+		assert_eq!(s.grid[0].ch, 'a');
+		assert_eq!(s.grid[1].ch, 'b');
+		assert!(!s.grid[0].wide_cont);
+		assert!(!s.grid[1].wide_cont);
+	}
+
+	#[test]
+	fn put_char_emoji_reserves_continuation() {
+		let mut s = ScreenBuffer::new(10, 1);
+		s.put_char('✅');
+		assert_eq!(s.cursor_x, 2, "emoji must advance two columns");
+		assert_eq!(s.grid[0].ch, '✅');
+		assert!(!s.grid[0].wide_cont);
+		assert!(s.grid[1].wide_cont, "trailing half must be marked");
+		assert_eq!(s.grid[1].ch, ' ');
+		s.put_char('x');
+		assert_eq!(s.cursor_x, 3);
+		assert_eq!(s.grid[2].ch, 'x');
+	}
+
+	#[test]
+	fn put_char_cjk_reserves_continuation() {
+		let mut s = ScreenBuffer::new(10, 1);
+		s.put_char('中');
+		assert_eq!(s.cursor_x, 2);
+		assert!(s.grid[1].wide_cont);
+	}
+
+	#[test]
+	fn put_str_with_emoji_keeps_columns_aligned() {
+		let mut s = ScreenBuffer::new(20, 1);
+		s.put_str("✅|❌|ok");
+		// ✅(2) +(1) ❌(2) +(1) o(1) k(1) = 8
+		assert_eq!(s.cursor_x, 8);
+		assert_eq!(s.grid[0].ch, '✅');
+		assert!(s.grid[1].wide_cont);
+		assert_eq!(s.grid[2].ch, '|');
+		assert_eq!(s.grid[3].ch, '❌');
+		assert!(s.grid[4].wide_cont);
+		assert_eq!(s.grid[5].ch, '|');
+		assert_eq!(s.grid[6].ch, 'o');
+		assert_eq!(s.grid[7].ch, 'k');
+	}
+
+	#[test]
+	fn diff_skips_printing_wide_continuation() {
+		let mut s = ScreenBuffer::new(6, 1);
+		s.hide_cursor = true; // avoid cursor Show/Hide noise in the byte stream
+		s.put_str("✅x");
+		let empty = ScreenBuffer::new(0, 0);
+		let mut out = Vec::new();
+		s.diff(&empty, &mut out).unwrap();
+		// Count how many times we Print a space: continuation cells must not
+		// be printed. The grid has a space at col 1 (wide_cont) — if diff
+		// wrongly emitted it, we'd see an extra U+0020 between ✅ and x.
+		let text = String::from_utf8_lossy(&out);
+		assert!(text.contains('✅'));
+		assert!(text.contains('x'));
+		let emoji_pos = text.find('✅').unwrap();
+		let x_pos = text.find('x').unwrap();
+		assert!(x_pos > emoji_pos);
+		let between = &text[emoji_pos + '✅'.len_utf8()..x_pos];
+		assert!(
+			!between.contains(' '),
+			"continuation space must not be printed between emoji and next char; got {between:?}"
+		);
+	}
+
+	#[test]
+	fn diff_prints_each_emoji_once_on_style_change() {
+		// Active-row / selection restyles both the primary and wide_cont
+		// cells. Diff must Print the emoji once, not twice.
+		let mut old = ScreenBuffer::new(8, 1);
+		old.hide_cursor = true;
+		old.put_str("✅❌");
+
+		let mut new = ScreenBuffer::new(8, 1);
+		new.hide_cursor = true;
+		new.set_bg(Color::DarkGrey);
+		new.put_str("✅❌");
+
+		let mut out = Vec::new();
+		new.diff(&old, &mut out).unwrap();
+		let text = String::from_utf8_lossy(&out);
+		assert_eq!(text.matches('✅').count(), 1, "double-painted ✅: {text:?}");
+		assert_eq!(text.matches('❌').count(), 1, "double-painted ❌: {text:?}");
 	}
 }

@@ -1,13 +1,30 @@
 // Syntax highlighting powered by syntect.
 
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::path::Path;
 
 use syntect::highlighting::{
-	HighlightIterator, HighlightState, Highlighter as SyntectHighlighter, Style, Theme,
+	FontStyle, HighlightIterator, HighlightState, Highlighter as SyntectHighlighter, Style, Theme,
 };
 use syntect::parsing::{ParseState, ScopeStack, SyntaxReference, SyntaxSet};
 use syntect_assets::assets::HighlightingAssets;
+
+/// Per-char style packed for the line highlight cache (avoids re-lexing the
+/// same buffer line every frame while soft-wrap scrolling).
+pub type CachedCharStyle = (u8, u8, u8, bool, bool, bool);
+
+struct LineHlEntry {
+	colors: Vec<CachedCharStyle>,
+	/// Parse/highlight state immediately **after** this line was lexed.
+	post: ParseSnapshot,
+}
+
+/// Cap so a long scroll session cannot grow without bound.
+const LINE_HL_CACHE_CAP: usize = 32;
+/// Only cache lines at least this many bytes — short lines are cheap to
+/// re-lex; soft-wrap lag comes from long Markdown/code lines.
+const LINE_HL_CACHE_MIN_BYTES: usize = 200;
 
 /// Snapshot of syntect's two stateful pieces taken at a line boundary.
 #[derive(Clone)]
@@ -34,6 +51,17 @@ pub struct HighlightCache {
 	pub syntax_name: String,
 	/// Theme name this cache was built against.
 	pub theme_name: String,
+	/// Sticky resume point: state at the **start** of `last_prime_line`.
+	/// Lets consecutive frames that prime at the same (or later) scroll
+	/// line skip replaying Markdown/syntect from the nearest 200-line
+	/// snapshot — Markdown lexing is ~100× slower than Plain Text.
+	pub last_prime_line: usize,
+	pub last_prime_state: Option<ParseSnapshot>,
+	/// Per-line highlight results for the current buffer version.
+	/// Soft-wrap scrolling re-renders the same `scroll_y` line every frame
+	/// (only `scroll_vrow` changes); without this, Markdown re-lexes that
+	/// whole line on every arrow key (~0.4ms for a ~800-char README line).
+	line_hl: HashMap<usize, LineHlEntry>,
 }
 
 impl HighlightCache {
@@ -44,6 +72,9 @@ impl HighlightCache {
 			buffer_version: 0,
 			syntax_name: String::new(),
 			theme_name: String::new(),
+			last_prime_line: 0,
+			last_prime_state: None,
+			line_hl: HashMap::new(),
 		}
 	}
 
@@ -52,6 +83,9 @@ impl HighlightCache {
 		self.buffer_version = 0;
 		self.syntax_name.clear();
 		self.theme_name.clear();
+		self.last_prime_line = 0;
+		self.last_prime_state = None;
+		self.line_hl.clear();
 	}
 
 	pub fn is_valid_for(&self, version: u64, syntax_name: &str, theme_name: &str) -> bool {
@@ -92,6 +126,49 @@ impl<'a> LineHighlighter<'a> {
 	) -> Vec<(Style, &'b str)> {
 		let ops = self.parse_state.parse_line(line, syntax_set).unwrap_or_default();
 		HighlightIterator::new(&mut self.highlight_state, &ops, line, &self.syntect_hi).collect()
+	}
+
+	/// Highlight `line_idx`, reusing a cached result when this buffer line was
+	/// already lexed for the current cache generation. On a hit, restores the
+	/// highlighter to the post-line state so subsequent lines stay consistent.
+	pub fn highlight_line_cached(
+		&mut self,
+		cache: &mut HighlightCache,
+		line_idx: usize,
+		line: &str,
+		syntax_set: &SyntaxSet,
+	) -> Vec<CachedCharStyle> {
+		if let Some(entry) = cache.line_hl.get(&line_idx) {
+			let colors = entry.colors.clone();
+			self.restore(&entry.post);
+			return colors;
+		}
+
+		let ranges = self.highlight_line(line, syntax_set);
+		let mut colors: Vec<CachedCharStyle> = Vec::with_capacity(line.len());
+		for (style, fragment) in &ranges {
+			let fg = style.foreground;
+			let bold = style.font_style.contains(FontStyle::BOLD);
+			let italic = style.font_style.contains(FontStyle::ITALIC);
+			let underline = style.font_style.contains(FontStyle::UNDERLINE);
+			for _ in fragment.chars() {
+				colors.push((fg.r, fg.g, fg.b, bold, italic, underline));
+			}
+		}
+		if line.len() >= LINE_HL_CACHE_MIN_BYTES {
+			let post = self.snapshot();
+			if cache.line_hl.len() >= LINE_HL_CACHE_CAP {
+				cache.line_hl.clear();
+			}
+			cache.line_hl.insert(
+				line_idx,
+				LineHlEntry {
+					colors: colors.clone(),
+					post,
+				},
+			);
+		}
+		colors
 	}
 
 	pub fn snapshot(&self) -> ParseSnapshot {
@@ -159,7 +236,12 @@ impl Highlighter {
 	/// Build a `LineHighlighter` primed at the start of `target_line`.
 	///
 	/// On a cache hit (same buffer version, syntax, theme), restores from
-	/// the nearest snapshot ≤ `target_line` and only replays the gap.
+	/// the best available resume point ≤ `target_line` and only replays
+	/// the gap:
+	/// 1. Sticky `last_prime_state` when it is at or before `target_line`
+	///    (typical case: same `scroll_y` every frame while editing)
+	/// 2. Otherwise the nearest interval snapshot
+	///
 	/// On miss, rebuilds the cache from line 0, populating snapshots every
 	/// `cache.interval` lines as it goes. Either way the returned
 	/// highlighter is in the exact state that a fresh `LineHighlighter` +
@@ -170,7 +252,7 @@ impl Highlighter {
 		syntax: &'a SyntaxReference,
 		target_line: usize,
 		buffer_version: u64,
-		get_line: impl Fn(usize) -> String,
+		mut get_line: impl FnMut(usize) -> String,
 	) -> LineHighlighter<'a> {
 		let syntax_name = syntax.name.clone();
 		let theme_name = self.theme.name.clone().unwrap_or_default();
@@ -187,10 +269,25 @@ impl Highlighter {
 			cache.snapshots.push(lh.snapshot());
 		}
 
-		let usable_idx =
-			(target_line / cache.interval).min(cache.snapshots.len().saturating_sub(1));
-		lh.restore(&cache.snapshots[usable_idx]);
-		let mut current_line = usable_idx * cache.interval;
+		// Prefer sticky resume (same/later scroll) over the coarse snapshot
+		// grid — Markdown syntect is expensive enough that replaying 50 lines
+		// every frame is user-visible lag.
+		let mut current_line = if let Some(ref sticky) = cache.last_prime_state {
+			if cache.last_prime_line <= target_line {
+				lh.restore(sticky);
+				cache.last_prime_line
+			} else {
+				let usable_idx = (target_line / cache.interval)
+					.min(cache.snapshots.len().saturating_sub(1));
+				lh.restore(&cache.snapshots[usable_idx]);
+				usable_idx * cache.interval
+			}
+		} else {
+			let usable_idx =
+				(target_line / cache.interval).min(cache.snapshots.len().saturating_sub(1));
+			lh.restore(&cache.snapshots[usable_idx]);
+			usable_idx * cache.interval
+		};
 
 		while current_line < target_line {
 			let line_text = get_line(current_line);
@@ -204,6 +301,9 @@ impl Highlighter {
 				}
 			}
 		}
+
+		cache.last_prime_line = target_line;
+		cache.last_prime_state = Some(lh.snapshot());
 
 		lh
 	}
@@ -269,5 +369,97 @@ mod tests {
 
 		let _lh = h.primed(&cache, syntax, 200, 2, |_| "fn x() {}\n".to_string());
 		assert_eq!(cache.borrow().buffer_version, 2);
+	}
+
+	#[test]
+	fn sticky_prime_avoids_replay_on_same_target() {
+		use std::cell::Cell;
+		let h = make_highlighter();
+		let cache = make_cache();
+		let syntax = h.detect_syntax(Some(Path::new("README.md")));
+		let calls = Cell::new(0usize);
+		let _ = h.primed(&cache, syntax, 50, 1, |_| {
+			calls.set(calls.get() + 1);
+			"# heading\n".to_string()
+		});
+		assert_eq!(calls.get(), 50, "cold prime replays 0..50");
+		assert_eq!(cache.borrow().last_prime_line, 50);
+
+		calls.set(0);
+		let _ = h.primed(&cache, syntax, 50, 1, |_| {
+			calls.set(calls.get() + 1);
+			"# heading\n".to_string()
+		});
+		assert_eq!(calls.get(), 0, "sticky resume at same line must not re-lex");
+
+		calls.set(0);
+		let _ = h.primed(&cache, syntax, 52, 1, |_| {
+			calls.set(calls.get() + 1);
+			"# heading\n".to_string()
+		});
+		assert_eq!(calls.get(), 2, "scroll down one/two lines only lexes the gap");
+	}
+
+	#[test]
+	fn sticky_markdown_prime_is_fast_when_warm() {
+		use std::time::Instant;
+		let h = make_highlighter();
+		let cache = make_cache();
+		let syntax = h.detect_syntax(Some(Path::new("README.md")));
+		let md = std::fs::read_to_string("README.md").unwrap_or_else(|_| "# x\n".repeat(100));
+		let lines: Vec<String> = md.lines().map(|l| format!("{l}\n")).collect();
+
+		let _ = h.primed(&cache, syntax, 50, 1, |i| {
+			lines.get(i).cloned().unwrap_or_default()
+		});
+
+		let t0 = Instant::now();
+		for _ in 0..50 {
+			let _ = h.primed(&cache, syntax, 50, 1, |i| {
+				lines.get(i).cloned().unwrap_or_default()
+			});
+		}
+		let avg = t0.elapsed() / 50;
+		// Warm sticky resume should be well under a millisecond; cold Markdown
+		// replay of 50 lines was ~50ms before this fix.
+		assert!(
+			avg.as_millis() < 5,
+			"warm primed(50) avg too slow: {:?}",
+			avg
+		);
+	}
+	#[test]
+	fn line_hl_cache_avoids_relex_on_same_line() {
+		use std::time::Instant;
+		let h = make_highlighter();
+		let cache = make_cache();
+		let syntax = h.detect_syntax(Some(Path::new("x.md")));
+		let line = format!("{}\n", "word ".repeat(400)); // ~2k chars
+
+		// Prime sticky state at line 0, then highlight once (cold).
+		let mut lh = h.primed(&cache, syntax, 0, 1, |_| String::new());
+		{
+			let mut c = cache.borrow_mut();
+			let t0 = Instant::now();
+			let _ = lh.highlight_line_cached(&mut c, 0, &line, &h.syntax_set);
+			let cold = t0.elapsed();
+			assert!(
+				cold.as_micros() > 50,
+				"expected cold markdown lex to be measurable, got {:?}",
+				cold
+			);
+
+			let t1 = Instant::now();
+			for _ in 0..50 {
+				let _ = lh.highlight_line_cached(&mut c, 0, &line, &h.syntax_set);
+			}
+			let warm_avg = t1.elapsed() / 50;
+			assert!(
+				warm_avg < cold / 5,
+				"warm cache should be much faster than cold: warm={:?} cold={:?}",
+				warm_avg,
+				cold
+			);
+		}
 	}
 }

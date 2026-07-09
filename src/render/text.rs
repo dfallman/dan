@@ -1,8 +1,7 @@
 use crossterm::style::Color;
 
-use syntect::highlighting::FontStyle;
-
 use super::Viewport;
+use crate::editor::viewport::visual_row_start_char;
 use crate::editor::Editor;
 use crate::syntax::LineHighlighter;
 use crate::utils::char_width;
@@ -32,39 +31,34 @@ fn whitespace_marker(ch: char, show: bool) -> (char, bool) {
 }
 
 /// Convert a syntect RGBA color to a crossterm Color.
-fn syntect_to_crossterm(c: syntect::highlighting::Color) -> Color {
-	Color::Rgb {
-		r: c.r,
-		g: c.g,
-		b: c.b,
-	}
-}
-
 /// Build a per-char foreground color map for one buffer line using syntect.
 ///
 /// Returns a Vec with one `Color` per character in `line_text` (excluding
 /// trailing newlines). If highlighting is disabled, returns an empty Vec.
+/// Results are cached on `editor.highlight_cache` so soft-wrap scrolling
+/// (same buffer line, changing `scroll_vrow`) does not re-lex every frame.
 fn syntax_colors_for_line(
 	editor: &Editor,
 	hi: &mut LineHighlighter<'_>,
+	line_idx: usize,
 	line_text: &str,
 ) -> Vec<(Color, bool, bool, bool)> {
 	if !editor.config.syntax_highlight {
 		return Vec::new();
 	}
-	let ranges = hi.highlight_line(line_text, &editor.highlighter.syntax_set);
-
-	let mut colors: Vec<(Color, bool, bool, bool)> = Vec::with_capacity(line_text.len());
-	for (style, fragment) in &ranges {
-		let fg = syntect_to_crossterm(style.foreground);
-		let bold = style.font_style.contains(FontStyle::BOLD);
-		let italic = style.font_style.contains(FontStyle::ITALIC);
-		let underline = style.font_style.contains(FontStyle::UNDERLINE);
-		for _ in fragment.chars() {
-			colors.push((fg, bold, italic, underline));
-		}
-	}
-	colors
+	let mut cache = editor.highlight_cache.borrow_mut();
+	let packed = hi.highlight_line_cached(
+		&mut cache,
+		line_idx,
+		line_text,
+		&editor.highlighter.syntax_set,
+	);
+	packed
+		.into_iter()
+		.map(|(r, g, b, bold, italic, underline)| {
+			(Color::Rgb { r, g, b }, bold, italic, underline)
+		})
+		.collect()
 }
 
 /// Look up the syntax color for a character at `char_idx`.
@@ -124,75 +118,82 @@ pub fn render_wrap(
 		let line_text = editor.buffer().text.line(buf_line);
 		let line_start_pos = editor.buffer().text.line_to_char(buf_line);
 		let tab_w = editor.tab_width();
-		let syn_colors = syntax_colors_for_line(editor, &mut hi, &line_text);
+		let syn_colors = syntax_colors_for_line(editor, &mut hi, buf_line, &line_text);
 
-		let mut vcol: usize = 0;
-		let mut char_idx: usize = 0;
+		// Jump past scrolled-off visual rows instead of walking every char
+		// with a skip counter (O(line length) per frame while scrolling a
+		// long soft-wrapped line).
+		let start_char = if skip_lines > 0 {
+			visual_row_start_char(line_text.chars(), tab_w, text_area_width, skip_lines)
+		} else {
+			0
+		};
+		let mut char_idx: usize = start_char;
 		let mut screen_col: usize = 0;
-		let mut current_vrow: usize = 0;
 
-		if skip_lines == 0 {
+		{
 			screen.mov_to(0, screen_row as u16);
 			screen.clear_attrs();
 			if show_line_numbers {
-				let line_num = format!("{:>width$} ", buf_line + 1, width = gutter_width);
+				let gutter = if skip_lines == 0 {
+					format!("{:>width$} ", buf_line + 1, width = gutter_width)
+				} else {
+					format!("{:>width$} ", "↳", width = gutter_width)
+				};
 				screen.set_bg(base_bg);
 				screen.set_fg(if buf_line == cursor_line {
 					editor.theme.line_nr_active
 				} else {
 					editor.theme.line_nr
 				});
-				screen.put_str(&line_num);
+				screen.put_str(&gutter);
 			}
 		}
 
-		for ch in line_text.chars() {
+		for ch in line_text.chars().skip(start_char) {
 			if ch == '\n' || ch == '\r' {
 				char_idx += 1;
 				continue;
 			}
 
+			// Use screen_col (within the visual row) for tab stops — matches
+			// `visual_rows_for` / `visual_row_start_char`.
 			let ch_w = if ch == '\t' {
-				tab_w - (vcol % tab_w)
+				tab_w - (screen_col % tab_w)
 			} else {
 				char_width(ch, tab_w)
 			};
 
 			if screen_col + ch_w > text_area_width {
-				if current_vrow >= skip_lines {
-					let remaining = text_area_width.saturating_sub(screen_col);
-					if remaining > 0 {
-						screen.set_bg(base_bg);
-						screen.clear_attrs();
-						for _ in 0..remaining {
-							screen.put_char(' ');
-						}
-					}
-					screen_row += 1;
-					if screen_row >= text_height {
-						break;
+				let remaining = text_area_width.saturating_sub(screen_col);
+				if remaining > 0 {
+					screen.set_bg(base_bg);
+					screen.clear_attrs();
+					for _ in 0..remaining {
+						screen.put_char(' ');
 					}
 				}
-				current_vrow += 1;
+				screen_row += 1;
+				if screen_row >= text_height {
+					break;
+				}
 				screen_col = 0;
 
-				if current_vrow >= skip_lines {
-					screen.mov_to(0, screen_row as u16);
-					screen.clear_attrs();
-					if show_line_numbers {
-						let wrap_gutter = format!("{:>width$} ", "↳", width = gutter_width);
-						screen.set_bg(base_bg);
-						screen.set_fg(if buf_line == cursor_line {
-							editor.theme.line_nr_active
-						} else {
-							editor.theme.line_nr
-						});
-						screen.put_str(&wrap_gutter);
-					}
+				screen.mov_to(0, screen_row as u16);
+				screen.clear_attrs();
+				if show_line_numbers {
+					let wrap_gutter = format!("{:>width$} ", "↳", width = gutter_width);
+					screen.set_bg(base_bg);
+					screen.set_fg(if buf_line == cursor_line {
+						editor.theme.line_nr_active
+					} else {
+						editor.theme.line_nr
+					});
+					screen.put_str(&wrap_gutter);
 				}
 			}
 
-			if current_vrow >= skip_lines {
+			{
 				let char_pos = line_start_pos + char_idx;
 				let want_sel = if let Some((sel_start, sel_end)) = sel_range {
 					char_pos >= sel_start && char_pos < sel_end
@@ -260,12 +261,11 @@ pub fn render_wrap(
 				}
 			}
 
-			vcol += ch_w;
 			screen_col += ch_w;
 			char_idx += 1;
 		}
 
-		if current_vrow >= skip_lines {
+		{
 			let cols_used = gutter_width + 1 + screen_col;
 			let remaining = (vp.width as usize).saturating_sub(cols_used);
 			if remaining > 0 {
@@ -369,7 +369,7 @@ pub fn render_nowrap(
 			let line_text = editor.buffer().text.line(line_idx);
 			let line_start_pos = editor.buffer().text.line_to_char(line_idx);
 			let tab_w = editor.tab_width();
-			let syn_colors = syntax_colors_for_line(editor, &mut hi, &line_text);
+			let syn_colors = syntax_colors_for_line(editor, &mut hi, line_idx, &line_text);
 
 			let mut vcol: usize = 0;
 			let mut visible_written: usize = 0;

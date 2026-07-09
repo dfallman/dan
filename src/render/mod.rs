@@ -10,7 +10,7 @@ use crossterm::{
 use std::io::{self, Write};
 
 use crate::editor::mode::Mode;
-use crate::editor::visual_rows_for;
+use crate::editor::viewport::{visual_row_count, visual_row_for_col};
 use crate::editor::Editor;
 use crate::utils::char_width;
 
@@ -107,19 +107,13 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 		let tab_w = editor.tab_width();
 		if taw_tmp > 0 {
 			// Find which visual row the cursor is on within its buffer line.
-			let cur_vrows = visual_rows_for(
+			let cursor_col = editor.buffer().cursors.cursor().col;
+			let (cur_vrow_idx, _) = visual_row_for_col(
 				editor.buffer().text.line_slice(cursor_line).chars(),
 				tab_w,
 				taw_tmp,
+				cursor_col,
 			);
-			let cursor_col = editor.buffer().cursors.cursor().col;
-			let mut cur_vrow_idx = cur_vrows.len().saturating_sub(1);
-			for (i, &(start, end)) in cur_vrows.iter().enumerate() {
-				if cursor_col >= start && (cursor_col < end || i == cur_vrows.len() - 1) {
-					cur_vrow_idx = i;
-					break;
-				}
-			}
 
 			// --- Scroll UP: ensure scroll_off visual rows above the cursor ---
 			// Clamp both scroll_y and scroll_vrow so the viewport never starts below the cursor.
@@ -130,6 +124,27 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 				editor.buffer_mut().scroll_vrow = cur_vrow_idx;
 			}
 
+			// Cache visual-row counts for lines we may re-scan in the adjust loops
+			// (avoids re-walking long wrapped lines on every scroll step).
+			let mut row_count_cache: std::collections::HashMap<usize, usize> =
+				std::collections::HashMap::new();
+			let cached_row_count =
+				|cache: &mut std::collections::HashMap<usize, usize>,
+				 editor: &Editor,
+				 bl: usize|
+				 -> usize {
+					if let Some(&n) = cache.get(&bl) {
+						return n;
+					}
+					let n = visual_row_count(
+						editor.buffer().text.line_slice(bl).chars(),
+						tab_w,
+						taw_tmp,
+					);
+					cache.insert(bl, n);
+					n
+				};
+
 			// Calculate rows strictly between (scroll_y, scroll_vrow) and (cursor_line, cur_vrow_idx).
 			loop {
 				let mut rows_above: usize = 0;
@@ -137,21 +152,12 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 					rows_above = cur_vrow_idx.saturating_sub(editor.buffer().scroll_vrow);
 				} else {
 					let scroll_y = editor.buffer().scroll_y;
-					let vrows_in_top = visual_rows_for(
-						editor.buffer().text.line_slice(scroll_y).chars(),
-						tab_w,
-						taw_tmp,
-					)
-					.len();
+					let vrows_in_top =
+						cached_row_count(&mut row_count_cache, editor, scroll_y);
 					rows_above += vrows_in_top.saturating_sub(editor.buffer().scroll_vrow);
 
 					for bl in (editor.buffer().scroll_y + 1)..cursor_line {
-						rows_above += visual_rows_for(
-							editor.buffer().text.line_slice(bl).chars(),
-							tab_w,
-							taw_tmp,
-						)
-						.len();
+						rows_above += cached_row_count(&mut row_count_cache, editor, bl);
 					}
 					rows_above += cur_vrow_idx;
 				}
@@ -169,12 +175,7 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 				} else {
 					editor.buffer_mut().scroll_y -= 1;
 					let scroll_y = editor.buffer().scroll_y;
-					let count = visual_rows_for(
-						editor.buffer().text.line_slice(scroll_y).chars(),
-						tab_w,
-						taw_tmp,
-					)
-					.len();
+					let count = cached_row_count(&mut row_count_cache, editor, scroll_y);
 					editor.buffer_mut().scroll_vrow = count.saturating_sub(1);
 				}
 			}
@@ -188,21 +189,12 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 					vrow_from_top = cur_vrow_idx.saturating_sub(editor.buffer().scroll_vrow);
 				} else {
 					let scroll_y = editor.buffer().scroll_y;
-					let vrows_in_top = visual_rows_for(
-						editor.buffer().text.line_slice(scroll_y).chars(),
-						tab_w,
-						taw_tmp,
-					)
-					.len();
+					let vrows_in_top =
+						cached_row_count(&mut row_count_cache, editor, scroll_y);
 					vrow_from_top += vrows_in_top.saturating_sub(editor.buffer().scroll_vrow);
 
 					for bl in (editor.buffer().scroll_y + 1)..cursor_line {
-						vrow_from_top += visual_rows_for(
-							editor.buffer().text.line_slice(bl).chars(),
-							tab_w,
-							taw_tmp,
-						)
-						.len();
+						vrow_from_top += cached_row_count(&mut row_count_cache, editor, bl);
 					}
 					vrow_from_top += cur_vrow_idx;
 				}
@@ -213,12 +205,7 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 
 				// Scroll DOWN one visual row
 				let scroll_y = editor.buffer().scroll_y;
-				let count = visual_rows_for(
-					editor.buffer().text.line_slice(scroll_y).chars(),
-					tab_w,
-					taw_tmp,
-				)
-				.len();
+				let count = cached_row_count(&mut row_count_cache, editor, scroll_y);
 				if editor.buffer().scroll_vrow + 1 < count {
 					editor.buffer_mut().scroll_vrow += 1;
 				} else {
@@ -404,28 +391,19 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 			// relative to the start of the cursor's visual row.
 			let mut sy: usize = 0;
 			for bl in editor.buffer().scroll_y..cursor_pos.line.min(line_count) {
-				sy += visual_rows_for(
+				sy += visual_row_count(
 					editor.buffer().text.line_slice(bl).chars(),
 					tab_w,
 					text_area_width,
-				)
-				.len();
+				);
 			}
-			// Find cursor's visual row within its buffer line.
 			let (vrow_idx, vrow_start) = if cursor_pos.line < line_count {
-				let vrows = visual_rows_for(
+				visual_row_for_col(
 					editor.buffer().text.line_slice(cursor_pos.line).chars(),
 					tab_w,
 					text_area_width,
-				);
-				let mut idx = vrows.len().saturating_sub(1);
-				for (i, &(start, end)) in vrows.iter().enumerate() {
-					if cursor_pos.col >= start && (cursor_pos.col < end || i == vrows.len() - 1) {
-						idx = i;
-						break;
-					}
-				}
-				(idx, vrows[idx].0)
+					cursor_pos.col,
+				)
 			} else {
 				(0, 0)
 			};

@@ -76,4 +76,12 @@ mod tests {
 		assert_eq!(char_width('\x07', 4), 0);
 		assert_eq!(char_width('\x1B', 4), 0);
 	}
+
+	#[test]
+	fn emoji_presentation_is_wide() {
+		// README comparison table uses these; terminals draw them 2 columns wide.
+		assert_eq!(char_width('✅', 4), 2);
+		assert_eq!(char_width('❌', 4), 2);
+		assert_eq!(char_width('🚀', 4), 2);
+	}
 }

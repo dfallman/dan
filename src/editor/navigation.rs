@@ -1,4 +1,4 @@
-use crate::editor::viewport::visual_rows_for;
+use crate::editor::viewport::{visual_row_for_col, visual_rows_for};
 use crate::editor::visual_col::{char_idx_for_visual_col, visual_col_at};
 use crate::editor::Editor;
 
@@ -87,23 +87,22 @@ impl Editor {
 
 		let cur_line_len = self.line_len_no_newline(c.line);
 
-		let rows = visual_rows_for(
+		// Only build the break list when we need a neighbour row on this line;
+		// locating the current visual row is O(col) without allocating.
+		let (cur_vrow, _) = visual_row_for_col(
 			self.buffer().text.line_slice(c.line).chars(),
 			tab_w,
 			text_area_width,
+			c.col,
 		);
-
-		// Which visual row is the cursor on within its buffer line?
-		let mut cur_vrow: usize = 0;
-		for (i, &(start, end)) in rows.iter().enumerate() {
-			if c.col >= start && (c.col < end || i == rows.len() - 1) {
-				cur_vrow = i;
-				break;
-			}
-		}
 
 		if delta > 0 {
 			// Moving down
+			let rows = visual_rows_for(
+				self.buffer().text.line_slice(c.line).chars(),
+				tab_w,
+				text_area_width,
+			);
 			if cur_vrow + 1 < rows.len() {
 				// Stay on same buffer line, move to next visual row.
 				let next_idx = cur_vrow + 1;
@@ -145,6 +144,11 @@ impl Editor {
 		} else {
 			// Moving up
 			if cur_vrow > 0 {
+				let rows = visual_rows_for(
+					self.buffer().text.line_slice(c.line).chars(),
+					tab_w,
+					text_area_width,
+				);
 				// Stay on same buffer line, move to previous visual row.
 				let prev_idx = cur_vrow - 1;
 				let prev_row = rows[prev_idx];
