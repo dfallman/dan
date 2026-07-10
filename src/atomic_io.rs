@@ -28,7 +28,7 @@ fn temp_suffix() -> String {
 ///   match the original target before rename.
 ///
 /// Not yet covered: uid/gid preservation, xattrs, `O_NOFOLLOW`-style
-/// symlink-TOCTOU hardening for the temp file. See docs/archive/AUDIT.md.
+/// symlink-TOCTOU hardening for the temp file.
 pub fn write(path: &Path, bytes: &[u8]) -> io::Result<()> {
 	let target = resolve_symlink_target(path)?;
 

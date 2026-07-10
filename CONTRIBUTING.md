@@ -27,4 +27,4 @@ Have a thought on a better shortcut for "Select All"? Or an idea for a plugin in
 ---
 
 ## Future Roadmap
-Open ideas and trackable work live in [`docs/BACKLOG.md`](docs/BACKLOG.md). If you have a major feature in mind, feel free to discuss it in the Discussions area so it can be considered for the official roadmap. Thank you for using **Dan**!
+If you have a major feature in mind, feel free to discuss it in the Discussions area so it can be considered for the official roadmap. Thank you for using **Dan**!
