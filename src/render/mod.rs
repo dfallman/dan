@@ -85,15 +85,16 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 	let text_height = vp.text_height() as usize;
 
 	// Adjust scroll to keep cursor visible (with scroll_off padding).
-	// Skip while a selection is active so wheel / Ctrl+↑↓ can pan without
-	// yanking the viewport back to the selection head.
+	// Skip only while the viewport is explicitly pinned (wheel / Ctrl+↑↓ pan)
+	// so a selection can stay off-screen. Shift+arrow selection must still
+	// follow the head — pinning is cleared on those commands.
 	let cursor_line = editor.buffer().cursors.cursor().line;
 	let scroll_off = if vp.height <= 20 {
 		0
 	} else {
 		editor.config.scroll_off
 	};
-	if !editor.has_selection() {
+	if !editor.pin_viewport {
 	if editor.config.wrap_lines {
 		// Wrap mode: scroll must account for visual rows, not just buffer lines.
 		// Re-derive text_area_width for the helper (gutter not computed yet, use temp)
@@ -223,7 +224,7 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 			editor.buffer_mut().scroll_y = (cursor_line + scroll_off).saturating_sub(visible_height) + 1;
 		}
 	}
-	} // !has_selection()
+	} // !pin_viewport
 
 	// -- Horizontal scroll adjustment (only when wrap_lines = false) --
 	let line_count = editor.buffer().line_count();
@@ -478,4 +479,99 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 	editor.last_screen = Some(screen);
 
 	Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crate::editor::commands::Command;
+
+	fn editor_with_lines(lines: &[&str], width: u16, height: u16) -> Editor {
+		let mut e = Editor::new();
+		e.terminal_width = width;
+		e.terminal_height = height;
+		e.show_help = false;
+		e.config.wrap_lines = false;
+		e.config.line_numbers = false;
+		e.config.scroll_off = 0;
+		e.config.mouse = true;
+		e.execute(Command::SelectAll);
+		e.execute(Command::DeleteForward);
+		for (i, line) in lines.iter().enumerate() {
+			if i > 0 {
+				e.execute(Command::InsertNewline);
+			}
+			for ch in line.chars() {
+				e.execute(Command::InsertChar(ch));
+			}
+		}
+		e.execute(Command::MoveBufferTop);
+		e
+	}
+
+	/// Shift+↓ past the bottom of the viewport must scroll so the selection
+	/// head stays visible, without clearing the selection.
+	#[test]
+	fn shift_select_down_scrolls_viewport() {
+		// Enough lines that the head leaves the first page even on a tall
+		// terminal (render() syncs size from the real tty via Viewport::from_editor).
+		let lines: Vec<String> = (0..80).map(|i| format!("line{i}")).collect();
+		let line_refs: Vec<&str> = lines.iter().map(|s| s.as_str()).collect();
+		let mut e = editor_with_lines(&line_refs, 40, 10);
+		e.config.scroll_off = 0;
+		assert_eq!(e.buffer().scroll_y, 0);
+		assert_eq!(e.buffer().cursors.cursor().line, 0);
+
+		for _ in 0..50 {
+			e.execute(Command::SelectDown);
+		}
+		assert!(!e.pin_viewport);
+		assert!(e.has_selection());
+		assert_eq!(e.buffer().cursors.cursor().line, 50);
+
+		let mut out: Vec<u8> = Vec::new();
+		render(&mut e, &mut out).unwrap();
+
+		assert!(e.has_selection(), "selection must survive Shift+↓");
+		assert_eq!(e.buffer().cursors.cursor().line, 50);
+		assert!(
+			e.buffer().scroll_y > 0,
+			"viewport must follow the selection head; scroll_y={} th={}",
+			e.buffer().scroll_y,
+			e.terminal_height
+		);
+		let visible = e.terminal_height.saturating_sub(1) as usize;
+		assert!(
+			e.buffer().cursors.cursor().line < e.buffer().scroll_y + visible,
+			"cursor line {} must be within viewport starting at {}",
+			e.buffer().cursors.cursor().line,
+			e.buffer().scroll_y
+		);
+	}
+
+	/// Wheel / Ctrl+↑↓ pan must keep the viewport where the user scrolled it,
+	/// even when a selection is active (do not yank back to the selection head).
+	#[test]
+	fn wheel_pan_with_selection_does_not_yank_to_head() {
+		let lines: Vec<String> = (0..30).map(|i| format!("line{i}")).collect();
+		let line_refs: Vec<&str> = lines.iter().map(|s| s.as_str()).collect();
+		let mut e = editor_with_lines(&line_refs, 40, 20);
+		e.execute(Command::SelectDown);
+		e.execute(Command::SelectDown);
+		assert!(e.has_selection());
+		assert_eq!(e.buffer().cursors.cursor().line, 2);
+
+		e.execute(Command::ScrollViewportDown);
+		e.execute(Command::ScrollViewportDown);
+		assert_eq!(e.buffer().scroll_y, 2);
+
+		let mut out: Vec<u8> = Vec::new();
+		render(&mut e, &mut out).unwrap();
+
+		assert!(e.has_selection());
+		assert_eq!(
+			e.buffer().scroll_y, 2,
+			"render must not yank scroll back to the selection head after a wheel pan"
+		);
+	}
 }

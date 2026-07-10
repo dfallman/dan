@@ -34,6 +34,20 @@ impl Editor {
 		}
 		self.last_edit_action = action;
 
+		// Wheel / Ctrl+↑↓ pan pins the viewport so render won't yank back to
+		// the selection head. Any other real command (including Shift+arrow
+		// select) clears the pin so the cursor stays visible again. Noop is
+		// ignored so release/noise events don't accidentally unpin.
+		match cmd {
+			Command::ScrollViewportUp | Command::ScrollViewportDown => {
+				self.pin_viewport = true;
+			}
+			Command::Noop => {}
+			_ => {
+				self.pin_viewport = false;
+			}
+		}
+
 		match cmd {
 			Command::MoveLeft => self.cmd_move_left(),
 			Command::MoveRight => self.cmd_move_right(),

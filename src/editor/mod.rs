@@ -111,6 +111,10 @@ pub struct Editor {
 	/// Kind of the most recent edit; used to group consecutive same-kind
 	/// edits into a single undo step.
 	pub last_edit_action: crate::editor::commands::EditAction,
+	/// When true, render skips scroll-to-cursor so a wheel / Ctrl+↑↓ pan
+	/// can leave the selection head off-screen. Cleared by any non-pan
+	/// command (including Shift+arrow selection, which must follow the head).
+	pub pin_viewport: bool,
 	/// None = not in a quit cycle; Some(i) = currently prompting buffer i.
 	pub quit_cycle_idx: Option<usize>,
 	/// Command palette state (query, items, filter, selection).
@@ -255,6 +259,7 @@ impl Editor {
 			theme: std::sync::Arc::new(crate::ui::theme::Theme::default(is_light_bg)),
 			locale: Box::new(crate::ui::i18n::EnglishLocale),
 			last_edit_action: crate::editor::commands::EditAction::Other,
+			pin_viewport: false,
 			quit_cycle_idx: None,
 			palette: crate::palette::PaletteState::new(),
 			recent_files: crate::palette::index::load_recent_files().into_iter().collect(),
