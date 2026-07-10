@@ -7,7 +7,6 @@ test-file.txt
 /scripts
 /.env
 rustfmt.toml
-/doc
 *.bak
-
+/docs
 .worktrees/

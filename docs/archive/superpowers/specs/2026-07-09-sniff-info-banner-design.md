@@ -1,3 +1,6 @@
+> **ARCHIVED — DONE (shipped 2026-07-09).** Design for sniff INFO banner.
+> Live tracker: [`../../../BACKLOG.md`](../../../BACKLOG.md).
+
 # Sniff INFO Banner — Design
 
 ## Problem

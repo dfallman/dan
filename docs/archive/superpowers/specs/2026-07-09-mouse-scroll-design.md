@@ -1,3 +1,6 @@
+> **ARCHIVED — DONE (shipped 2026-07-09).** Design for mouse + scroll wheel.
+> Live tracker: [`../../../BACKLOG.md`](../../../BACKLOG.md).
+
 # Mouse + Scroll Wheel — Design
 
 ## Problem

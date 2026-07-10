@@ -1,3 +1,6 @@
+> **ARCHIVED — DONE (shipped 2026-07-09).** Design for optional regex search.
+> Live tracker: [`../../../BACKLOG.md`](../../../BACKLOG.md).
+
 # Regex Search — Design
 
 ## Problem

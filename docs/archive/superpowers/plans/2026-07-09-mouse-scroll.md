@@ -1,3 +1,7 @@
+> **ARCHIVED — DONE (shipped 2026-07-09).** Mouse + scroll wheel is in tree.
+> Step checkboxes below are historical and are **not** open work.
+> Live tracker: [`../../../BACKLOG.md`](../../../BACKLOG.md).
+
 # Mouse + Scroll Wheel Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

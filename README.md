@@ -335,6 +335,10 @@ Formatter output and errors are shown in the status bar.
 
 I've been writing code for over 30 years. Lately, LLM agent-enhanced coding practices have rekindled my sense of awe at what's possible. This project has been built using a range of tools. By leveraging advanced LLMs for boilerplate generation, rapid prototyping, and automated unit testing, development efforts were focused on high-level architectural decisions, robust edge-case verification, and low-level performance optimizations.
 
+## Docs
+
+Design notes, audits, and the living feature backlog live under [`docs/`](docs/). Start with [`docs/BACKLOG.md`](docs/BACKLOG.md).
+
 ---
 
 **License**: GNU General Public License v3.0 (GPLv3)
