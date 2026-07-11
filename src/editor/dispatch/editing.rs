@@ -93,15 +93,7 @@ impl Editor {
 	}
 
 	pub(crate) fn cmd_insert_string(&mut self, s: String) {
-		self.delete_selection_if_active();
-		if !s.is_empty() {
-			let pos = self.cursor_char_pos();
-			let char_count = self.buffer_mut().insert_paste(pos, &s);
-			let new_pos = pos + char_count;
-			let new_line = self.buffer().text.char_to_line(new_pos);
-			let new_col = new_pos - self.buffer().text.line_to_char(new_line);
-			self.buffer_mut().cursors.set_cursor(new_line, new_col);
-		}
+		self.paste_text(&s);
 		// Suppress the Ctrl+V internal-paste that some terminals
 		// send alongside the bracketed paste event.
 		self.suppress_next_paste = true;

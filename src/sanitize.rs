@@ -96,6 +96,19 @@ pub fn sanitize_paste(text: &str) -> String {
     sanitized
 }
 
+/// Sanitize pasted text for single-line prompt fields (search, save-as,
+/// go-to-line, replace-with, palette).
+///
+/// Same control-char / bidi stripping as [`sanitize_paste`], plus CR/LF
+/// removal so a multiline clipboard cannot break the toolbar layout or
+/// smuggle newlines into paths / queries.
+pub fn sanitize_prompt_paste(text: &str) -> String {
+	sanitize_paste(text)
+		.chars()
+		.filter(|&c| c != '\n' && c != '\r')
+		.collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -214,5 +227,16 @@ mod tests {
         let (clean, count) = sanitize_str(s);
         assert_eq!(clean, s);
         assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn prompt_paste_strips_newlines_and_escapes() {
+        let dirty = "foo\nbar\r\nbaz\x1b[31m";
+        let clean = sanitize_prompt_paste(dirty);
+        assert!(!clean.contains('\n'));
+        assert!(!clean.contains('\r'));
+        assert!(!clean.contains('\x1b'));
+        assert!(clean.starts_with("foobarbaz"));
+        assert!(clean.contains('\u{241B}'));
     }
 }

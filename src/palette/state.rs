@@ -88,6 +88,16 @@ impl PaletteState {
         self.refilter();
     }
 
+    /// Insert a (already-sanitized) string at the query cursor.
+    pub fn insert_str(&mut self, text: &str) {
+        if text.is_empty() {
+            return;
+        }
+        self.query.insert_str(self.query_cursor, text);
+        self.query_cursor += text.len();
+        self.refilter();
+    }
+
     pub fn delete_char(&mut self) {
         if self.query_cursor == 0 { return; }
         // Walk back one char boundary.

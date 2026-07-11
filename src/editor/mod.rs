@@ -1431,4 +1431,105 @@ mod tests {
 		e.toggle_comment();
 		assert_eq!(e.buffer().text.to_string_full(), "color: red;\n");
 	}
+
+	#[test]
+	fn paste_in_search_goes_to_query_not_document() {
+		use crate::editor::commands::Command;
+		use crate::editor::mode::Mode;
+		use crate::buffer::rope::TextRope;
+		let mut e = Editor::new();
+		e.buffer_mut().text = TextRope::from_str("DOC\n");
+		e.buffer_mut().cursors.set_cursor(0, 0);
+		e.mode = Mode::Searching;
+		e.search_query.clear();
+		e.prompt_cursor = 0;
+		e.execute(Command::InsertString("needle".into()));
+		assert_eq!(e.search_query, "needle");
+		assert_eq!(e.prompt_cursor, 6);
+		assert_eq!(e.buffer().text.to_string_full(), "DOC\n", "document must stay untouched");
+	}
+
+	#[test]
+	fn paste_command_in_save_as_goes_to_prompt() {
+		use crate::editor::commands::Command;
+		use crate::editor::mode::Mode;
+		use crate::buffer::rope::TextRope;
+		let mut e = Editor::new();
+		e.buffer_mut().text = TextRope::from_str("DOC\n");
+		e.mode = Mode::SaveAs;
+		e.save_as_input.clear();
+		e.prompt_cursor = 0;
+		e.internal_clipboard = "/tmp/out.txt".into();
+		e.execute(Command::Paste);
+		assert_eq!(e.save_as_input, "/tmp/out.txt");
+		assert_eq!(e.buffer().text.to_string_full(), "DOC\n");
+	}
+
+	#[test]
+	fn paste_in_goto_line_keeps_digits_only() {
+		use crate::editor::commands::Command;
+		use crate::editor::mode::Mode;
+		let mut e = Editor::new();
+		e.mode = Mode::GoToLine;
+		e.goto_line_input.clear();
+		e.prompt_cursor = 0;
+		e.execute(Command::InsertString("12ab34\n56".into()));
+		assert_eq!(e.goto_line_input, "123456");
+	}
+
+	#[test]
+	fn paste_in_confirm_quit_does_not_touch_document() {
+		use crate::editor::commands::Command;
+		use crate::editor::mode::Mode;
+		use crate::buffer::rope::TextRope;
+		let mut e = Editor::new();
+		e.buffer_mut().text = TextRope::from_str("DOC\n");
+		e.mode = Mode::ConfirmQuit;
+		e.execute(Command::InsertString("pwned".into()));
+		assert_eq!(e.buffer().text.to_string_full(), "DOC\n");
+	}
+
+	#[test]
+	fn paste_into_search_sanitizes_escape_injection() {
+		use crate::editor::commands::Command;
+		use crate::editor::mode::Mode;
+		let mut e = Editor::new();
+		e.mode = Mode::Searching;
+		e.search_query.clear();
+		e.prompt_cursor = 0;
+		e.execute(Command::InsertString("x\x1b[2Jy".into()));
+		assert!(!e.search_query.contains('\x1b'));
+		assert!(e.search_query.contains('\u{241B}'));
+		assert!(e.search_query.starts_with('x'));
+		assert!(e.search_query.ends_with('y'));
+	}
+
+	#[test]
+	fn paste_into_replace_with_goes_to_prompt() {
+		use crate::editor::commands::Command;
+		use crate::editor::mode::Mode;
+		use crate::buffer::rope::TextRope;
+		let mut e = Editor::new();
+		e.buffer_mut().text = TextRope::from_str("DOC\n");
+		e.mode = Mode::ReplacingWith;
+		e.replace_with.clear();
+		e.prompt_cursor = 0;
+		e.execute(Command::InsertString("repl\x1baced".into()));
+		assert_eq!(e.replace_with, "repl\u{241B}aced");
+		assert_eq!(e.buffer().text.to_string_full(), "DOC\n");
+	}
+
+	#[test]
+	fn paste_into_palette_goes_to_query() {
+		use crate::editor::commands::Command;
+		use crate::editor::mode::Mode;
+		use crate::buffer::rope::TextRope;
+		let mut e = Editor::new();
+		e.buffer_mut().text = TextRope::from_str("DOC\n");
+		e.execute(Command::PaletteOpen);
+		assert_eq!(e.mode, Mode::Palette);
+		e.execute(Command::InsertString("save".into()));
+		assert_eq!(e.palette.query, "save");
+		assert_eq!(e.buffer().text.to_string_full(), "DOC\n");
+	}
 }

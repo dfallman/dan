@@ -193,6 +193,18 @@ pub(super) fn prompt_insert_char(s: &mut String, char_idx: usize, ch: char) {
 	s.insert(byte_idx, ch);
 }
 
+/// Insert `text` into `s` at the char cursor, advancing `char_cursor` by the
+/// number of chars inserted.
+pub(super) fn prompt_insert_str(s: &mut String, char_cursor: &mut usize, text: &str) {
+	let byte_idx = s
+		.char_indices()
+		.nth(*char_cursor)
+		.map(|(b, _)| b)
+		.unwrap_or(s.len());
+	s.insert_str(byte_idx, text);
+	*char_cursor += text.chars().count();
+}
+
 /// Remove the char at **char** index `char_idx` from `s`. No-op if out of
 /// range. Char-index counterpart to `String::remove` (which takes bytes).
 pub(super) fn prompt_remove_char(s: &mut String, char_idx: usize) {

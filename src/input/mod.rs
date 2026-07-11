@@ -34,7 +34,21 @@ pub fn map_event(event: &Event, mode: Mode) -> Command {
 				_ => map_key(key),
 			}
 		}
-		Event::Paste(text) => Command::InsertString(text.clone()),
+		Event::Paste(text) => {
+			// Confirm / step dialogs have no text field — ignore paste so it
+			// cannot land in the document behind the prompt.
+			if matches!(
+				mode,
+				Mode::ConfirmQuit
+					| Mode::ConfirmOverwrite
+					| Mode::ReplacingStep
+					| Mode::RecoverSwap
+			) {
+				Command::Noop
+			} else {
+				Command::InsertString(text.clone())
+			}
+		}
 		Event::Mouse(me) => map_mouse(me, mode),
 		_ => Command::Noop,
 	}
@@ -95,6 +109,8 @@ fn map_search_key(key: &KeyEvent) -> Command {
 		KeyCode::Char('t') | KeyCode::Char('T') if ctrl => Command::SearchPrev,
 		// Ctrl+R = elevate search matches directly into global Replace loop
 		KeyCode::Char('r') | KeyCode::Char('R') if ctrl => Command::SearchConvertToReplace,
+		// Ctrl+V = paste into the search query (not the document)
+		KeyCode::Char('v') | KeyCode::Char('V') if ctrl => Command::Paste,
 		// Backspace deletes from query
 		KeyCode::Backspace => Command::SearchDeleteChar,
 		KeyCode::Left => Command::PromptCursorLeft,
@@ -117,6 +133,7 @@ fn map_replace_with_key(key: &KeyEvent) -> Command {
 		KeyCode::Backspace => Command::ReplaceDeleteChar,
 		KeyCode::Left => Command::PromptCursorLeft,
 		KeyCode::Right => Command::PromptCursorRight,
+		KeyCode::Char('v') | KeyCode::Char('V') if ctrl => Command::Paste,
 		KeyCode::Char(ch) if !ctrl => Command::ReplaceInsertChar(ch),
 		_ => Command::Noop,
 	}
@@ -285,6 +302,7 @@ fn map_goto_line_key(key: &KeyEvent) -> Command {
 		KeyCode::Backspace => Command::GoToLineDeleteChar,
 		KeyCode::Left => Command::PromptCursorLeft,
 		KeyCode::Right => Command::PromptCursorRight,
+		KeyCode::Char('v') | KeyCode::Char('V') if ctrl => Command::Paste,
 		KeyCode::Char(ch) if !ctrl => Command::GoToLineInsertChar(ch),
 		_ => Command::Noop,
 	}
@@ -300,6 +318,7 @@ fn map_save_as_key(key: &KeyEvent) -> Command {
 		KeyCode::Backspace => Command::SaveAsDeleteChar,
 		KeyCode::Left => Command::PromptCursorLeft,
 		KeyCode::Right => Command::PromptCursorRight,
+		KeyCode::Char('v') | KeyCode::Char('V') if ctrl => Command::Paste,
 		KeyCode::Char(ch) if !ctrl => Command::SaveAsInsertChar(ch),
 		_ => Command::Noop,
 	}
@@ -329,6 +348,7 @@ fn map_palette_key(key: &KeyEvent) -> Command {
 		KeyCode::Backspace => Command::PaletteDeleteChar,
 		KeyCode::Char('s') | KeyCode::Char('S') if ctrl => Command::PaletteClosePromptSave,
 		KeyCode::Char('d') | KeyCode::Char('D') if ctrl => Command::PaletteCloseBuffer,
+		KeyCode::Char('v') | KeyCode::Char('V') if ctrl => Command::Paste,
 		KeyCode::Char(ch) if !ctrl => Command::PaletteInsertChar(ch),
 		_ => Command::Noop,
 	}
@@ -455,6 +475,7 @@ mod tests {
 			("right", key(KeyCode::Right, M::NONE), Mode::Searching, Command::PromptCursorRight),
 			("char x", key(KeyCode::Char('x'), M::NONE), Mode::Searching, Command::SearchInsertChar('x')),
 			("shift+X", key(KeyCode::Char('X'), M::SHIFT), Mode::Searching, Command::SearchInsertChar('X')),
+			("ctrl+v paste", key(KeyCode::Char('v'), M::CONTROL), Mode::Searching, Command::Paste),
 			("ctrl+s noop", key(KeyCode::Char('s'), M::CONTROL), Mode::Searching, Command::Noop),
 		]);
 	}
@@ -470,6 +491,7 @@ mod tests {
 			("goto left", key(KeyCode::Left, M::NONE), Mode::GoToLine, Command::PromptCursorLeft),
 			("goto right", key(KeyCode::Right, M::NONE), Mode::GoToLine, Command::PromptCursorRight),
 			("goto 4", key(KeyCode::Char('4'), M::NONE), Mode::GoToLine, Command::GoToLineInsertChar('4')),
+			("goto ctrl+v paste", key(KeyCode::Char('v'), M::CONTROL), Mode::GoToLine, Command::Paste),
 			("goto ctrl+a noop", key(KeyCode::Char('a'), M::CONTROL), Mode::GoToLine, Command::Noop),
 			// SaveAs
 			("saveas esc", key(KeyCode::Esc, M::NONE), Mode::SaveAs, Command::SaveAsCancel),
@@ -478,6 +500,7 @@ mod tests {
 			("saveas left", key(KeyCode::Left, M::NONE), Mode::SaveAs, Command::PromptCursorLeft),
 			("saveas right", key(KeyCode::Right, M::NONE), Mode::SaveAs, Command::PromptCursorRight),
 			("saveas /", key(KeyCode::Char('/'), M::NONE), Mode::SaveAs, Command::SaveAsInsertChar('/')),
+			("saveas ctrl+v paste", key(KeyCode::Char('v'), M::CONTROL), Mode::SaveAs, Command::Paste),
 			// ConfirmOverwrite
 			("overwrite ctrl+o", key(KeyCode::Char('o'), M::CONTROL), Mode::ConfirmOverwrite, Command::ConfirmOverwrite),
 			("overwrite esc cancel", key(KeyCode::Esc, M::NONE), Mode::ConfirmOverwrite, Command::CancelOverwrite),
@@ -496,6 +519,7 @@ mod tests {
 			("replwith left", key(KeyCode::Left, M::NONE), Mode::ReplacingWith, Command::PromptCursorLeft),
 			("replwith right", key(KeyCode::Right, M::NONE), Mode::ReplacingWith, Command::PromptCursorRight),
 			("replwith x", key(KeyCode::Char('x'), M::NONE), Mode::ReplacingWith, Command::ReplaceInsertChar('x')),
+			("replwith ctrl+v paste", key(KeyCode::Char('v'), M::CONTROL), Mode::ReplacingWith, Command::Paste),
 			// ReplacingStep
 			("replstep ctrl+y", key(KeyCode::Char('y'), M::CONTROL), Mode::ReplacingStep, Command::ReplaceActionYes),
 			("replstep ctrl+n", key(KeyCode::Char('n'), M::CONTROL), Mode::ReplacingStep, Command::ReplaceActionNo),
@@ -525,6 +549,7 @@ mod tests {
 			("ctrl+s save", key(KeyCode::Char('s'), M::CONTROL), Mode::Palette, Command::PaletteClosePromptSave),
 			("ctrl+d close", key(KeyCode::Char('d'), M::CONTROL), Mode::Palette, Command::PaletteCloseBuffer),
 			("char f", key(KeyCode::Char('f'), M::NONE), Mode::Palette, Command::PaletteInsertChar('f')),
+			("ctrl+v paste", key(KeyCode::Char('v'), M::CONTROL), Mode::Palette, Command::Paste),
 			("ctrl+p noop", key(KeyCode::Char('p'), M::CONTROL), Mode::Palette, Command::Noop),
 		]);
 	}
@@ -539,10 +564,28 @@ mod tests {
 				Command::InsertString("hello".into()),
 			),
 			(
-				"paste in search still inserts",
+				"paste in search routes to prompt",
 				Event::Paste("x".into()),
 				Mode::Searching,
 				Command::InsertString("x".into()),
+			),
+			(
+				"paste in goto routes to prompt",
+				Event::Paste("12".into()),
+				Mode::GoToLine,
+				Command::InsertString("12".into()),
+			),
+			(
+				"paste in confirm-quit is noop",
+				Event::Paste("x".into()),
+				Mode::ConfirmQuit,
+				Command::Noop,
+			),
+			(
+				"paste in replace-step is noop",
+				Event::Paste("x".into()),
+				Mode::ReplacingStep,
+				Command::Noop,
 			),
 			("resize noop", Event::Resize(80, 24), Mode::Editing, Command::Noop),
 		]);
