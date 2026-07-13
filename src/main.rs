@@ -99,25 +99,32 @@ fn spawn_shutdown_watchdog(flag: Arc<AtomicBool>) {
 		// running when it elapses, it is wedged.
 		std::thread::sleep(SHUTDOWN_GRACE);
 
-		// Rescue and restore on a helper thread: if either blocks (a stuck tty
-		// write, a full disk), the timeout below still gets us to `_exit`.
+		// Every step that can block goes on a helper thread, and this thread only
+		// ever waits on it with a timeout. Writing to the terminal is itself a
+		// blocking operation — if the tty has stopped draining (XOFF, a frozen
+		// or disconnected terminal emulator), a write to it never returns — so
+		// reporting *before* exiting would be exactly the way to never exit.
 		let (tx, rx) = std::sync::mpsc::channel();
 		std::thread::spawn(move || {
 			let rescued = crate::crash::dump();
 			emergency_terminal_restore();
-			let _ = tx.send(rescued);
+
+			let mut msg = String::from(
+				"\r\ndan: main loop unresponsive to shutdown signal; forcing exit.\r\n",
+			);
+			for p in &rescued {
+				msg.push_str(&format!("dan: rescued unsaved buffer to {}\r\n", p.display()));
+			}
+			write_fd(2, msg.as_bytes());
+
+			let _ = tx.send(());
 		});
-		let rescued = rx.recv_timeout(RESCUE_BUDGET).unwrap_or_default();
+		let _ = rx.recv_timeout(RESCUE_BUDGET);
 
-		let mut msg =
-			String::from("\r\ndan: main loop unresponsive to shutdown signal; forcing exit.\r\n");
-		for p in &rescued {
-			msg.push_str(&format!("dan: rescued unsaved buffer to {}\r\n", p.display()));
-		}
-		write_fd(2, msg.as_bytes());
-
-		// _exit(2): no atexit handlers, no stdio flush — the wedged thread may
-		// hold the stdout lock, and blocking on it here would defeat the point.
+		// Unconditional: whether the helper finished, is still writing to a dead
+		// terminal, or died, the process goes now. `_exit(2)` runs no atexit
+		// handlers and flushes no stdio — the wedged thread may hold the stdout
+		// lock, and blocking on it here would defeat the point.
 		signal_hook::low_level::exit(1);
 	});
 }
