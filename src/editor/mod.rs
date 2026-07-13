@@ -143,6 +143,23 @@ pub struct Editor {
 	pub color_query_failed: bool,
 }
 
+/// The system clipboard — never opened under `cfg(test)`.
+///
+/// `cmd_paste` prefers the system clipboard and only falls back to the internal
+/// one when it is empty. A test that seeds `internal_clipboard` would therefore
+/// paste whatever the developer happened to have copied, so the suite passed or
+/// failed on the state of the machine's pasteboard rather than on the code.
+fn system_clipboard() -> Option<arboard::Clipboard> {
+	#[cfg(test)]
+	{
+		None
+	}
+	#[cfg(not(test))]
+	{
+		arboard::Clipboard::new().ok()
+	}
+}
+
 impl Editor {
 	pub fn new() -> Self {
 		let (tw, th) = terminal::size().unwrap_or((80, 24));
@@ -235,7 +252,7 @@ impl Editor {
 			info_banner: None,
 			should_quit: false,
 			scroll_x: 0,
-			sys_clipboard: arboard::Clipboard::new().ok(),
+			sys_clipboard: system_clipboard(),
 			internal_clipboard: String::new(),
 			terminal_width: tw,
 			terminal_height: th,

@@ -68,6 +68,99 @@ fn install_signal_shutdown_flag() -> io::Result<Arc<AtomicBool>> {
 	Ok(flag)
 }
 
+/// How long the main loop gets to honour a shutdown request before the watchdog
+/// terminates the process itself.
+const SHUTDOWN_GRACE: Duration = Duration::from_secs(2);
+
+/// How long the watchdog waits for the buffer rescue + terminal restore before
+/// exiting anyway. Bounded so a restore that itself blocks cannot strand us.
+const RESCUE_BUDGET: Duration = Duration::from_secs(2);
+
+/// Force-exit if the main loop does not honour a shutdown request.
+///
+/// The signal handlers only flip an `AtomicBool` that `run_loop` polls, so a
+/// main loop that is wedged never sees it: the process ignores SIGTERM/SIGHUP,
+/// spins at 100% CPU, and can only be killed with SIGKILL — typically after the
+/// terminal it was attached to is already gone. That turns any editor hang into
+/// an orphaned CPU-burning process, so a graceful-shutdown flag alone is not
+/// enough. This thread is the backstop: if the flag is still set once the grace
+/// period elapses, the loop is not coming back, and we rescue unsaved buffers,
+/// restore the terminal, and exit without it.
+#[cfg(unix)]
+fn spawn_shutdown_watchdog(flag: Arc<AtomicBool>) {
+	std::thread::spawn(move || loop {
+		if !flag.load(Ordering::Relaxed) {
+			std::thread::sleep(Duration::from_millis(100));
+			continue;
+		}
+
+		// Shutdown requested. A healthy main loop exits well inside the grace
+		// period and takes this thread down with the process; if we are still
+		// running when it elapses, it is wedged.
+		std::thread::sleep(SHUTDOWN_GRACE);
+
+		// Rescue and restore on a helper thread: if either blocks (a stuck tty
+		// write, a full disk), the timeout below still gets us to `_exit`.
+		let (tx, rx) = std::sync::mpsc::channel();
+		std::thread::spawn(move || {
+			let rescued = crate::crash::dump();
+			emergency_terminal_restore();
+			let _ = tx.send(rescued);
+		});
+		let rescued = rx.recv_timeout(RESCUE_BUDGET).unwrap_or_default();
+
+		let mut msg =
+			String::from("\r\ndan: main loop unresponsive to shutdown signal; forcing exit.\r\n");
+		for p in &rescued {
+			msg.push_str(&format!("dan: rescued unsaved buffer to {}\r\n", p.display()));
+		}
+		write_fd(2, msg.as_bytes());
+
+		// _exit(2): no atexit handlers, no stdio flush — the wedged thread may
+		// hold the stdout lock, and blocking on it here would defeat the point.
+		signal_hook::low_level::exit(1);
+	});
+}
+
+#[cfg(not(unix))]
+fn spawn_shutdown_watchdog(_flag: Arc<AtomicBool>) {}
+
+/// Undo raw mode, the alternate screen, mouse capture and bracketed paste from
+/// a thread that cannot trust the main thread to still be alive.
+#[cfg(unix)]
+fn emergency_terminal_restore() {
+	const RESTORE: &str = concat!(
+		"\x1b[?2004l", // bracketed paste off
+		"\x1b[?1000l", "\x1b[?1002l", "\x1b[?1003l", "\x1b[?1006l", // mouse reporting off
+		"\x1b[0m",     // reset colours + attributes
+		"\x1b[?25h",   // show cursor
+		"\x1b[?1049l", // leave alternate screen
+	);
+	write_fd(1, RESTORE.as_bytes());
+	let _ = crossterm::terminal::disable_raw_mode();
+}
+
+/// `write(2)` straight to a file descriptor, bypassing Rust's buffered and
+/// mutex-guarded stdio handles — the wedged main thread may be holding them.
+#[cfg(unix)]
+fn write_fd(fd: std::os::fd::RawFd, mut bytes: &[u8]) {
+	use std::io::Write;
+	use std::mem::ManuallyDrop;
+	use std::os::fd::FromRawFd;
+
+	// ManuallyDrop: this File only borrows the fd; dropping it would close
+	// stdout/stderr out from under the process.
+	let mut f = ManuallyDrop::new(unsafe { std::fs::File::from_raw_fd(fd) });
+	while !bytes.is_empty() {
+		match f.write(bytes) {
+			Ok(0) => break,
+			Ok(n) => bytes = &bytes[n..],
+			Err(ref e) if e.kind() == io::ErrorKind::Interrupted => {}
+			Err(_) => break,
+		}
+	}
+}
+
 fn main() -> io::Result<()> {
 	let args: Vec<String> = env::args().collect();
 
@@ -112,6 +205,10 @@ fn main() -> io::Result<()> {
 	// Install signal handlers BEFORE entering raw mode so a signal arriving
 	// during the next few statements still trips the cleanup path.
 	let shutdown_signal = install_signal_shutdown_flag()?;
+
+	// Backstop the flag: a wedged main loop never polls it, and would otherwise
+	// survive SIGTERM/SIGHUP and spin at 100% CPU until SIGKILLed.
+	spawn_shutdown_watchdog(Arc::clone(&shutdown_signal));
 
 	// Install the panic hook BEFORE enable_raw_mode so a panic between
 	// raw-mode-on and the first hook installation can no longer strand
