@@ -1,6 +1,6 @@
 [package]
 name = "dan"
-version = "0.2.175"
+version = "0.2.176"
 edition = "2021"
 authors = ["Daniel Fallman <dfallman@gmail.com>"]
 description = "Dan is a fast, friendly, and zero-fuss terminal text editor written in Rust"
@@ -28,7 +28,6 @@ arboard = "3.4"
 chardetng = "0.1"
 encoding_rs = "0.8"
 editorconfig-parser = "0.0.4"
-terminal-light = "1.8.0"
 terminal-colorsaurus = "1.0.3"
 syntect-assets = "0.23.6"
 
