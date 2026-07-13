@@ -83,6 +83,14 @@ impl OverlayBuilder {
                     while !text_rem.is_empty() {
                         let space_left = (eff_width.saturating_sub(current_x)) as usize;
                         if space_left == 0 {
+                            // A continuation row restarts at `overflow_prefix_width`. If the
+                            // terminal is no wider than that prefix, such a row can never hold
+                            // a single character, so flushing again would spin forever without
+                            // draining `text_rem`. Drop the rest instead: unrenderable text in a
+                            // terminal this narrow is not worth hanging the editor over.
+                            if overflow_prefix_width >= eff_width {
+                                break;
+                            }
                             windows.push(self.emit_row(current_row_fragments, width, 0, Some(self.flex_bg), windows.is_empty()));
                             current_row_fragments = Vec::new();
                             current_x = overflow_prefix_width;
@@ -180,8 +188,49 @@ impl OverlayBuilder {
             rect: Rect { x: 0, y, width, height: 1 },
             gravity: Gravity::BottomLeft,
             z_index: self.z_index,
-            cursor_bounds: None, 
+            cursor_bounds: None,
             fragments: final_frags,
         }
     }
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use std::sync::mpsc;
+	use std::thread;
+	use std::time::Duration;
+
+	fn frag(text: &str) -> UiFragment {
+		UiFragment {
+			text: text.to_string(),
+			fg: Color::Reset,
+			bg: Color::Reset,
+			is_flex: false,
+			is_bold: false,
+		}
+	}
+
+	/// Wrapping must terminate even when the terminal is narrower than the
+	/// overflow prefix. The help bar's overflow prefix is 6 columns ("▌" plus
+	/// "Help"-width padding), so a 4-column terminal leaves no room for text on
+	/// a continuation row. `build` used to flush a row, reset `current_x` to the
+	/// prefix width, then `continue` without draining `text_rem` — spinning
+	/// forever at 100% CPU, allocating a Window per iteration.
+	#[test]
+	fn build_terminates_when_narrower_than_overflow_prefix() {
+		let (tx, rx) = mpsc::channel();
+		thread::spawn(move || {
+			let mut b = OverlayBuilder::new(Color::Reset, 0)
+				.with_prefix(frag("▌"))
+				.with_overflow_prefix(frag("▌     "));
+			b.add_block(OverlayBlock {
+				fragments: vec![frag(" Help  ^S Save  ^Q Quit")],
+			});
+			let _ = tx.send(b.build(4, 0).len());
+		});
+
+		rx.recv_timeout(Duration::from_secs(2))
+			.expect("OverlayBuilder::build did not terminate — infinite wrap loop");
+	}
 }
