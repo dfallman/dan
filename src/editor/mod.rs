@@ -135,12 +135,9 @@ pub struct Editor {
 	/// scratch is seq 1 (renders as `[Untitled]`); subsequent NewBuffer
 	/// invocations get 2, 3, 4… (rendered as `[Untitled 2]`, etc).
 	pub next_untitled_seq: usize,
-	/// True when the startup terminal colour query (OSC 10/11, via
-	/// terminal-colorsaurus) failed or was deemed unsupported. Some terminals
-	/// answer the query's DA1 sentinel *before* the colour replies, so
-	/// colorsaurus bails out and the late colour replies leak into stdin —
-	/// main.rs drains that stray input before the first frame when this is set.
-	pub color_query_failed: bool,
+	/// True when startup ran an OSC colour query. `main` drains leftover
+	/// replies before the first frame so they are not typed into the buffer.
+	pub osc_attempted: bool,
 }
 
 /// The system clipboard — never opened under `cfg(test)`.
@@ -165,27 +162,20 @@ impl Editor {
 		let (tw, th) = terminal::size().unwrap_or((80, 24));
 		let config = Config::load();
 		
+		// Prefer COLORFGBG; OSC only when theme is "default" and env is missing.
+		// See `theme_detect` and the stdin drain in main.rs.
+		let allow_osc = config.theme == "default";
+		let detected = crate::theme_detect::detect_background(
+			crate::theme_detect::DetectOptions::from_env(allow_osc),
+		);
+		let (theme, is_light_bg) =
+			crate::theme_detect::resolve_themes(&config.theme, detected.bg);
+		let osc_attempted = detected.osc_attempted;
+
 		// macOS limits the main-thread stack to 8 MB. In release builds,
 		// syntect's syntax-set initialization can blow that and SIGKILL the
 		// process. Spawn a dedicated 32 MB-stack thread and join it so the
 		// expensive initialization happens off the main thread.
-		let mode_result = terminal_colorsaurus::theme_mode(terminal_colorsaurus::QueryOptions::default());
-		// A failed/unsupported query means the terminal may still send its colour
-		// replies late (see `color_query_failed`); record it so main.rs can flush
-		// the leftover bytes before they get parsed as typed input.
-		let color_query_failed = mode_result.is_err();
-		let mode = mode_result.unwrap_or(terminal_colorsaurus::ThemeMode::Dark);
-		let is_light_bg = mode == terminal_colorsaurus::ThemeMode::Light;
-
-		let mut theme = config.theme.clone();
-		if theme == "default" {
-			theme = if is_light_bg {
-				"OneHalfLight".to_string()
-			} else {
-				"OneHalfDark".to_string()
-			};
-		}
-
 		let mut highlighter = std::thread::Builder::new()
 			.stack_size(32 * 1024 * 1024)
 			.spawn(move || Highlighter::new(&theme))
@@ -286,7 +276,7 @@ impl Editor {
 			recent_files_dirty: false,
 			last_recent_save: std::time::Instant::now(),
 			next_untitled_seq: 2,
-			color_query_failed,
+			osc_attempted,
 		}
 	}
 

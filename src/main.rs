@@ -29,6 +29,7 @@ pub mod recovery;
 mod render;
 mod sanitize;
 mod syntax;
+mod theme_detect;
 pub mod ui;
 mod utils;
 mod terminal_guard;
@@ -136,14 +137,20 @@ fn spawn_shutdown_watchdog(_flag: Arc<AtomicBool>) {}
 /// a thread that cannot trust the main thread to still be alive.
 #[cfg(unix)]
 fn emergency_terminal_restore() {
-	const RESTORE: &str = concat!(
+	let mut restore = String::from(concat!(
 		"\x1b[?2004l", // bracketed paste off
-		"\x1b[?1000l", "\x1b[?1002l", "\x1b[?1003l", "\x1b[?1006l", // mouse reporting off
+		"\x1b[?1000l",
+		"\x1b[?1002l",
+		"\x1b[?1003l",
+		"\x1b[?1006l", // mouse reporting off
 		"\x1b[0m",     // reset colours + attributes
 		"\x1b[?25h",   // show cursor
-		"\x1b[?1049l", // leave alternate screen
-	);
-	write_fd(1, RESTORE.as_bytes());
+	));
+	if crate::terminal_guard::cursor_color_was_applied() {
+		restore.push_str("\x1b]112\x07");
+	}
+	restore.push_str("\x1b[?1049l"); // leave alternate screen
+	write_fd(1, restore.as_bytes());
 	let _ = crossterm::terminal::disable_raw_mode();
 }
 
@@ -247,6 +254,11 @@ fn main() -> io::Result<()> {
 			&mut stdout,
 			crossterm::cursor::SetCursorStyle::DefaultUserShape,
 		);
+		if crate::terminal_guard::cursor_color_was_applied() {
+			use std::io::Write;
+			let _ = stdout.write_all(b"\x1b]112\x07");
+			let _ = stdout.flush();
+		}
 		let _ = crossterm::ExecutableCommand::execute(
 			&mut stdout,
 			crossterm::terminal::LeaveAlternateScreen,
@@ -265,23 +277,19 @@ fn main() -> io::Result<()> {
 
 	// Set up terminal (restored automatically by TerminalGuard on drop).
 	let mut terminal = terminal_guard::TerminalGuard::enter(editor.config.mouse)?;
+	if let Some(rgb) = editor.config.cursor_color_rgb() {
+		terminal.apply_cursor_color(rgb)?;
+	}
 	let writer = terminal.writer_mut();
 
-	// Flush stray terminal-query replies before the first frame.
+	// Flush stray OSC replies before the first frame.
 	//
-	// Editor::new() asks the terminal for its fg/bg colours (OSC 10/11, via
-	// terminal-colorsaurus) to auto-pick a light/dark theme. colorsaurus tells
-	// query-capable terminals apart from the rest by also sending a DA1 request
-	// and assuming replies come back in order — a DA1 answer before the colour
-	// answers is read as "unsupported". Some terminals (e.g. Terax) answer DA1
-	// *first* despite fully supporting the colour query, so colorsaurus bails
-	// and the colour replies arrive late, landing in our stdin. crossterm then
-	// parses them as key input, typing the raw reply ("10;rgb:…11;rgb:…") into
-	// the buffer on the first frame. When the query failed, drain that leftover
-	// input. The replies come as one burst, so stopping after a brief quiet gap
-	// catches them without swallowing real keystrokes (nobody types this fast
-	// the instant the editor launches).
-	if editor.color_query_failed {
+	// When theme detection sends OSC 10/11 (via terminal-colorsaurus), some
+	// terminals answer DA1 before the colour replies. colorsaurus may then
+	// treat the terminal as unsupported while late replies still land in
+	// stdin; crossterm would parse them as typed keys. Drain whenever we
+	// attempted OSC — success or failure — stopping after a short quiet gap.
+	if editor.osc_attempted {
 		while event::poll(Duration::from_millis(20))? {
 			let _ = event::read()?;
 		}

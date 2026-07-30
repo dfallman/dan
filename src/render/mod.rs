@@ -3,7 +3,6 @@ pub mod chrome;
 pub mod text;
 
 use crossterm::{
-	cursor,
 	style::Color,
 	terminal,
 };
@@ -378,7 +377,7 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 		screen.term_cursor_x = cx;
 		screen.term_cursor_y = cy;
 		screen.hide_cursor = false;
-		screen.cursor_style = cursor::SetCursorStyle::BlinkingBlock;
+		screen.cursor_style = editor.config.terminal_cursor_style();
 	} else if matches!(editor.mode, Mode::ReplacingStep) {
 		// hide cursor during step evaluations specifically
 		screen.hide_cursor = true;
@@ -463,8 +462,7 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 		screen.term_cursor_y = screen_y;
 		screen.hide_cursor = false;
 
-		// Pico-style: always use a steady block cursor (like a normal text editor)
-		screen.cursor_style = cursor::SetCursorStyle::SteadyBlock;
+		screen.cursor_style = editor.config.terminal_cursor_style();
 	}
 
 	// -- Execution Front/Back Matrix Flush --

@@ -51,7 +51,7 @@ Dan uses familiar shortcuts out of the box — `Ctrl-C`/`V` to copy/paste, `Ctrl
 - **Crash Recovery**: Periodically checkpoints the active buffer to a hidden `.swp` file every 5 seconds using safe write patterns. Unplanned terminal disconnects or crashed sessions trigger automatic recovery prompts on the next open.
 - **Interactive Command Palette (`Ctrl-P`)**: A fuzzy-search overlay covering all editor actions, active buffers, and project workspace files to keep operations entirely on the home row.
 - **Multiple Buffers**: Concurrent support for multiple active buffers, indexed and managed via the command palette.
-- **Context-Aware Syntax Highlighting**: Powered by `syntect` with broad language grammar support. Queries the terminal background at startup to apply adaptive themes (OneHalfDark/OneHalfLight) automatically, with immediate toggling via `Ctrl-T`.
+- **Context-Aware Syntax Highlighting**: Powered by `syntect` with broad language grammar support. Auto-picks OneHalfDark/OneHalfLight from `COLORFGBG` or an OSC colour query when `theme = "default"`, with immediate toggling via `Ctrl-T`.
 - **Background Auto-Formatter (`Ctrl-L`)**: Pipes buffer contents to external formatters (Prettier, Rustfmt, Ruff) on a background thread. Formatted output is applied transactionally only if the buffer was not modified during execution.
 - **Fuzzy Search & Destructive Replace**: Instant buffer-wide searching with `Ctrl-F`, easily promoted to find-and-replace with `Ctrl-R`. Wrap the query in `/pattern/` for regex (case-sensitive; use `(?i)` for insensitive). Regex replace supports `$0`, `$1`, `$name`, and `$$`.
 - **Unicode & CJK Support**: Correct visual alignment, cell measurements, and cursor positioning for double-width characters and complex emoji.
@@ -262,6 +262,9 @@ scroll_off = 5              # Lines to keep visible above/below cursor (default:
 fast_scroll_steps = 10      # Lines jumped per fast-scroll keypress (default: 10)
 show_full_path = false      # Show full file path in toolbar (default: false)
 show_whitespace = false     # Show visible markers for spaces/tabs/EOL (default: false; toggle with Ctrl-R)
+cursor_style = "block"      # "block" | "line" | "underscore" (default: "block")
+cursor_blink = false        # Blink the terminal cursor (default: false)
+# cursor_color = "#FF8800"  # Optional; omit to leave the terminal cursor color alone
 
 # Editing
 auto_indent = true          # Match indentation of the previous line (default: true)
@@ -275,7 +278,7 @@ show_lang = true            # Show detected language in status bar (default: tru
 mouse = true                # Click, drag-select, wheel scroll (default: true)
 
 # Theme
-theme = "default"           # Syntax highlight theme; "default" auto-detects terminal background
+theme = "default"           # "default" = COLORFGBG then OSC auto-detect; or a syntect theme name
 comments_are_italics = true # Render comments in italics (default: true)
 ```
 
@@ -283,11 +286,51 @@ comments_are_italics = true # Render comments in italics (default: true)
 
 Dan automatically picks up `.editorconfig` files in the project tree. Tab width, line endings, and trailing-whitespace rules defined there take precedence over your global config, so Dan adapts to each project's style without manual adjustment.
 
+## Cursor
+
+The terminal cursor (document, prompts, and command palette) is configured with three keys:
+
+| Key | Values | Default |
+|-----|--------|---------|
+| `cursor_style` | `"block"`, `"line"`, `"underscore"` | `"block"` |
+| `cursor_blink` | `true` / `false` | `false` |
+| `cursor_color` | `#RGB` or `#RRGGBB` (optional) | unset |
+
+When `cursor_color` is omitted, Dan leaves your terminal's cursor color alone. When set, Dan applies it via OSC 12 at startup and restores the previous color on exit. Most modern emulators honor this; some (including older Terminal.app builds) may ignore it.
+
+Example — blinking orange bar:
+
+```toml
+cursor_style = "line"
+cursor_blink = true
+cursor_color = "#FF8800"
+```
+
+Save the file with normal Unix newlines (`\n`). Unusual line endings can make the whole config fail to parse; Dan then falls back to defaults and prints a warning.
+
 ## Themes
 
-When `theme = "default"`, Dan queries your terminal's background color at startup and picks `OneHalfDark` for dark terminals or `OneHalfLight` for light terminals. Toggle syntax highlighting on/off at any time with `Ctrl-T`.
+When `theme = "default"`, Dan picks `OneHalfDark` or `OneHalfLight` from your
+terminal background:
 
-To use a specific theme, set it in your config:
+1. **`COLORFGBG`** environment variable (no terminal I/O), if set and valid
+2. Otherwise an **OSC 10/11** colour query (via `terminal-colorsaurus`)
+3. Otherwise **dark** (`OneHalfDark`)
+
+If you set an explicit theme name (e.g. `theme = "DarkNeon"`), Dan skips the
+OSC query. Chrome colours still follow `COLORFGBG` when present, else dark.
+
+Toggle syntax highlighting on/off at any time with `Ctrl-T`.
+
+To force a light or dark syntax theme without auto-detect:
+
+```toml
+theme = "OneHalfLight"
+# or
+theme = "OneHalfDark"
+```
+
+To use a different specific theme:
 
 ```toml
 theme = "DarkNeon"

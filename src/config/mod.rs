@@ -49,6 +49,12 @@ pub struct Config {
 	pub end_of_line: Option<String>,
 	/// Enable terminal mouse capture (click, drag-select, wheel).
 	pub mouse: bool,
+	/// Terminal cursor shape: "block", "line", or "underscore".
+	pub cursor_style: String,
+	/// Whether the terminal cursor blinks.
+	pub cursor_blink: bool,
+	/// Optional cursor color as "#RRGGBB" or "#RGB". Invalid values are ignored at use time.
+	pub cursor_color: Option<String>,
 }
 
 impl Default for Config {
@@ -59,8 +65,8 @@ impl Default for Config {
 			line_numbers: true,
 			highlight_active: true,
 			scroll_off: 5,
-			// "default" triggers terminal-background auto-detect in Editor::new
-			// (OneHalfDark / OneHalfLight). Explicit theme names skip that.
+			// "default" auto-detects via COLORFGBG then OSC (OneHalfDark /
+			// OneHalfLight). Explicit theme names skip the OSC query.
 			theme: "default".to_string(),
 			wrap_lines: true,
 			syntax_highlight: true,
@@ -76,11 +82,33 @@ impl Default for Config {
 			trim_trailing_whitespace: None,
 			end_of_line: None,
 			mouse: true,
+			cursor_style: "block".to_string(),
+			cursor_blink: false,
+			cursor_color: None,
 		}
 	}
 }
 
 impl Config {
+	/// Map `cursor_style` + `cursor_blink` to a crossterm cursor style.
+	/// Unknown styles behave as `"block"`.
+	pub fn terminal_cursor_style(&self) -> crossterm::cursor::SetCursorStyle {
+		use crossterm::cursor::SetCursorStyle;
+		match (self.cursor_style.as_str(), self.cursor_blink) {
+			("line", false) => SetCursorStyle::SteadyBar,
+			("line", true) => SetCursorStyle::BlinkingBar,
+			("underscore", false) => SetCursorStyle::SteadyUnderScore,
+			("underscore", true) => SetCursorStyle::BlinkingUnderScore,
+			(_, false) => SetCursorStyle::SteadyBlock,
+			(_, true) => SetCursorStyle::BlinkingBlock,
+		}
+	}
+
+	/// Parsed RGB if `cursor_color` is a valid `#RGB` / `#RRGGBB` hex string.
+	pub fn cursor_color_rgb(&self) -> Option<[u8; 3]> {
+		self.cursor_color.as_deref().and_then(parse_cursor_color)
+	}
+
 	/// Load config from the default config path (~/.config/dan/config.toml).
 	pub fn load() -> Self {
 		let mut config = Self::default();
@@ -90,8 +118,18 @@ impl Config {
 					if cfg!(debug_assertions) {
 						eprintln!("[DEBUG] Config::load() read global config from: {}", path.display());
 					}
-					if let Ok(c) = toml::from_str(&content) {
-						config = c;
+					// Accept CRLF and bare-CR line endings. TOML requires `\n`;
+					// a pasted Cursor section with `\r` would otherwise fail the
+					// whole file and silently fall back to defaults.
+					let content = content.replace("\r\n", "\n").replace('\r', "\n");
+					match toml::from_str(&content) {
+						Ok(c) => config = c,
+						Err(e) => {
+							eprintln!(
+								"dan: could not parse {}: {e}\nUsing defaults.",
+								path.display()
+							);
+						}
 					}
 				}
 			}
@@ -170,6 +208,28 @@ fn collect_editorconfigs(query_path: &std::path::Path) -> Vec<EditorConfig> {
 	found
 }
 
+/// Parse `#RGB` or `#RRGGBB` (case-insensitive). Other forms return `None`.
+pub(crate) fn parse_cursor_color(raw: &str) -> Option<[u8; 3]> {
+	let s = raw.strip_prefix('#')?;
+	let expand = |nibble: u8| (nibble << 4) | nibble;
+	match s.len() {
+		3 => {
+			let mut bytes = [0u8; 3];
+			for (i, ch) in s.chars().enumerate() {
+				bytes[i] = expand(ch.to_digit(16)? as u8);
+			}
+			Some(bytes)
+		}
+		6 => {
+			let r = u8::from_str_radix(&s[0..2], 16).ok()?;
+			let g = u8::from_str_radix(&s[2..4], 16).ok()?;
+			let b = u8::from_str_radix(&s[4..6], 16).ok()?;
+			Some([r, g, b])
+		}
+		_ => None,
+	}
+}
+
 /// Get the config file path.
 fn config_path() -> Option<PathBuf> {
 	let preferred = dirs::home_dir().map(|d| d.join(".config").join("dan").join("config.toml"));
@@ -185,6 +245,92 @@ fn config_path() -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	use crossterm::cursor::SetCursorStyle;
+
+	#[test]
+	fn cursor_defaults() {
+		let c = Config::default();
+		assert_eq!(c.cursor_style, "block");
+		assert!(!c.cursor_blink);
+		assert_eq!(c.cursor_color, None);
+		assert_eq!(c.terminal_cursor_style(), SetCursorStyle::SteadyBlock);
+		assert_eq!(c.cursor_color_rgb(), None);
+	}
+
+	#[test]
+	fn cursor_style_and_blink_from_toml() {
+		let c: Config = toml::from_str(
+			r#"
+			cursor_style = "line"
+			cursor_blink = true
+			"#,
+		)
+		.unwrap();
+		assert_eq!(c.cursor_style, "line");
+		assert!(c.cursor_blink);
+		assert_eq!(c.terminal_cursor_style(), SetCursorStyle::BlinkingBar);
+	}
+
+	#[test]
+	fn terminal_cursor_style_mapping_table() {
+		let cases = [
+			("block", false, SetCursorStyle::SteadyBlock),
+			("block", true, SetCursorStyle::BlinkingBlock),
+			("line", false, SetCursorStyle::SteadyBar),
+			("line", true, SetCursorStyle::BlinkingBar),
+			("underscore", false, SetCursorStyle::SteadyUnderScore),
+			("underscore", true, SetCursorStyle::BlinkingUnderScore),
+			("nope", false, SetCursorStyle::SteadyBlock),
+			("nope", true, SetCursorStyle::BlinkingBlock),
+		];
+		for (style, blink, expected) in cases {
+			let c = Config {
+				cursor_style: style.to_string(),
+				cursor_blink: blink,
+				..Config::default()
+			};
+			assert_eq!(
+				c.terminal_cursor_style(),
+				expected,
+				"style={style:?} blink={blink}"
+			);
+		}
+	}
+
+	#[test]
+	fn cursor_color_hex_parsing() {
+		assert_eq!(parse_cursor_color("#FF8800"), Some([0xff, 0x88, 0x00]));
+		assert_eq!(parse_cursor_color("#f80"), Some([0xff, 0x88, 0x00]));
+		assert_eq!(parse_cursor_color("#AbCdEf"), Some([0xab, 0xcd, 0xef]));
+		assert_eq!(parse_cursor_color(""), None);
+		assert_eq!(parse_cursor_color("FF8800"), None);
+		assert_eq!(parse_cursor_color("#gg0000"), None);
+		assert_eq!(parse_cursor_color("#12345"), None);
+		assert_eq!(parse_cursor_color("rgb(255,0,0)"), None);
+
+		let c: Config = toml::from_str(r##"cursor_color = "#0af""##).unwrap();
+		assert_eq!(c.cursor_color.as_deref(), Some("#0af"));
+		assert_eq!(c.cursor_color_rgb(), Some([0x00, 0xaa, 0xff]));
+
+		let bad: Config = toml::from_str(r#"cursor_color = "nope""#).unwrap();
+		assert_eq!(bad.cursor_color_rgb(), None);
+	}
+
+	#[test]
+	fn toml_with_bare_cr_line_endings_parses_after_normalize() {
+		// Mimic a pasted Cursor section that used CR instead of LF.
+		let raw = "cursor_style = \"line\"\rcursor_blink = true\rcursor_color = \"#FF8800\"\n";
+		assert!(
+			toml::from_str::<Config>(raw).is_err(),
+			"bare CR must be invalid TOML without normalization"
+		);
+		let normalized = raw.replace("\r\n", "\n").replace('\r', "\n");
+		let c: Config = toml::from_str(&normalized).unwrap();
+		assert_eq!(c.cursor_style, "line");
+		assert!(c.cursor_blink);
+		assert_eq!(c.cursor_color_rgb(), Some([0xff, 0x88, 0x00]));
+	}
 
 	#[test]
 	fn mouse_defaults_to_true() {
