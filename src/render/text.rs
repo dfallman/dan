@@ -1,7 +1,7 @@
 use crossterm::style::Color;
 
 use super::Viewport;
-use crate::editor::viewport::visual_row_start_char;
+use crate::editor::layout::{self, WrapOptions};
 use crate::editor::Editor;
 use crate::syntax::LineHighlighter;
 use crate::utils::char_width;
@@ -102,6 +102,9 @@ pub fn render_wrap(
 		|line_idx| editor.buffer().text.line(line_idx),
 	);
 
+	let tab_w = editor.tab_width();
+	let opts = WrapOptions::new(tab_w, text_area_width).with_breakindent(editor.config.breakindent);
+
 	while screen_row < text_height && buf_line < line_count {
 		let is_active = highlight_active && buf_line == cursor_line;
 		let base_bg = if is_active {
@@ -109,7 +112,7 @@ pub fn render_wrap(
 		} else {
 			Color::Reset
 		};
-		let skip_lines = if buf_line == editor.buffer().scroll_y {
+		let skip_rows = if buf_line == editor.buffer().scroll_y {
 			editor.buffer().scroll_vrow
 		} else {
 			0
@@ -117,25 +120,23 @@ pub fn render_wrap(
 
 		let line_text = editor.buffer().text.line(buf_line);
 		let line_start_pos = editor.buffer().text.line_to_char(buf_line);
-		let tab_w = editor.tab_width();
 		let syn_colors = syntax_colors_for_line(editor, &mut hi, buf_line, &line_text);
-
-		// Jump past scrolled-off visual rows instead of walking every char
-		// with a skip counter (O(line length) per frame while scrolling a
-		// long soft-wrapped line).
-		let start_char = if skip_lines > 0 {
-			visual_row_start_char(line_text.chars(), tab_w, text_area_width, skip_lines)
+		let rows = layout::visual_rows(&line_text, opts);
+		let cont_indent = if opts.breakindent {
+			layout::leading_indent_width(&line_text, tab_w).min(text_area_width.saturating_sub(1))
 		} else {
 			0
 		};
-		let mut char_idx: usize = start_char;
-		let mut screen_col: usize = 0;
 
-		{
+		for (vrow_idx, &(row_start, row_end)) in rows.iter().enumerate().skip(skip_rows) {
+			if screen_row >= text_height {
+				break;
+			}
+
 			screen.mov_to(0, screen_row as u16);
 			screen.clear_attrs();
 			if show_line_numbers {
-				let gutter = if skip_lines == 0 {
+				let gutter = if vrow_idx == 0 {
 					format!("{:>width$} ", buf_line + 1, width = gutter_width)
 				} else {
 					format!("{:>width$} ", "↳", width = gutter_width)
@@ -148,52 +149,29 @@ pub fn render_wrap(
 				});
 				screen.put_str(&gutter);
 			}
-		}
 
-		for ch in line_text.chars().skip(start_char) {
-			if ch == '\n' || ch == '\r' {
-				char_idx += 1;
-				continue;
+			let mut screen_col: usize = 0;
+			if vrow_idx > 0 && cont_indent > 0 {
+				screen.set_bg(base_bg);
+				screen.clear_attrs();
+				for _ in 0..cont_indent {
+					screen.put_char(' ');
+				}
+				screen_col = cont_indent;
 			}
 
-			// Use screen_col (within the visual row) for tab stops — matches
-			// `visual_rows_for` / `visual_row_start_char`.
-			let ch_w = if ch == '\t' {
-				tab_w - (screen_col % tab_w)
-			} else {
-				char_width(ch, tab_w)
-			};
-
-			if screen_col + ch_w > text_area_width {
-				let remaining = text_area_width.saturating_sub(screen_col);
-				if remaining > 0 {
-					screen.set_bg(base_bg);
-					screen.clear_attrs();
-					for _ in 0..remaining {
-						screen.put_char(' ');
-					}
-				}
-				screen_row += 1;
-				if screen_row >= text_height {
+			let mut char_idx = row_start;
+			for ch in line_text.chars().skip(row_start) {
+				if char_idx >= row_end {
 					break;
 				}
-				screen_col = 0;
-
-				screen.mov_to(0, screen_row as u16);
-				screen.clear_attrs();
-				if show_line_numbers {
-					let wrap_gutter = format!("{:>width$} ", "↳", width = gutter_width);
-					screen.set_bg(base_bg);
-					screen.set_fg(if buf_line == cursor_line {
-						editor.theme.line_nr_active
-					} else {
-						editor.theme.line_nr
-					});
-					screen.put_str(&wrap_gutter);
+				if ch == '\n' || ch == '\r' {
+					char_idx += 1;
+					continue;
 				}
-			}
 
-			{
+				let ch_w = layout::char_display_width(ch, screen_col, tab_w);
+
 				let char_pos = line_start_pos + char_idx;
 				let want_sel = if let Some((sel_start, sel_end)) = sel_range {
 					char_pos >= sel_start && char_pos < sel_end
@@ -249,45 +227,49 @@ pub fn render_wrap(
 				}
 
 				if ch == '\t' {
-					// First cell: render the tab marker (→ or space).
 					screen.put_char(display_ch);
-					// Remaining cells: pad with · or space.
-					let pad_ch = if editor.config.show_whitespace { '·' } else { ' ' };
+					let pad_ch = if editor.config.show_whitespace {
+						'·'
+					} else {
+						' '
+					};
 					for _ in 1..ch_w {
 						screen.put_char(pad_ch);
 					}
 				} else {
 					screen.put_char(display_ch);
 				}
+
+				screen_col += ch_w;
+				char_idx += 1;
 			}
 
-			screen_col += ch_w;
-			char_idx += 1;
-		}
-
-		{
-			let cols_used = gutter_width + 1 + screen_col;
-			let remaining = (vp.width as usize).saturating_sub(cols_used);
-			if remaining > 0 {
-				screen.set_bg(base_bg);
-				screen.clear_attrs();
-				// EOL marker: emit ↵ before padding when show_whitespace is on.
-				if editor.config.show_whitespace {
-					screen.set_fg(editor.theme.line_nr);
-					screen.put_char('↵');
-				}
-				screen.set_fg(Color::Reset);
-				let pad_remaining = if editor.config.show_whitespace {
-					remaining.saturating_sub(1)
-				} else {
-					remaining
-				};
-				for _ in 0..pad_remaining {
-					screen.put_char(' ');
+			{
+				let cols_used = gutter_width + 1 + screen_col;
+				let remaining = (vp.width as usize).saturating_sub(cols_used);
+				if remaining > 0 {
+					screen.set_bg(base_bg);
+					screen.clear_attrs();
+					let is_last_vrow = vrow_idx + 1 == rows.len();
+					if is_last_vrow && editor.config.show_whitespace {
+						screen.set_fg(editor.theme.line_nr);
+						screen.put_char('↵');
+						screen.set_fg(Color::Reset);
+						for _ in 0..remaining.saturating_sub(1) {
+							screen.put_char(' ');
+						}
+					} else {
+						screen.set_fg(Color::Reset);
+						for _ in 0..remaining {
+							screen.put_char(' ');
+						}
+					}
 				}
 			}
+
 			screen_row += 1;
 		}
+
 		buf_line += 1;
 	}
 

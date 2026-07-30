@@ -8,6 +8,8 @@ pub enum Command {
 	MoveDown,
 	MoveLineStart,
 	MoveLineEnd,
+	MoveLogicalLineStart,
+	MoveLogicalLineEnd,
 	MoveWordForward,
 	MoveWordBackward,
 	SwapLineUp,
@@ -30,6 +32,8 @@ pub enum Command {
 	SelectWordBackward,
 	SelectLineStart,
 	SelectLineEnd,
+	SelectLogicalLineStart,
+	SelectLogicalLineEnd,
 	SelectAll,
 
 	// -- Mouse --

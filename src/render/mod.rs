@@ -8,8 +8,8 @@ use crossterm::{
 };
 use std::io::{self, Write};
 
+use crate::editor::layout;
 use crate::editor::mode::Mode;
-use crate::editor::viewport::{visual_row_count, visual_row_for_col};
 use crate::editor::Editor;
 use crate::utils::char_width;
 
@@ -104,16 +104,12 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 			0
 		};
 		let taw_tmp = (vp.width as usize).saturating_sub(gw_tmp + 1);
-		let tab_w = editor.tab_width();
 		if taw_tmp > 0 {
+			let opts = editor.wrap_opts();
 			// Find which visual row the cursor is on within its buffer line.
 			let cursor_col = editor.buffer().cursors.cursor().col;
-			let (cur_vrow_idx, _) = visual_row_for_col(
-				editor.buffer().text.line_slice(cursor_line).chars(),
-				tab_w,
-				taw_tmp,
-				cursor_col,
-			);
+			let cur_line_text = editor.buffer().text.line(cursor_line);
+			let (cur_vrow_idx, _) = layout::logical_to_visual(&cur_line_text, opts, cursor_col);
 
 			// --- Scroll UP: ensure scroll_off visual rows above the cursor ---
 			// Clamp both scroll_y and scroll_vrow so the viewport never starts below the cursor.
@@ -136,11 +132,7 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 					if let Some(&n) = cache.get(&bl) {
 						return n;
 					}
-					let n = visual_row_count(
-						editor.buffer().text.line_slice(bl).chars(),
-						tab_w,
-						taw_tmp,
-					);
+					let n = layout::visual_height(&editor.buffer().text.line(bl), opts);
 					cache.insert(bl, n);
 					n
 				};
@@ -387,21 +379,17 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 		let tab_w = editor.tab_width();
 
 		let (screen_y, visual_col) = if editor.config.wrap_lines && text_area_width > 0 {
-			// Wrap mode: screen_y must count visual rows, visual_col is
-			// relative to the start of the cursor's visual row.
+			let opts = editor.wrap_opts();
+			// Wrap mode: screen_y counts visual rows; visual_col includes
+			// breakindent offset on continuation rows.
 			let mut sy: usize = 0;
 			for bl in editor.buffer().scroll_y..cursor_pos.line.min(line_count) {
-				sy += visual_row_count(
-					editor.buffer().text.line_slice(bl).chars(),
-					tab_w,
-					text_area_width,
-				);
+				sy += layout::visual_height(&editor.buffer().text.line(bl), opts);
 			}
-			let (vrow_idx, vrow_start) = if cursor_pos.line < line_count {
-				visual_row_for_col(
-					editor.buffer().text.line_slice(cursor_pos.line).chars(),
-					tab_w,
-					text_area_width,
+			let (vrow_idx, vc) = if cursor_pos.line < line_count {
+				layout::logical_to_visual(
+					&editor.buffer().text.line(cursor_pos.line),
+					opts,
 					cursor_pos.col,
 				)
 			} else {
@@ -409,28 +397,6 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 			};
 			sy += vrow_idx;
 			sy = sy.saturating_sub(editor.buffer().scroll_vrow);
-
-			// Compute visual column from the visual row's start char.
-			let vc = if cursor_pos.line < line_count {
-				let line_slice = editor.buffer().text.line_slice(cursor_pos.line);
-				let mut v: usize = 0;
-				for (i, ch) in line_slice.chars().enumerate() {
-					if i < vrow_start {
-						continue;
-					}
-					if i >= cursor_pos.col {
-						break;
-					}
-					if ch == '\t' {
-						v += tab_w - (v % tab_w);
-					} else {
-						v += char_width(ch, tab_w);
-					}
-				}
-				v
-			} else {
-				cursor_pos.col
-			};
 			(sy, vc)
 		} else {
 			// No-wrap mode: 1 buffer line = 1 screen row.

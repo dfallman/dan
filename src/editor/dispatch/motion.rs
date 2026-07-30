@@ -23,20 +23,22 @@ impl Editor {
 	}
 
 	pub(crate) fn cmd_move_line_start(&mut self) {
-		self.buffer_mut().cursors.primary_mut().head.set_col(0);
+		self.move_visual_or_line_home();
 		self.clear_selection();
 	}
 
 	pub(crate) fn cmd_move_line_end(&mut self) {
-		let c = self.buffer().cursors.cursor();
-		let len = self.line_len_no_newline(c.line);
-		self.buffer_mut().cursors.primary_mut().head.set_col(len);
-		self.buffer_mut().cursors.primary_mut().head.desired_vcol =
-			crate::editor::visual_col::visual_col_at(
-				self.buffer().text.line_slice(c.line).chars(),
-				len,
-				self.tab_width(),
-			);
+		self.move_visual_or_line_end();
+		self.clear_selection();
+	}
+
+	pub(crate) fn cmd_move_logical_line_start(&mut self) {
+		self.move_logical_line_start();
+		self.clear_selection();
+	}
+
+	pub(crate) fn cmd_move_logical_line_end(&mut self) {
+		self.move_logical_line_end();
 		self.clear_selection();
 	}
 
@@ -100,16 +102,19 @@ impl Editor {
 
 	pub(crate) fn cmd_scroll_viewport_up(&mut self) {
 		let keep_sel = self.has_selection();
-		let new_scroll_y = self.buffer().scroll_y.saturating_sub(1);
-		self.buffer_mut().scroll_y = new_scroll_y;
+		if self.config.wrap_lines && self.text_area_width() > 0 {
+			self.scroll_visual_rows_up(1);
+		} else {
+			let new_scroll_y = self.buffer().scroll_y.saturating_sub(1);
+			self.buffer_mut().scroll_y = new_scroll_y;
+		}
 		// While a selection is active, leave the cursor (selection head) alone so
 		// wheel / Ctrl+↑ scroll can pan without collapsing or reshaping the range.
 		if !keep_sel {
 			let visible_height = self.terminal_height.saturating_sub(2) as usize;
 			let cursor_line = self.buffer().cursors.cursor().line;
-			// Maintain VSCode-style viewport tether: push cursor back up if it would fall out of the bottom bound
 			if cursor_line
-				>= self.buffer_mut().scroll_y + visible_height.saturating_sub(self.config.scroll_off)
+				>= self.buffer().scroll_y + visible_height.saturating_sub(self.config.scroll_off)
 			{
 				self.move_cursor_vertical(-1);
 			}
@@ -119,14 +124,53 @@ impl Editor {
 
 	pub(crate) fn cmd_scroll_viewport_down(&mut self) {
 		let keep_sel = self.has_selection();
-		self.buffer_mut().scroll_y += 1;
+		if self.config.wrap_lines && self.text_area_width() > 0 {
+			self.scroll_visual_rows_down(1);
+		} else {
+			self.buffer_mut().scroll_y += 1;
+		}
 		if !keep_sel {
 			let cursor_line = self.buffer().cursors.cursor().line;
-			// Maintain VSCode-style viewport tether: pull cursor down if it would fall out of the top bound
-			if cursor_line < self.buffer_mut().scroll_y + self.config.scroll_off {
+			if cursor_line < self.buffer().scroll_y + self.config.scroll_off {
 				self.move_cursor_vertical(1);
 			}
 			self.clear_selection();
+		}
+	}
+
+	/// Scroll the viewport up by `n` visual rows (wrap mode).
+	fn scroll_visual_rows_up(&mut self, n: usize) {
+		for _ in 0..n {
+			if self.buffer().scroll_vrow > 0 {
+				self.buffer_mut().scroll_vrow -= 1;
+			} else if self.buffer().scroll_y > 0 {
+				self.buffer_mut().scroll_y -= 1;
+				let y = self.buffer().scroll_y;
+				let h = self.cached_visual_height(y);
+				self.buffer_mut().scroll_vrow = h.saturating_sub(1);
+			} else {
+				break;
+			}
+		}
+	}
+
+	/// Scroll the viewport down by `n` visual rows (wrap mode).
+	fn scroll_visual_rows_down(&mut self, n: usize) {
+		let line_count = self.buffer().line_count();
+		for _ in 0..n {
+			let y = self.buffer().scroll_y;
+			if y >= line_count {
+				break;
+			}
+			let h = self.cached_visual_height(y);
+			if self.buffer().scroll_vrow + 1 < h {
+				self.buffer_mut().scroll_vrow += 1;
+			} else if y + 1 < line_count {
+				self.buffer_mut().scroll_y += 1;
+				self.buffer_mut().scroll_vrow = 0;
+			} else {
+				break;
+			}
 		}
 	}
 
@@ -176,21 +220,22 @@ impl Editor {
 
 	pub(crate) fn cmd_select_line_start(&mut self) {
 		self.begin_selection_if_needed();
-		self.buffer_mut().cursors.primary_mut().head.set_col(0);
+		self.move_visual_or_line_home();
 	}
 
 	pub(crate) fn cmd_select_line_end(&mut self) {
 		self.begin_selection_if_needed();
-		let c = self.buffer().cursors.cursor();
-		let len = self.line_len_no_newline(c.line);
-		let tab_w = self.tab_width();
-		let vcol = crate::editor::visual_col::visual_col_at(
-			self.buffer().text.line_slice(c.line).chars(),
-			len,
-			tab_w,
-		);
-		self.buffer_mut().cursors.primary_mut().head.set_col(len);
-		self.buffer_mut().cursors.primary_mut().head.desired_vcol = vcol;
+		self.move_visual_or_line_end();
+	}
+
+	pub(crate) fn cmd_select_logical_line_start(&mut self) {
+		self.begin_selection_if_needed();
+		self.move_logical_line_start();
+	}
+
+	pub(crate) fn cmd_select_logical_line_end(&mut self) {
+		self.begin_selection_if_needed();
+		self.move_logical_line_end();
 	}
 
 	pub(crate) fn cmd_select_all(&mut self) {

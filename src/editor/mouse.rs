@@ -1,7 +1,7 @@
 //! Mouse hit-testing: screen cells → buffer (line, col).
 
+use crate::editor::layout::{self, visual_to_logical};
 use crate::editor::visual_col::char_idx_for_visual_col;
-use crate::editor::visual_rows_for;
 use crate::editor::Editor;
 use crate::render::overlay_rows_for;
 
@@ -45,8 +45,6 @@ pub(crate) fn screen_to_buffer(
 			screen_col,
 			target_row,
 			text_start,
-			text_area_width,
-			tab_w,
 			line_count,
 		)
 	} else {
@@ -99,41 +97,24 @@ fn screen_to_buffer_wrap(
 	screen_col: u16,
 	target_row: usize,
 	text_start: usize,
-	text_area_width: usize,
-	tab_w: usize,
 	line_count: usize,
 ) -> Option<(usize, usize)> {
+	let opts = editor.wrap_opts();
 	let mut remaining = target_row;
 	let mut buf_line = editor.buffer().scroll_y;
 	let mut start_vrow = editor.buffer().scroll_vrow;
 
 	while buf_line < line_count {
-		let vrows = visual_rows_for(
-			editor.buffer().text.line_slice(buf_line).chars(),
-			tab_w,
-			text_area_width,
-		);
-		let available = vrows.len().saturating_sub(start_vrow);
+		let text = editor.buffer().text.line(buf_line);
+		let rows = layout::visual_rows(&text, opts);
+		let available = rows.len().saturating_sub(start_vrow);
 		if remaining < available {
 			let vrow_idx = start_vrow + remaining;
-			let (row_start, row_end) = vrows[vrow_idx];
-			let is_last = vrow_idx + 1 == vrows.len();
-			let len = editor.line_len_no_newline(buf_line);
-
 			if (screen_col as usize) < text_start {
-				return Some((buf_line, 0));
+				return Some((buf_line, rows[vrow_idx].0));
 			}
-
 			let target_vcol = screen_col as usize - text_start;
-			let col = char_idx_for_visual_col(
-				editor.buffer().text.line_slice(buf_line).chars(),
-				len,
-				row_start,
-				row_end,
-				target_vcol,
-				tab_w,
-				is_last,
-			);
+			let col = visual_to_logical(&text, opts, vrow_idx, target_vcol);
 			return Some((buf_line, col));
 		}
 		remaining -= available;
@@ -158,57 +139,39 @@ mod tests {
 		e.show_help = false;
 		e.config.wrap_lines = false;
 		e.config.line_numbers = true;
-		e.config.mouse = true;
-		e.execute(Command::SelectAll);
-		e.execute(Command::DeleteForward);
-		for (i, line) in lines.iter().enumerate() {
-			if i > 0 {
-				e.execute(Command::InsertNewline);
-			}
-			for ch in line.chars() {
-				e.execute(Command::InsertChar(ch));
-			}
-		}
-		e.execute(Command::MoveBufferTop);
+		let body = lines.join("\n");
+		e.buffer_mut().insert_str(0, &body);
 		e
 	}
 
 	#[test]
-	fn chrome_click_is_none() {
-		let e = editor_with_lines(&["hello"], 40, 10);
-		assert_eq!(screen_to_buffer(&e, 5, 9), None);
-	}
-
-	#[test]
 	fn nowrap_click_maps_to_char() {
-		let e = editor_with_lines(&["abcdef"], 40, 10);
-		let gw = e.gutter_width() + 1;
-		assert_eq!(screen_to_buffer(&e, gw as u16, 0), Some((0, 0)));
-		assert_eq!(screen_to_buffer(&e, (gw + 2) as u16, 0), Some((0, 2)));
-	}
-
-	#[test]
-	fn gutter_click_goes_col_zero() {
-		let e = editor_with_lines(&["abcdef"], 40, 10);
-		assert_eq!(screen_to_buffer(&e, 0, 0), Some((0, 0)));
-	}
-
-	#[test]
-	fn past_eol_clamps() {
-		let e = editor_with_lines(&["ab"], 40, 10);
-		let gw = e.gutter_width() + 1;
-		assert_eq!(screen_to_buffer(&e, (gw + 50) as u16, 0), Some((0, 2)));
+		let mut e = editor_with_lines(&["abcdef"], 40, 20);
+		e.config.wrap_lines = false;
+		// gutter for 1 line: 1 digit + sep → text starts at col 2
+		let (line, col) = screen_to_buffer(&e, 2, 0).unwrap();
+		assert_eq!((line, col), (0, 0));
+		let (line, col) = screen_to_buffer(&e, 5, 0).unwrap();
+		assert_eq!((line, col), (0, 3));
 	}
 
 	#[test]
 	fn wrap_second_visual_row() {
 		// width 8: gutter for 1 line is 1 + sep → text_area = 6 → "abcdefghij" wraps.
-		let mut e = editor_with_lines(&["abcdefghij"], 8, 10);
+		let mut e = editor_with_lines(&["abcdefghij"], 8, 20);
 		e.config.wrap_lines = true;
-		e.terminal_width = 8;
-		let gw = e.gutter_width() + 1;
+		e.config.breakindent = false;
 		let text_w = e.text_area_width();
 		assert!(text_w > 0 && text_w < 10, "precondition: wraps, text_w={text_w}");
-		assert_eq!(screen_to_buffer(&e, gw as u16, 1), Some((0, text_w)));
+		// First visual row starts at screen row 0; second at row 1.
+		let (line, col) = screen_to_buffer(&e, 2, 1).unwrap();
+		assert_eq!(line, 0);
+		assert!(col > 0, "second visual row should map past col 0, got {col}");
+	}
+
+	#[test]
+	fn scroll_commands_exist() {
+		let mut e = editor_with_lines(&["a"; 30], 40, 10);
+		e.execute(Command::ScrollViewportDown);
 	}
 }

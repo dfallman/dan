@@ -8,10 +8,10 @@ pub(crate) mod mouse;
 mod navigation;
 mod search;
 mod selection;
+pub(crate) mod layout;
+mod softwrap_tests;
 pub(crate) mod viewport;
 pub(crate) mod visual_col;
-
-pub(crate) use viewport::visual_rows_for;
 
 use crate::buffer::Buffer;
 use crate::config::Config;
@@ -115,6 +115,8 @@ pub struct Editor {
 	/// can leave the selection head off-screen. Cleared by any non-pan
 	/// command (including Shift+arrow selection, which must follow the head).
 	pub pin_viewport: bool,
+	/// Soft-wrap layout cache (invalidated on resize / wrap toggle / edits).
+	pub(crate) wrap_cache: crate::editor::layout::WrapCache,
 	/// None = not in a quit cycle; Some(i) = currently prompting buffer i.
 	pub quit_cycle_idx: Option<usize>,
 	/// Command palette state (query, items, filter, selection).
@@ -267,6 +269,7 @@ impl Editor {
 			locale: Box::new(crate::ui::i18n::EnglishLocale),
 			last_edit_action: crate::editor::commands::EditAction::Other,
 			pin_viewport: false,
+			wrap_cache: crate::editor::layout::WrapCache::default(),
 			quit_cycle_idx: None,
 			palette: crate::palette::PaletteState::new(),
 			recent_files: crate::palette::index::load_recent_files().into_iter().collect(),
@@ -915,6 +918,8 @@ impl Editor {
 	pub fn handle_resize(&mut self, width: u16, height: u16) {
 		self.terminal_width = width;
 		self.terminal_height = height;
+		self.wrap_cache.clear();
+		// Scroll-to-cursor on the next render re-clamps so the cursor stays visible.
 	}
 
 	/// Remove buffer at `idx`. If the closed buffer was active, picks the

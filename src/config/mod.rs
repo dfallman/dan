@@ -20,6 +20,8 @@ pub struct Config {
 	pub theme: String,
 	/// Wrap long lines (true) or scroll horizontally (false).
 	pub wrap_lines: bool,
+	/// Indent soft-wrapped continuation rows to match leading indentation.
+	pub breakindent: bool,
 	/// Enable syntax highlighting (requires a file with a known extension).
 	#[serde(alias = "syntax_highlighting")]
 	pub syntax_highlight: bool,
@@ -69,6 +71,7 @@ impl Default for Config {
 			// OneHalfLight). Explicit theme names skip the OSC query.
 			theme: "default".to_string(),
 			wrap_lines: true,
+			breakindent: false,
 			syntax_highlight: true,
 			auto_indent: true,
 			show_help: true,

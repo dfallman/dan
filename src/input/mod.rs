@@ -168,6 +168,27 @@ fn map_key(key: &KeyEvent) -> Command {
 	let shift = key.modifiers.contains(KeyModifiers::SHIFT);
 	let alt = key.modifiers.contains(KeyModifiers::ALT);
 
+	// -- Ctrl+Alt: logical line Home/End (before Ctrl+Shift so Shift variants work) --
+	if ctrl && alt {
+		return match key.code {
+			KeyCode::Home => {
+				if shift {
+					Command::SelectLogicalLineStart
+				} else {
+					Command::MoveLogicalLineStart
+				}
+			}
+			KeyCode::End => {
+				if shift {
+					Command::SelectLogicalLineEnd
+				} else {
+					Command::MoveLogicalLineEnd
+				}
+			}
+			_ => Command::Noop,
+		};
+	}
+
 	// -- Ctrl+Shift shortcuts --
 	if ctrl && shift {
 		return match key.code {
@@ -425,6 +446,30 @@ mod tests {
 			("ctrl+down", key(KeyCode::Down, M::CONTROL), Mode::Editing, Command::ScrollViewportDown),
 			("ctrl+home", key(KeyCode::Home, M::CONTROL), Mode::Editing, Command::MoveBufferTop),
 			("ctrl+end", key(KeyCode::End, M::CONTROL), Mode::Editing, Command::MoveBufferBottom),
+			(
+				"ctrl+alt+home",
+				key(KeyCode::Home, M::CONTROL | M::ALT),
+				Mode::Editing,
+				Command::MoveLogicalLineStart,
+			),
+			(
+				"ctrl+alt+end",
+				key(KeyCode::End, M::CONTROL | M::ALT),
+				Mode::Editing,
+				Command::MoveLogicalLineEnd,
+			),
+			(
+				"ctrl+alt+shift+home",
+				key(KeyCode::Home, M::CONTROL | M::ALT | M::SHIFT),
+				Mode::Editing,
+				Command::SelectLogicalLineStart,
+			),
+			(
+				"ctrl+alt+shift+end",
+				key(KeyCode::End, M::CONTROL | M::ALT | M::SHIFT),
+				Mode::Editing,
+				Command::SelectLogicalLineEnd,
+			),
 			("ctrl+k", key(KeyCode::Char('k'), M::CONTROL), Mode::Editing, Command::DeleteLine),
 			("ctrl+d", key(KeyCode::Char('d'), M::CONTROL), Mode::Editing, Command::DuplicateLineOrSelection),
 			("ctrl+r whitespace", key(KeyCode::Char('r'), M::CONTROL), Mode::Editing, Command::ToggleWhitespace),

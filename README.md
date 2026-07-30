@@ -17,12 +17,12 @@ Dan is a blazingly fast, modeless, lightweight multi-platform terminal text edit
 | --- | --- | --- | --- | --- |
 | Modeless | ✅ | ❌ | ✅ | ✅ |
 | Rust-based | ✅ | ❌ | ❌ | ✅ |
-| Atomic Saves | ✅ (fsync/rename) | ⚠️ (Configurable) | ❌ | ❌ |
-| Buffer Architecture | Rope $O(\log N)$ | Gap buffer/Piece table | Flat string | Gap buffer |
+| Atomic saves | ✅ (fsync/rename) | ⚠️ (Configurable) | ❌ | ❌ |
+| Buffer architecture | Rope $O(\log N)$ | Gap buffer/Piece table | Flat string | Gap buffer |
 | Rendering | Differential | Full/partial redraw | Full redraw | Full redraw |
-| Crash Recovery | ✅ Auto-swap | ✅ Swap files | ❌ | ❌ |
-| Command Palette | ✅ | ❌ (Cmd line) | ❌ | ❌ |
-| Out-of-box Config | Zero-config | High learning curve | Minimal | Minimal |
+| Crash recovery | ✅ Auto-swap | ✅ Swap files | ❌ | ❌ |
+| Command palette | ✅ | ❌ (Cmd line) | ❌ | ❌ |
+| Out-of-box config | Zero-config | High learning curve | Minimal | Minimal |
 
 
 ## Quick install
@@ -45,21 +45,21 @@ For more installation options, see [Installation](#installation).
 
 Dan uses familiar shortcuts out of the box — `Ctrl-C`/`V` to copy/paste, `Ctrl-S` to save, `Ctrl-Z`/`Y` to undo/redo, `Ctrl-Q` to quit. Press `Ctrl-H` to toggle the built-in help bar at any time. Mouse is enabled by default: click to place the cursor, drag to select, and use the scroll wheel to move the viewport (set `mouse = false` to disable).
 
-- **Rope-Backed Text Buffer**: Utilizes a rope structure ensuring $O(\\log N)$ time complexity for insertions and deletions. Memory usage scales with edit volume rather than raw file size, permitting fluid, non-blocking navigation and manipulation of 100MB+ log files.
-- **Optimized Terminal I/O & Differential Rendering**: Implements differential rendering to minimize bandwidth by emitting ANSI escape sequences strictly for modified cells. To sustain $O(1)$ scroll performance in massive files, `dan` maintains a syntax snapshot cache every 200 lines, eliminating the need to re-lex the entire visible range during rapid vertical movement.
-- **POSIX-Compliant Atomic Writes (Crash-Safe I/O)**: File writes are executed via a temporary sibling file, followed by an `fsync` and atomic `rename`. A system crash or disk-full condition mid-save leaves the original file intact, preserving original file permissions and symlink targets.
-- **Crash Recovery**: Periodically checkpoints the active buffer to a hidden `.swp` file every 5 seconds using safe write patterns. Unplanned terminal disconnects or crashed sessions trigger automatic recovery prompts on the next open.
-- **Interactive Command Palette (`Ctrl-P`)**: A fuzzy-search overlay covering all editor actions, active buffers, and project workspace files to keep operations entirely on the home row.
-- **Multiple Buffers**: Concurrent support for multiple active buffers, indexed and managed via the command palette.
-- **Context-Aware Syntax Highlighting**: Powered by `syntect` with broad language grammar support. Auto-picks OneHalfDark/OneHalfLight from `COLORFGBG` or an OSC colour query when `theme = "default"`, with immediate toggling via `Ctrl-T`.
-- **Background Auto-Formatter (`Ctrl-L`)**: Pipes buffer contents to external formatters (Prettier, Rustfmt, Ruff) on a background thread. Formatted output is applied transactionally only if the buffer was not modified during execution.
-- **Fuzzy Search & Destructive Replace**: Instant buffer-wide searching with `Ctrl-F`, easily promoted to find-and-replace with `Ctrl-R`. Wrap the query in `/pattern/` for regex (case-sensitive; use `(?i)` for insensitive). Regex replace supports `$0`, `$1`, `$name`, and `$$`.
-- **Unicode & CJK Support**: Correct visual alignment, cell measurements, and cursor positioning for double-width characters and complex emoji.
-- **Native Clipboard Integration**: Cross-platform clipboard access using `arboard`, falling back gracefully to an internal in-memory buffer on headless SSH sessions without display servers.
-- **Auto-Pairs & Wrap-on-Type**: Automated closure insertion for brackets and quotes, with contextual wrap behavior when keys are typed over an active selection.
-- **Robust Encoding Detection**: Scans and parses legacy encodings (Shift-JIS, Windows-1252, etc.) utilizing Byte Order Mark (BOM) sniffing, normalizes to UTF-8 internally, and transparently round-trips to the native encoding on save.
-- **Active Content Sanitization**: Sanitizes raw terminal escape sequences at render time. Malicious or hostile files containing raw ANSI codes cannot alter terminal chrome or exfiltrate local clipboard states.
-- **Hierarchical Configuration**: Evaluates settings through a layered model: core defaults → `~/.config/dan/config.toml` → local workspace `.editorconfig` rules.
+- **Rope-backed text buffer**: Utilizes a rope structure ensuring $O(\\log N)$ time complexity for insertions and deletions. Memory usage scales with edit volume rather than raw file size, permitting fluid, non-blocking navigation and manipulation of 100MB+ log files.
+- **Optimized terminal I/O & differential rendering**: Implements differential rendering to minimize bandwidth by emitting ANSI escape sequences strictly for modified cells. To sustain $O(1)$ scroll performance in massive files, `dan` maintains a syntax snapshot cache every 200 lines, eliminating the need to re-lex the entire visible range during rapid vertical movement.
+- **POSIX-compliant atomic writes (crash-safe I/O)**: File writes are executed via a temporary sibling file, followed by an `fsync` and atomic `rename`. A system crash or disk-full condition mid-save leaves the original file intact, preserving original file permissions and symlink targets.
+- **Crash recovery**: Periodically checkpoints the active buffer to a hidden `.swp` file every 5 seconds using safe write patterns. Unplanned terminal disconnects or crashed sessions trigger automatic recovery prompts on the next open.
+- **Interactive command palette (`Ctrl-P`)**: A fuzzy-search overlay covering all editor actions, active buffers, and project workspace files to keep operations entirely on the home row.
+- **Multiple buffers**: Concurrent support for multiple active buffers, indexed and managed via the command palette.
+- **Context-aware syntax highlighting**: Powered by `syntect` with broad language grammar support. Auto-picks OneHalfDark/OneHalfLight from `COLORFGBG` or an OSC colour query when `theme = "default"`, with immediate toggling via `Ctrl-T`.
+- **Background auto-formatter (`Ctrl-L`)**: Pipes buffer contents to external formatters (Prettier, Rustfmt, Ruff) on a background thread. Formatted output is applied transactionally only if the buffer was not modified during execution.
+- **Fuzzy search & destructive replace**: Instant buffer-wide searching with `Ctrl-F`, easily promoted to find-and-replace with `Ctrl-R`. Wrap the query in `/pattern/` for regex (case-sensitive; use `(?i)` for insensitive). Regex replace supports `$0`, `$1`, `$name`, and `$$`.
+- **Unicode & CJK support**: Correct visual alignment, cell measurements, and cursor positioning for double-width characters and complex emoji.
+- **Native clipboard integration**: Cross-platform clipboard access using `arboard`, falling back gracefully to an internal in-memory buffer on headless SSH sessions without display servers.
+- **Auto-pairs & wrap-on-type**: Automated closure insertion for brackets and quotes, with contextual wrap behavior when keys are typed over an active selection.
+- **Robust encoding detection**: Scans and parses legacy encodings (Shift-JIS, Windows-1252, etc.) utilizing Byte Order Mark (BOM) sniffing, normalizes to UTF-8 internally, and transparently round-trips to the native encoding on save.
+- **Active content sanitization**: Sanitizes raw terminal escape sequences at render time. Malicious or hostile files containing raw ANSI codes cannot alter terminal chrome or exfiltrate local clipboard states.
+- **Hierarchical configuration**: Evaluates settings through a layered model: core defaults → `~/.config/dan/config.toml` → local workspace `.editorconfig` rules.
 
 
 ## Keyboard shortcuts
@@ -104,6 +104,8 @@ Dan uses familiar shortcuts out of the box — `Ctrl-C`/`V` to copy/paste, `Ctrl
 
 | Key | Action |
 |-----|--------|
+| `Home` / `End` | Start / end of current visual row (soft-wrap aware) |
+| `Ctrl` + `Alt` + `Home` / `End` | Start / end of logical line |
 | `Ctrl` + `↑` / `↓` | Scroll without moving cursor |
 | `Ctrl` + `Shift` + `↑` / `↓` | Fast scroll |
 | `Ctrl` / `Alt` + `←` / `→` | Jump by word |
@@ -254,6 +256,7 @@ dan ~/.config/dan/config.toml
 ```toml
 # Display
 wrap_lines = true           # Wrap long lines (default: true)
+breakindent = false         # Indent soft-wrap continuations to match leading indent
 tab_width = 4               # Visual tab width (default: 4)
 expand_tab = false          # Insert spaces instead of tabs (default: false)
 line_numbers = true         # Show line numbers (default: true)
