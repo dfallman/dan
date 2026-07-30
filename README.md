@@ -55,6 +55,7 @@ Dan uses familiar shortcuts out of the box — `Ctrl-C`/`V` to copy/paste, `Ctrl
 - **Background auto-formatter (`Ctrl-L`)**: Pipes buffer contents to external formatters (Prettier, Rustfmt, Ruff) on a background thread. Formatted output is applied transactionally only if the buffer was not modified during execution.
 - **Fuzzy search & destructive replace**: Instant buffer-wide searching with `Ctrl-F`, easily promoted to find-and-replace with `Ctrl-R`. Wrap the query in `/pattern/` for regex (case-sensitive; use `(?i)` for insensitive). Regex replace supports `$0`, `$1`, `$name`, and `$$`.
 - **Unicode & CJK support**: Correct visual alignment, cell measurements, and cursor positioning for double-width characters and complex emoji.
+- **Soft-wrap navigation**: With wrap on, Up/Down/Page/Home/End and scrolling move by *visual* rows (sticky goal column, word-boundary wraps). `Ctrl+Alt+Home/End` jump the logical line; optional `breakindent` indents continuation rows.
 - **Native clipboard integration**: Cross-platform clipboard access using `arboard`, falling back gracefully to an internal in-memory buffer on headless SSH sessions without display servers.
 - **Auto-pairs & wrap-on-type**: Automated closure insertion for brackets and quotes, with contextual wrap behavior when keys are typed over an active selection.
 - **Robust encoding detection**: Scans and parses legacy encodings (Shift-JIS, Windows-1252, etc.) utilizing Byte Order Mark (BOM) sniffing, normalizes to UTF-8 internally, and transparently round-trips to the native encoding on save.

@@ -57,6 +57,7 @@ pub enum ActionId {
     Find, GoToLine, FormatDocument, ToggleComment,
     ToggleWrap, ToggleHelp, ToggleSyntax, ToggleWhitespace,
     DeleteLine, DuplicateLineOrSelection, MoveBufferTop, MoveBufferBottom,
+    MoveLogicalLineStart, MoveLogicalLineEnd,
     // New commands added in Task 22+; declared here to seed the registry shape.
     NewBuffer,
     OpenFile, ReloadBuffer, CloseBuffer, CloseOthers, CloseAll, SaveAll,
@@ -101,6 +102,8 @@ pub fn action_to_command(id: ActionId) -> Command {
         DuplicateLineOrSelection => Command::DuplicateLineOrSelection,
         MoveBufferTop => Command::MoveBufferTop,
         MoveBufferBottom => Command::MoveBufferBottom,
+        MoveLogicalLineStart => Command::MoveLogicalLineStart,
+        MoveLogicalLineEnd => Command::MoveLogicalLineEnd,
         NewBuffer => Command::NewBuffer,
         OpenFile => Command::OpenFilePicker,
         ReloadBuffer => Command::ReloadBuffer,
@@ -168,6 +171,8 @@ pub fn action_registry() -> Vec<PaletteItem> {
         (DuplicateLineOrSelection, "Duplicate line/selection", Some("⌃D")),
         (MoveBufferTop, "Move to top of file", Some("⌃Home")),
         (MoveBufferBottom, "Move to bottom of file", Some("⌃End")),
+        (MoveLogicalLineStart, "Move to start of logical line", Some("⌃⌥Home")),
+        (MoveLogicalLineEnd, "Move to end of logical line", Some("⌃⌥End")),
         // Net-new commands (no top-level keybinding):
         (NewBuffer, "New buffer", Some("⌃N")),
         (OpenFile, "Open file…", None),

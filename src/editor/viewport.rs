@@ -29,10 +29,9 @@ impl Editor {
 	/// Cached visual height of a logical line (wrap mode).
 	pub(crate) fn cached_visual_height(&mut self, line_idx: usize) -> usize {
 		let opts = self.wrap_opts();
-		let version = self.buffer().version;
-		let text = self.buffer().text.line(line_idx);
-		self.wrap_cache
-			.wrap_points_cached(line_idx, &text, opts, version)
-			.len()
+		let buf = self.buffer_mut();
+		buf.sync_wrap_cache();
+		let text = buf.text.line(line_idx);
+		buf.wrap_cache.wrap_points_cached(line_idx, &text, opts).len()
 	}
 }

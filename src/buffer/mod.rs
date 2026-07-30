@@ -49,6 +49,10 @@ pub struct Buffer {
 	/// (e.g. the formatter) detect that the buffer changed underneath them
 	/// while they were running.
 	pub version: u64,
+	/// Soft-wrap layout cache for this buffer (per-line wrap points).
+	pub(crate) wrap_cache: crate::editor::layout::WrapCache,
+	/// Merged edit hint since the cache last synced (fine-grained invalidation).
+	pub(crate) wrap_edit: crate::editor::layout::WrapEditHint,
 	/// The detected byte stream character encoding of the document.
 	pub encoding: &'static encoding_rs::Encoding,
 	/// Path of the `.swp` crash-recovery file for this buffer, if any.
@@ -96,6 +100,8 @@ impl Buffer {
 			file_path: None,
 			dirty: false,
 			version: 0,
+			wrap_cache: crate::editor::layout::WrapCache::default(),
+			wrap_edit: crate::editor::layout::WrapEditHint::None,
 			encoding: encoding_rs::UTF_8,
 			swp_path: None,
 			cursors: crate::editor::cursor::CursorSet::new(),
@@ -213,6 +219,8 @@ impl Buffer {
 			file_path: Some(path.to_path_buf()),
 			dirty: false,
 			version: 0,
+			wrap_cache: crate::editor::layout::WrapCache::default(),
+			wrap_edit: crate::editor::layout::WrapEditHint::None,
 			encoding,
 			swp_path: None,
 			cursors: crate::editor::cursor::CursorSet::new(),
@@ -377,9 +385,20 @@ impl Buffer {
 
 	// -- Edit operations with history tracking --
 
+	pub(crate) fn note_wrap_edit(&mut self, hint: crate::editor::layout::WrapEditHint) {
+		self.wrap_edit = self.wrap_edit.merge(hint);
+	}
+
 	/// Insert a character at a char position.
 	pub fn insert_char(&mut self, pos: usize, ch: char) {
 		self.history.start_group(&self.text);
+		let pos = pos.min(self.text.len_chars());
+		let line = self.text.char_to_line(pos);
+		if ch == '\n' || ch == '\r' {
+			self.note_wrap_edit(crate::editor::layout::WrapEditHint::From(line));
+		} else {
+			self.note_wrap_edit(crate::editor::layout::WrapEditHint::Line(line));
+		}
 		self.text.insert_char(pos, ch);
 		self.mark_mutated();
 	}
@@ -390,6 +409,13 @@ impl Buffer {
 	/// untrusted external content (paste, drop) must use `insert_paste` instead.
 	pub fn insert_str(&mut self, pos: usize, s: &str) {
 		self.history.start_group(&self.text);
+		let pos = pos.min(self.text.len_chars());
+		let line = self.text.char_to_line(pos);
+		if s.as_bytes().iter().any(|&b| b == b'\n' || b == b'\r') {
+			self.note_wrap_edit(crate::editor::layout::WrapEditHint::From(line));
+		} else {
+			self.note_wrap_edit(crate::editor::layout::WrapEditHint::Line(line));
+		}
 		self.text.insert_str(pos, s);
 		self.mark_mutated();
 	}
@@ -402,6 +428,13 @@ impl Buffer {
 		let clean = sanitize_paste(s);
 		let char_count = clean.chars().count();
 		self.history.start_group(&self.text);
+		let pos = pos.min(self.text.len_chars());
+		let line = self.text.char_to_line(pos);
+		if clean.as_bytes().iter().any(|&b| b == b'\n' || b == b'\r') {
+			self.note_wrap_edit(crate::editor::layout::WrapEditHint::From(line));
+		} else {
+			self.note_wrap_edit(crate::editor::layout::WrapEditHint::Line(line));
+		}
 		self.text.insert_str(pos, &clean);
 		self.mark_mutated();
 		char_count
@@ -411,6 +444,13 @@ impl Buffer {
 	pub fn delete_char(&mut self, pos: usize) {
 		if pos < self.text.len_chars() {
 			self.history.start_group(&self.text);
+			let ch = self.text.char_at(pos);
+			let line = self.text.char_to_line(pos);
+			if ch == '\n' || ch == '\r' {
+				self.note_wrap_edit(crate::editor::layout::WrapEditHint::From(line));
+			} else {
+				self.note_wrap_edit(crate::editor::layout::WrapEditHint::Line(line));
+			}
 			self.text.remove(pos..pos + 1);
 			self.mark_mutated();
 		}
@@ -420,6 +460,13 @@ impl Buffer {
 	pub fn delete_range(&mut self, start: usize, end: usize) {
 		if start < end && end <= self.text.len_chars() {
 			self.history.start_group(&self.text);
+			let start_line = self.text.char_to_line(start);
+			let end_line = self.text.char_to_line(end - 1);
+			if start_line != end_line {
+				self.note_wrap_edit(crate::editor::layout::WrapEditHint::From(start_line));
+			} else {
+				self.note_wrap_edit(crate::editor::layout::WrapEditHint::Line(start_line));
+			}
 			self.text.remove(start..end);
 			self.mark_mutated();
 		}
@@ -431,6 +478,7 @@ impl Buffer {
 	/// without an intermediate full-document `String`.
 	pub fn replace_text(&mut self, new: crate::buffer::rope::TextRope) {
 		self.history.start_group(&self.text);
+		self.note_wrap_edit(crate::editor::layout::WrapEditHint::All);
 		self.text.replace_with(new);
 		self.mark_mutated();
 	}
@@ -489,6 +537,7 @@ impl Buffer {
 	/// Undo the last edit group.
 	pub fn undo(&mut self) {
 		if let Some(restored) = self.history.undo(self.text.clone()) {
+			self.note_wrap_edit(crate::editor::layout::WrapEditHint::All);
 			self.text = restored;
 			self.mark_mutated();
 		}
@@ -497,9 +546,17 @@ impl Buffer {
 	/// Redo the last undone edit group.
 	pub fn redo(&mut self) {
 		if let Some(restored) = self.history.redo(self.text.clone()) {
+			self.note_wrap_edit(crate::editor::layout::WrapEditHint::All);
 			self.text = restored;
 			self.mark_mutated();
 		}
+	}
+
+	/// Sync the soft-wrap cache with edits since the last sync.
+	pub(crate) fn sync_wrap_cache(&mut self) {
+		let version = self.version;
+		let hint = std::mem::take(&mut self.wrap_edit);
+		self.wrap_cache.apply_edit(version, hint);
 	}
 
 	/// Mark a content mutation: bumps the dirty flag and the version
@@ -602,6 +659,27 @@ mod tests {
 
 		b.delete_range(0, 1);
 		assert_eq!(b.version, 5);
+	}
+
+	#[test]
+	fn wrap_cache_invalidates_only_edited_line() {
+		use crate::editor::layout::WrapOptions;
+		let mut b = Buffer::new();
+		b.insert_str(0, &format!("{}\n{}\n", "a".repeat(30), "b".repeat(30)));
+		b.sync_wrap_cache();
+		let opts = WrapOptions::new(4, 10);
+		let line0 = b.text.line(0);
+		let line1 = b.text.line(1);
+		let _ = b.wrap_cache.wrap_points_cached(0, &line0, opts);
+		let _ = b.wrap_cache.wrap_points_cached(1, &line1, opts);
+		assert!(b.wrap_cache.lines_cached(0));
+		assert!(b.wrap_cache.lines_cached(1));
+
+		// Edit line 0 only — line 1 cache must survive sync.
+		b.insert_char(0, 'X');
+		b.sync_wrap_cache();
+		assert!(!b.wrap_cache.lines_cached(0));
+		assert!(b.wrap_cache.lines_cached(1));
 	}
 
 	#[test]

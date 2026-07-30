@@ -9,7 +9,9 @@ impl Editor {
 	pub(crate) fn cmd_toggle_wrap(&mut self) {
 		self.config.wrap_lines = !self.config.wrap_lines;
 		self.buffer_mut().scroll_vrow = 0;
-		self.wrap_cache.clear();
+		for buf in &mut self.buffers {
+			buf.wrap_cache.clear();
+		}
 	}
 
 	pub(crate) fn cmd_toggle_whitespace(&mut self) {

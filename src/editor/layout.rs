@@ -337,6 +337,34 @@ pub(crate) fn grapheme_floor(line: &str, col: usize) -> usize {
 	col
 }
 
+/// Hint describing how a buffer edit affects soft-wrap layout cache entries.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum WrapEditHint {
+	#[default]
+	None,
+	/// Only this logical line’s content changed (no line-count change).
+	Line(usize),
+	/// Line structure may have changed from this line onward (newline
+	/// insert/delete, multi-line edit).
+	From(usize),
+	/// Full-document replace, undo/redo, or unknown mutation.
+	All,
+}
+
+impl WrapEditHint {
+	pub(crate) fn merge(self, other: Self) -> Self {
+		use WrapEditHint::*;
+		match (self, other) {
+			(None, x) | (x, None) => x,
+			(All, _) | (_, All) => All,
+			(From(a), From(b)) => From(a.min(b)),
+			(From(a), Line(b)) | (Line(b), From(a)) => From(a.min(b)),
+			(Line(a), Line(b)) if a == b => Line(a),
+			(Line(a), Line(b)) => From(a.min(b)),
+		}
+	}
+}
+
 /// Per-line wrap-point cache. Full invalidation on resize / wrap toggle is fine.
 #[derive(Debug, Default, Clone)]
 pub(crate) struct WrapCache {
@@ -360,20 +388,34 @@ impl WrapCache {
 		self.lines.clear();
 	}
 
-	#[allow(dead_code)] // available for fine-grained edit invalidation
 	pub(crate) fn invalidate_line(&mut self, line: usize) {
 		if line < self.lines.len() {
 			self.lines[line] = None;
 		}
 	}
 
-	#[allow(dead_code)]
 	pub(crate) fn invalidate_from(&mut self, line: usize) {
 		if line < self.lines.len() {
 			for e in &mut self.lines[line..] {
 				*e = None;
 			}
+		} else {
+			// Ensure subsequent fills don't assume stale length.
+			self.lines.truncate(line);
 		}
+	}
+
+	/// Apply a buffer edit hint. No-op when `version` matches the last sync.
+	pub(crate) fn apply_edit(&mut self, version: u64, hint: WrapEditHint) {
+		if version == self.buffer_version {
+			return;
+		}
+		match hint {
+			WrapEditHint::None | WrapEditHint::All => self.lines.clear(),
+			WrapEditHint::Line(l) => self.invalidate_line(l),
+			WrapEditHint::From(l) => self.invalidate_from(l),
+		}
+		self.buffer_version = version;
 	}
 
 	pub(crate) fn wrap_points_cached(
@@ -381,12 +423,7 @@ impl WrapCache {
 		line_idx: usize,
 		line: &str,
 		opts: WrapOptions,
-		buffer_version: u64,
 	) -> &[usize] {
-		if buffer_version != self.buffer_version {
-			self.lines.clear();
-			self.buffer_version = buffer_version;
-		}
 		if opts.width != self.width
 			|| opts.tab_w != self.tab_w
 			|| opts.breakindent != self.breakindent
@@ -400,6 +437,12 @@ impl WrapCache {
 			self.lines[line_idx] = Some(wrap_points(line, opts));
 		}
 		self.lines[line_idx].as_ref().unwrap()
+	}
+
+	/// True if line `idx` currently has a cached wrap-point entry.
+	#[cfg(test)]
+	pub(crate) fn lines_cached(&self, idx: usize) -> bool {
+		self.lines.get(idx).and_then(|e| e.as_ref()).is_some()
 	}
 }
 
@@ -539,20 +582,40 @@ mod tests {
 	}
 
 	#[test]
-	fn wrap_cache_invalidation() {
+	fn wrap_cache_fine_grained_invalidation() {
 		let mut cache = WrapCache::default();
 		let o = opts(10);
-		let a = cache
-			.wrap_points_cached(0, "abcdefghijklmnop", o, 1)
-			.to_vec();
-		assert_eq!(a, vec![0, 10]);
-		cache.invalidate_line(0);
-		let b = cache.wrap_points_cached(0, "short", o, 1).to_vec();
-		assert_eq!(b, vec![0]);
-		// Version bump clears stale entries.
-		let c = cache
-			.wrap_points_cached(0, "abcdefghijklmnop", o, 2)
-			.to_vec();
-		assert_eq!(c, vec![0, 10]);
+		let _ = cache.wrap_points_cached(0, "abcdefghijklmnop", o);
+		let _ = cache.wrap_points_cached(1, "short", o);
+		assert!(cache.lines[0].is_some());
+		assert!(cache.lines[1].is_some());
+
+		cache.apply_edit(1, WrapEditHint::Line(0));
+		assert!(cache.lines[0].is_none());
+		assert!(cache.lines[1].is_some());
+
+		let _ = cache.wrap_points_cached(0, "abcdefghijklmnop", o);
+		cache.apply_edit(2, WrapEditHint::From(1));
+		assert!(cache.lines[0].is_some());
+		assert!(cache.lines[1].is_none());
+
+		cache.apply_edit(3, WrapEditHint::All);
+		assert!(cache.lines.is_empty());
+	}
+
+	#[test]
+	fn wrap_edit_hint_merge() {
+		assert_eq!(
+			WrapEditHint::Line(3).merge(WrapEditHint::Line(3)),
+			WrapEditHint::Line(3)
+		);
+		assert_eq!(
+			WrapEditHint::Line(3).merge(WrapEditHint::Line(5)),
+			WrapEditHint::From(3)
+		);
+		assert_eq!(
+			WrapEditHint::Line(2).merge(WrapEditHint::From(0)),
+			WrapEditHint::From(0)
+		);
 	}
 }

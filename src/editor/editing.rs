@@ -68,6 +68,8 @@ impl Editor {
 			new_text.push('\n');
 		}
 
+		self.buffer_mut()
+			.note_wrap_edit(crate::editor::layout::WrapEditHint::From(line - 1));
 		self.buffer_mut().text.remove(above_start..cur_end);
 		self.buffer_mut().text.insert_str(above_start, &new_text);
 		self.buffer_mut().mark_mutated();
@@ -109,6 +111,8 @@ impl Editor {
 			new_text.push('\n');
 		}
 
+		self.buffer_mut()
+			.note_wrap_edit(crate::editor::layout::WrapEditHint::From(line));
 		self.buffer_mut().text.remove(cur_start..below_end);
 		self.buffer_mut().text.insert_str(cur_start, &new_text);
 		self.buffer_mut().mark_mutated();
@@ -159,6 +163,8 @@ impl Editor {
 			new_text.push('\n');
 		}
 
+		self.buffer_mut()
+			.note_wrap_edit(crate::editor::layout::WrapEditHint::From(first_line - 1));
 		self.buffer_mut().text.remove(above_start..block_end);
 		self.buffer_mut().text.insert_str(above_start, &new_text);
 		self.buffer_mut().mark_mutated();
@@ -209,6 +215,8 @@ impl Editor {
 			new_text.push('\n');
 		}
 
+		self.buffer_mut()
+			.note_wrap_edit(crate::editor::layout::WrapEditHint::From(first_line));
 		self.buffer_mut().text.remove(block_start..below_end);
 		self.buffer_mut().text.insert_str(block_start, &new_text);
 		self.buffer_mut().mark_mutated();
