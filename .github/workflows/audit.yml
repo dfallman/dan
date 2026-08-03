@@ -32,7 +32,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
     # Building cargo-audit from source costs minutes; cache the binary.
     # Bump the key suffix to force a reinstall on a newer release.
     - name: Cache cargo-audit
