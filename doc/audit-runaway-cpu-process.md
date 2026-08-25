@@ -97,8 +97,12 @@ Ctrl-Q quit unchanged; `cargo test --release` green.
 A fix inside `run_loop` cannot work on its own: the hang-up arrives while the
 main thread is already inside `event::poll`, which never returns.
 
-Still worth doing upstream: crossterm's `mio.rs` should return `Err` on
-`Ok(0)`/`EIO` instead of looping. And **reinstall** (`cargo install --path .`)
+Upstream: already reported as crossterm issue #793 ("Orphaned crossterm
+process consumes 100% CPU", open since 2023-07, same stack) and fixed by PR
+#1067 ("fix: return an error when the tty is gone", opened 2026-07-10,
+unmerged as of 2026-08-25). Once released, `event::poll` returns
+`Err(UnexpectedEof)` and `run_loop` exits cleanly via `?`; the watchdog probe
+stays as a backstop for any other signal-less wedge. And **reinstall** (`cargo install --path .`)
 — the installed 0.2.169 has neither the watchdog nor this probe.
 
 Harness caveat: the scripted Ctrl-Q occasionally is not acted on (screen
