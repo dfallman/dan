@@ -89,8 +89,19 @@ const RESCUE_BUDGET: Duration = Duration::from_secs(2);
 /// restore the terminal, and exit without it.
 #[cfg(unix)]
 fn spawn_shutdown_watchdog(flag: Arc<AtomicBool>) {
+	// Only trust POLLHUP on fd 0 when it is the terminal crossterm reads from.
+	// On a piped stdin, hang-up just means the writer closed — not a reason
+	// to quit.
+	let stdin_is_tty = unsafe { libc::isatty(libc::STDIN_FILENO) } == 1;
 	std::thread::spawn(move || loop {
 		if !flag.load(Ordering::Relaxed) {
+			if stdin_is_tty && tty_hung_up() {
+				// Terminal vanished without a signal reaching us. Treat it
+				// exactly like SIGHUP: request shutdown, and force-exit below
+				// if the main loop is wedged (see `tty_hung_up`).
+				flag.store(true, Ordering::Relaxed);
+				continue;
+			}
 			std::thread::sleep(Duration::from_millis(100));
 			continue;
 		}
@@ -132,6 +143,29 @@ fn spawn_shutdown_watchdog(flag: Arc<AtomicBool>) {
 
 #[cfg(not(unix))]
 fn spawn_shutdown_watchdog(_flag: Arc<AtomicBool>) {}
+
+/// True once the controlling terminal behind fd 0 has hung up.
+///
+/// When the terminal goes away (window closed, SSH drop, tmux pane killed)
+/// `read(2)` on the tty returns EOF/`EIO`. crossterm 0.29's mio event source
+/// (`event/source/unix/mio.rs`, `try_read`) only breaks its read loop on
+/// `WouldBlock`/`Interrupted`; EOF and `EIO` fall through and it re-issues
+/// `read` forever, so `event::poll` never returns and the main thread spins at
+/// 100% CPU. The main loop can't detect that itself — it is stuck inside
+/// `poll` — and the signal path only helps when SIGHUP is actually delivered
+/// (not when dan is backgrounded, suspended, or the multiplexer just closes
+/// the master fd). So the watchdog probes the tty with a zero-timeout
+/// `poll(2)` instead: a hung-up pty reports `POLLHUP` immediately.
+#[cfg(unix)]
+fn tty_hung_up() -> bool {
+	let mut pfd = libc::pollfd {
+		fd: libc::STDIN_FILENO,
+		events: libc::POLLIN,
+		revents: 0,
+	};
+	let r = unsafe { libc::poll(&mut pfd, 1, 0) };
+	r > 0 && (pfd.revents & (libc::POLLHUP | libc::POLLERR | libc::POLLNVAL)) != 0
+}
 
 /// Undo raw mode, the alternate screen, mouse capture and bracketed paste from
 /// a thread that cannot trust the main thread to still be alive.
