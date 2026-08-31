@@ -1,4 +1,4 @@
-use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent};
+use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEvent};
 
 use crate::editor::commands::Command;
 use crate::editor::mode::Mode;
@@ -8,6 +8,11 @@ use crate::editor::mode::Mode;
 pub fn map_event(event: &Event, mode: Mode) -> Command {
 	match event {
 		Event::Key(key) => {
+			// Windows reports both Press and Release for every keystroke;
+			// acting on releases would double every key.
+			if key.kind == KeyEventKind::Release {
+				return Command::Noop;
+			}
 			if mode == Mode::ConfirmQuit {
 				return map_confirm_quit_key(key);
 			}
@@ -382,6 +387,40 @@ mod tests {
 
 	fn key(code: KeyCode, mods: KeyModifiers) -> Event {
 		Event::Key(KeyEvent::new(code, mods))
+	}
+
+	fn key_release(code: KeyCode, mods: KeyModifiers) -> Event {
+		Event::Key(KeyEvent::new_with_kind(
+			code,
+			mods,
+			crossterm::event::KeyEventKind::Release,
+		))
+	}
+
+	// Windows delivers both Press and Release events for every keystroke;
+	// releases must be dropped or every key is handled twice.
+	#[test]
+	fn key_release_is_ignored_in_all_modes() {
+		use KeyModifiers as M;
+		let modes = [
+			Mode::Editing,
+			Mode::Searching,
+			Mode::GoToLine,
+			Mode::SaveAs,
+			Mode::ConfirmQuit,
+			Mode::ConfirmOverwrite,
+			Mode::ReplacingWith,
+			Mode::ReplacingStep,
+			Mode::RecoverSwap,
+			Mode::Palette,
+		];
+		for mode in modes {
+			assert_map(&[
+				("release char", key_release(KeyCode::Char('o'), M::NONE), mode, Command::Noop),
+				("release enter", key_release(KeyCode::Enter, M::NONE), mode, Command::Noop),
+				("release ctrl+p", key_release(KeyCode::Char('p'), M::CONTROL), mode, Command::Noop),
+			]);
+		}
 	}
 
 	fn assert_map(cases: &[(&str, Event, Mode, Command)]) {
