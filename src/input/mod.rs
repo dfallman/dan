@@ -60,10 +60,21 @@ pub fn map_event(event: &Event, mode: Mode) -> Command {
 }
 
 fn map_mouse(me: &MouseEvent, mode: Mode) -> Command {
+	use crossterm::event::{MouseButton, MouseEventKind};
+	if mode == Mode::Palette {
+		return match me.kind {
+			MouseEventKind::Down(MouseButton::Left) => Command::PaletteClick {
+				col: me.column,
+				row: me.row,
+			},
+			MouseEventKind::ScrollUp => Command::PaletteUp,
+			MouseEventKind::ScrollDown => Command::PaletteDown,
+			_ => Command::Noop,
+		};
+	}
 	if mode != Mode::Editing {
 		return Command::Noop;
 	}
-	use crossterm::event::{MouseButton, MouseEventKind};
 	match me.kind {
 		MouseEventKind::Down(MouseButton::Left) => Command::MouseDown {
 			col: me.column,
@@ -758,13 +769,30 @@ mod tests {
 	}
 
 	#[test]
-	fn mouse_ignored_in_palette_and_search() {
+	fn mouse_maps_in_palette_ignored_in_search() {
 		use crossterm::event::{MouseButton, MouseEventKind as K};
 		let ev = mouse(K::Down(MouseButton::Left), 2, 2);
-		assert_eq!(map_event(&ev, Mode::Palette), Command::Noop);
-		assert_eq!(map_event(&ev, Mode::Searching), Command::Noop);
+		assert_eq!(
+			map_event(&ev, Mode::Palette),
+			Command::PaletteClick { col: 2, row: 2 }
+		);
+		assert_eq!(
+			map_event(&mouse(K::ScrollUp, 0, 0), Mode::Palette),
+			Command::PaletteUp
+		);
 		assert_eq!(
 			map_event(&mouse(K::ScrollDown, 0, 0), Mode::Palette),
+			Command::PaletteDown
+		);
+		// Drag/up have no palette meaning.
+		assert_eq!(
+			map_event(&mouse(K::Drag(MouseButton::Left), 2, 2), Mode::Palette),
+			Command::Noop
+		);
+		// Search prompt still ignores the mouse entirely.
+		assert_eq!(map_event(&ev, Mode::Searching), Command::Noop);
+		assert_eq!(
+			map_event(&mouse(K::ScrollDown, 0, 0), Mode::Searching),
 			Command::Noop
 		);
 	}

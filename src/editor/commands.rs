@@ -133,6 +133,8 @@ pub enum Command {
 	PalettePageDown,
 	PaletteConfirm,
 	PaletteCancel,
+	/// Left click at screen (col, row) while the palette is open.
+	PaletteClick { col: u16, row: u16 },
 	PaletteCloseBuffer,
 	PaletteClosePromptSave,
 	#[allow(dead_code)]

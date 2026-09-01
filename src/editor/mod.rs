@@ -969,6 +969,53 @@ impl Default for Editor {
 mod tests {
 	use super::*;
 
+	/// Palette geometry for a 100x30 terminal: modal is 80x20 at (10, 5),
+	/// query bar at absolute row 6, result rows at absolute rows 8..22
+	/// (see `render::chrome::palette_modal_rect` / `build_palette_window`).
+	fn palette_editor_filtered_to_show_keybindings() -> Editor {
+		use crate::editor::commands::Command;
+		let mut e = Editor::new();
+		e.terminal_width = 100;
+		e.terminal_height = 30;
+		e.execute(Command::PaletteOpen);
+		for ch in "keybind".chars() {
+			e.execute(Command::PaletteInsertChar(ch));
+		}
+		assert_eq!(e.palette.filtered.len(), 1, "query must isolate one item");
+		e
+	}
+
+	#[test]
+	fn palette_click_on_item_row_runs_it() {
+		use crate::editor::commands::Command;
+		let mut e = palette_editor_filtered_to_show_keybindings();
+		// Single result ("Show keybindings") sits on the first result row.
+		e.execute(Command::PaletteClick { col: 15, row: 8 });
+		assert!(!e.palette.open, "click on an item must confirm and close");
+		assert_eq!(e.mode, Mode::Editing);
+		assert!(e.show_help, "clicked item must actually execute");
+	}
+
+	#[test]
+	fn palette_click_on_empty_result_row_is_inert() {
+		use crate::editor::commands::Command;
+		let mut e = palette_editor_filtered_to_show_keybindings();
+		// Row 9 is inside the modal but below the only result.
+		e.execute(Command::PaletteClick { col: 15, row: 9 });
+		assert!(e.palette.open, "click on an empty row must not close");
+		assert!(!e.show_help);
+	}
+
+	#[test]
+	fn palette_click_outside_modal_dismisses() {
+		use crate::editor::commands::Command;
+		let mut e = palette_editor_filtered_to_show_keybindings();
+		e.execute(Command::PaletteClick { col: 0, row: 0 });
+		assert!(!e.palette.open, "click outside must dismiss the palette");
+		assert_eq!(e.mode, Mode::Editing);
+		assert!(!e.show_help, "dismissing must not run the selected item");
+	}
+
 	#[test]
 	fn palette_show_keybindings_shows_help_bar() {
 		use crate::editor::commands::Command;

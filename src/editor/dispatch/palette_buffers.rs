@@ -48,6 +48,40 @@ impl Editor {
 		self.palette.page_down(rows);
 	}
 
+	pub(crate) fn cmd_palette_click(&mut self, col: u16, row: u16) {
+		let Some((mx, my, mw, mh)) = crate::render::chrome::palette_modal_rect(
+			self.terminal_width,
+			self.terminal_height,
+		) else {
+			return;
+		};
+		// Outside the modal: dismiss, same as Esc.
+		if col < mx || col >= mx + mw || row < my || row >= my + mh {
+			self.cmd_palette_cancel();
+			return;
+		}
+		// The dirty-buffer close prompt is keyboard-driven; ignore clicks on it.
+		if self.palette.close_prompt_idx.is_some() {
+			return;
+		}
+		// Result rows occupy modal-relative rows 3..3+visible_rows
+		// (border, query, separator above; separator, footer, border below) —
+		// must match `render::chrome::build_palette_window`.
+		let rel = (row - my) as usize;
+		let visible_rows = (mh as usize).saturating_sub(6);
+		if rel < 3 || rel >= 3 + visible_rows {
+			return;
+		}
+		let row_cursor = self.palette.scroll + (rel - 3);
+		// Section headers and empty rows are not selectable.
+		if let Some(crate::palette::PaletteRow::Item(filtered_idx)) =
+			self.palette.display_rows().get(row_cursor)
+		{
+			self.palette.selection = *filtered_idx;
+			self.cmd_palette_confirm();
+		}
+	}
+
 	pub(crate) fn cmd_palette_confirm(&mut self) {
 		// Clone the selected item before dispatching so we don't hold
 		// an immutable borrow of `self.palette` while mutating self.

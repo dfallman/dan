@@ -148,6 +148,7 @@ impl Editor {
 			Command::PalettePageUp => self.cmd_palette_page_up(),
 			Command::PalettePageDown => self.cmd_palette_page_down(),
 			Command::PaletteConfirm => self.cmd_palette_confirm(),
+			Command::PaletteClick { col, row } => self.cmd_palette_click(col, row),
 			Command::PaletteCloseBuffer => self.cmd_palette_close_buffer(),
 			Command::PaletteClosePromptSave => self.cmd_palette_close_prompt_save(),
 			Command::PaletteClosePromptDiscard => self.cmd_palette_close_prompt_discard(),

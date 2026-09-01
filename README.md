@@ -93,7 +93,7 @@ Dan uses familiar shortcuts out of the box — `Ctrl-C`/`V` to copy/paste, `Ctrl
 
 ### Command palette (`Ctrl-P`)
 
-The palette is a fuzzy-search overlay: start typing to filter across editor actions, open buffers, and project files, then `Enter` to run or switch. Every keyboard shortcut is also available here, plus a number of actions that have no dedicated key:
+The palette is a fuzzy-search overlay: start typing to filter across editor actions, open buffers, and project files, then `Enter` to run or switch. The mouse works too: click a result to run it, scroll the wheel to move through the list, and click outside the palette to dismiss it. Every keyboard shortcut is also available here, plus a number of actions that have no dedicated key:
 
 - **Buffers & files**: Open file, reload buffer from disk, close buffer / close others / close all, save all, show recent files. `Ctrl-D` on a highlighted buffer closes it directly (with a save prompt if it has unsaved changes).
 - **Path utilities**: Copy the file's absolute or relative path, reveal in Finder / open containing folder, show buffer info.
