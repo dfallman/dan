@@ -1,12 +1,24 @@
 # dan
 
-Dan is a blazingly fast, modeless, lightweight multi-platform terminal text editor written in Rust. It's a modern, faster alternative to editors like nano, vim, joe, and micro.
+A fast, modeless terminal text editor written in Rust: a lighter,
+quicker alternative to nano, vim, joe, and micro.
 
-Dan is designed for zero-configuration deployment, dan maintains ultra-low input latency even over high-jitter SSH connections and delivers high-performance operations on massive files (such as 100+ MB log files) thanks to its Rope buffer architecture.
+Dan needs no configuration to be useful, just build it and start editing.
+It keeps input latency low even over high-jitter SSH links, and its
+rope-based buffer keeps editing responsive on files far past the point
+where most editors stall. Try it with 100 MB+ logs, it opens and scrolls without a pause.
 
 <p align="center">
   <img width="800" alt="dan terminal editor" src="https://github.com/user-attachments/assets/ccebe66e-b927-418b-9cf1-4140771d3826" />
 </p>
+
+### Standout features:
+- **Modeless**: no insert/normal split, no modal muscle memory to learn
+- **Zero-config**: sensible and light-opinionated defaults out of the box, with ample configuration options if you want to
+- **Low latency**: designed to work equally well on remote sessions as in local terminals
+- **Large files**: uses a rope buffer, so file size doesn't dictate speed
+- **Multiple buffers**: supports multiple buffers (files), fast buffer switching 
+- **Multi-platform**: Linux, macOS, BSD, Windows
 
 ### Key performance metrics:
 - **Memory footprint**: Typically consumes < 20MB RSS.
