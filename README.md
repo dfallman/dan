@@ -1,6 +1,6 @@
 # dan
 
-A fast, modeless terminal text editor written in Rust: a lighter,
+A fast, modeless terminal text editor written in Rust. It's a lighter,
 quicker alternative to nano, vim, joe, and micro.
 
 Dan needs no configuration to be useful, just build it and start editing.
