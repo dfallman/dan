@@ -1,0 +1,94 @@
+name: Release
+
+# Build release binaries and attach them to a GitHub release whenever a
+# version tag (e.g. "0.3.2" — no "v" prefix, matching existing tags) is pushed:
+#
+#   git tag 0.3.7 && git push origin 0.3.7
+
+on:
+  push:
+    tags:
+      - "[0-9]+.[0-9]+.[0-9]+"
+
+env:
+  CARGO_TERM_COLOR: always
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+          - os: macos-13
+            target: x86_64-apple-darwin
+          - os: macos-latest
+            target: aarch64-apple-darwin
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Add rust target
+        run: rustup target add ${{ matrix.target }}
+
+      - name: Build (release)
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Package
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME}"
+          name="dan-${version}-${{ matrix.target }}"
+          mkdir "$name"
+          cp README.md LICENSE "$name/"
+          if [[ "${{ matrix.os }}" == windows-* ]]; then
+            cp "target/${{ matrix.target }}/release/dan.exe" "$name/"
+            7z a "${name}.zip" "$name"
+          else
+            cp "target/${{ matrix.target }}/release/dan" "$name/"
+            strip "$name/dan" || true
+            tar czf "${name}.tar.gz" "$name"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dan-${{ matrix.target }}
+          path: |
+            dan-*.tar.gz
+            dan-*.zip
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create GitHub release with assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            # Release already exists (e.g. re-run): just refresh the assets.
+            gh release upload "$tag" artifacts/* --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$tag" artifacts/* \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "dan $tag" \
+              --generate-notes
+          fi
