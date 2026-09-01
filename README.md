@@ -21,9 +21,9 @@ where most editors stall. Try it with 100 MB+ logs, it opens and scrolls without
 - **Multi-platform**: Linux, macOS, BSD, Windows
 
 ### Key performance metrics:
-- **Memory footprint**: Typically consumes < 20MB RSS.
-- **File handling capacity**: Fluid, non-blocking navigation and manipulation of 100MB+ log files.
-- **Bandwidth optimization**: Implements aggressive rendering optimizations to minimize transmitted escape sequences.
+- **Memory footprint**: Typically consumes < 20MB RSS
+- **File handling capacity**: Fluid, non-blocking navigation and manipulation of 100MB+ log files
+- **Bandwidth optimization**: Implements aggressive rendering optimizations to minimize transmitted escape sequences
 
 ### Architectural comparison
 
