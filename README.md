@@ -1,12 +1,12 @@
 # dan
 
 A fast, modeless terminal text editor written in Rust. It's a lighter,
-quicker alternative to nano, vim, joe, and micro.
+quicker alternative to nano, pico, vim, joe, and micro.
 
-Dan needs no configuration to be useful, just build it and start editing.
+Dan needs no configuration, just build it and start editing using familiar keyboard shortcuts.
 It keeps input latency low even over high-jitter SSH links, and its
 rope-based buffer keeps editing responsive on files far past the point
-where most editors stall. Try it with 100 MB+ logs, it opens and scrolls without a pause.
+where most editors stall. Try it with 100 MB+ logs, it opens and scrolls without hesitation.
 
 <p align="center">
   <img width="800" alt="dan terminal editor" src="https://github.com/user-attachments/assets/ccebe66e-b927-418b-9cf1-4140771d3826" />
@@ -14,16 +14,16 @@ where most editors stall. Try it with 100 MB+ logs, it opens and scrolls without
 
 ### Standout features:
 - **Modeless**: no insert/normal split, no modal muscle memory to learn
-- **Zero-config**: sensible and light-opinionated defaults out of the box, with ample configuration options if you want to
+- **Zero-config**: sensible and (lightly) opinionated defaults out of the box, with ample configuration options if you want to
 - **Low latency**: designed to work equally well on remote sessions as in local terminals
 - **Large files**: uses a rope buffer, so file size doesn't dictate speed
 - **Multiple buffers**: supports multiple buffers (files), fast buffer switching 
 - **Multi-platform**: Linux, macOS, BSD, Windows
 
 ### Key performance metrics:
-- **Memory footprint**: Typically consumes < 20MB RSS.
-- **File handling capacity**: Fluid, non-blocking navigation and manipulation of 100MB+ log files.
-- **Bandwidth optimization**: Implements aggressive rendering optimizations to minimize transmitted escape sequences.
+- **Memory footprint**: Typically consumes < 20MB RSS
+- **File handling capacity**: Fluid, non-blocking navigation and manipulation of 100MB+ log files
+- **Bandwidth optimization**: Implements aggressive rendering optimizations to minimize transmitted escape sequences
 
 ### Architectural comparison
 
