@@ -1,9 +1,9 @@
 # dan
 
-A fast, modeless terminal text editor written in Rust. It's a lighter,
-quicker alternative to nano, pico, vim, joe, and micro.
+A fast and modern multi-platform terminal text editor. It's a lighter,
+quicker alternative to editors such as Nano, Pico, Vim, Joe, and Micro, written entirely in Rust.
 
-Dan needs no configuration, just build it and start editing using familiar keyboard shortcuts.
+Dan needs no configuration, just install and start editing using intuitive, familiar keyboard shortcuts.
 It keeps input latency low even over high-jitter SSH links, and its
 rope-based buffer keeps editing responsive on files far past the point
 where most editors stall. Try it with 100 MB+ logs, it opens and scrolls without hesitation.
@@ -42,10 +42,10 @@ where most editors stall. Try it with 100 MB+ logs, it opens and scrolls without
 ## Quick install
 
 Grab a prebuilt binary for macOS, Linux, or Windows from the
-[latest release](https://github.com/dfallman/dan/releases/latest) — no toolchain needed.
+[latest release](https://github.com/dfallman/dan/releases/latest).
 See [Installation](#installation) for where to put it on each platform.
 
-Or build from source with [Rust](https://rustup.rs/):
+...or, build from source (it's easy!) with [Rust](https://rustup.rs/):
 ```
 git clone https://github.com/dfallman/dan.git
 cd dan
@@ -261,13 +261,15 @@ tar xzf dan-*-apple-darwin.tar.gz
 sudo mv dan-*-apple-darwin/dan /usr/local/bin/
 ```
 
-If macOS refuses to run it ("cannot be opened because the developer cannot be verified" — happens for browser downloads, since the binaries are not notarized), clear the quarantine flag:
+If macOS refuses to run it (with a message such as "...cannot be opened because the developer cannot be verified", this can happen for browser downloads as the binaries are not notarized), you can clear the quarantine flag with:
 
 ```
 xattr -d com.apple.quarantine /usr/local/bin/dan
 ```
 
 If you'd rather not use `sudo`, put it in `~/bin` or `~/.local/bin` instead and add that directory to `PATH` in your shell profile: `export PATH="$HOME/.local/bin:$PATH"`.
+
+Note: on macOS, consider building from source instead. It's quick and easy and also makes updating Dan a breeze, see **Option 2** below.
 
 ### Linux
 
