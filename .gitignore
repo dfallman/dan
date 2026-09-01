@@ -8,6 +8,7 @@ test-file.txt
 /.env
 rustfmt.toml
 *.bak
+doc/
 docs/
 .worktrees/
 .cursor/
