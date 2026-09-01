@@ -41,7 +41,12 @@ where most editors stall. Try it with 100 MB+ logs, it opens and scrolls without
 
 ## Quick install
 
-Grab a prebuilt binary for macOS, Linux, or Windows from the
+On macOS or Linux, install with [Homebrew](https://brew.sh/):
+```
+brew install dfallman/tap/dan
+```
+
+Or grab a prebuilt binary for macOS, Linux, or Windows from the
 [latest release](https://github.com/dfallman/dan/releases/latest).
 See [Installation](#installation) for where to put it on each platform.
 
@@ -237,7 +242,15 @@ Missing groups expand to an empty string (same as the `regex` crate). Each match
 
 # Installation
 
-## Option 1: Download a prebuilt binary
+## Option 1: Homebrew (macOS & Linux)
+
+```
+brew install dfallman/tap/dan
+```
+
+Homebrew puts `dan` on your `PATH` and handles macOS quarantine for you; update later with `brew upgrade dan`. The [tap](https://github.com/dfallman/homebrew-tap) is refreshed automatically on every release.
+
+## Option 2: Download a prebuilt binary
 
 Every release ships ready-to-run binaries on the
 [releases page](https://github.com/dfallman/dan/releases/latest). Pick the archive for your platform:
@@ -296,7 +309,7 @@ Move-Item dan-*-windows-msvc\dan-*\dan.exe "$env:LOCALAPPDATA\Programs\dan\"
 
 SmartScreen may warn the first time you run a downloaded, unsigned executable — choose "More info" → "Run anyway".
 
-## Option 2: Build from source
+## Option 3: Build from source
 
 Dan requires Rust 1.88 or later. We recommend installing via [rustup](https://rustup.rs/) rather than your system package manager, which often provides an older version:
 
