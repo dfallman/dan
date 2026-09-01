@@ -41,19 +41,16 @@ where most editors stall. Try it with 100 MB+ logs, it opens and scrolls without
 
 ## Quick install
 
-Install or update [Rust](https://rustup.rs/):
-```
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-```
+Grab a prebuilt binary for macOS, Linux, or Windows from the
+[latest release](https://github.com/dfallman/dan/releases/latest) — no toolchain needed.
+See [Installation](#installation) for where to put it on each platform.
 
-Clone, build, and install Dan:
+Or build from source with [Rust](https://rustup.rs/):
 ```
 git clone https://github.com/dfallman/dan.git
 cd dan
 cargo install --path .
 ```
-
-For more installation options, see [Installation](#installation).
 
 ## Features
 
@@ -239,6 +236,65 @@ Missing groups expand to an empty string (same as the `regex` crate). Each match
 **Note for macOS users**: Terminal emulators use escape sequences dating back to the late 70s and some at the time highly influential video display terminals such as VT100. Long story short, this means some "modern" key combinations available in GUI editors can't be distinguished in a terminal. Most notably, Dan (and other terminal apps) uses `Ctrl` where a Mac user might expect `⌘`. Many terminal emulators (including [iTerm2](https://iterm2.com/)) let you remap `⌘` to `Ctrl` if you prefer, although it can create side-issues. Additionally, the built-in Terminal.app is not recommended: a third-party emulator such as [iTerm2](https://iterm2.com/), [Kitty](https://sw.kovidgoyal.net/kitty/), [Ghostty](https://ghostty.dev/), or [WezTerm](https://wez.dev/) will give better results.
 
 # Installation
+
+## Option 1: Download a prebuilt binary
+
+Every release ships ready-to-run binaries on the
+[releases page](https://github.com/dfallman/dan/releases/latest). Pick the archive for your platform:
+
+| Platform | Archive |
+|---|---|
+| macOS (Apple Silicon) | `dan-<version>-aarch64-apple-darwin.tar.gz` |
+| macOS (Intel) | `dan-<version>-x86_64-apple-darwin.tar.gz` |
+| Linux (x86_64) | `dan-<version>-x86_64-unknown-linux-gnu.tar.gz` |
+| Linux (arm64) | `dan-<version>-aarch64-unknown-linux-gnu.tar.gz` |
+| Windows (x86_64) | `dan-<version>-x86_64-pc-windows-msvc.zip` |
+
+Each archive contains the `dan` binary plus the README and license.
+
+### macOS
+
+Extract and move the binary somewhere on your `PATH` (`/usr/local/bin` is in the default `PATH`):
+
+```
+tar xzf dan-*-apple-darwin.tar.gz
+sudo mv dan-*-apple-darwin/dan /usr/local/bin/
+```
+
+If macOS refuses to run it ("cannot be opened because the developer cannot be verified" — happens for browser downloads, since the binaries are not notarized), clear the quarantine flag:
+
+```
+xattr -d com.apple.quarantine /usr/local/bin/dan
+```
+
+If you'd rather not use `sudo`, put it in `~/bin` or `~/.local/bin` instead and add that directory to `PATH` in your shell profile: `export PATH="$HOME/.local/bin:$PATH"`.
+
+### Linux
+
+```
+tar xzf dan-*-linux-gnu.tar.gz
+install -Dm755 dan-*-linux-gnu/dan ~/.local/bin/dan
+```
+
+`~/.local/bin` is on the default `PATH` of most modern distributions; if `dan` isn't found afterwards, add `export PATH="$HOME/.local/bin:$PATH"` to your shell profile, or use `sudo install -m755 .../dan /usr/local/bin/dan` for a system-wide install.
+
+### Windows
+
+> **Note**: If you're running Dan inside WSL, follow the Linux instructions above instead.
+
+Unzip the archive and put `dan.exe` in a folder of your choice, e.g. `%LOCALAPPDATA%\Programs\dan`. Then add that folder to your `PATH` so you can run `dan` from any terminal:
+
+```powershell
+Expand-Archive dan-*-windows-msvc.zip
+New-Item -ItemType Directory -Force "$env:LOCALAPPDATA\Programs\dan"
+Move-Item dan-*-windows-msvc\dan-*\dan.exe "$env:LOCALAPPDATA\Programs\dan\"
+# add to PATH for the current user (takes effect in new terminals)
+[Environment]::SetEnvironmentVariable("Path", $env:LOCALAPPDATA + "\Programs\dan;" + [Environment]::GetEnvironmentVariable("Path", "User"), "User")
+```
+
+SmartScreen may warn the first time you run a downloaded, unsigned executable — choose "More info" → "Run anyway".
+
+## Option 2: Build from source
 
 Dan requires Rust 1.88 or later. We recommend installing via [rustup](https://rustup.rs/) rather than your system package manager, which often provides an older version:
 
