@@ -14,7 +14,7 @@ where most editors stall. Try it with 100 MB+ logs, it opens and scrolls without
 
 ### Standout features:
 - **Modeless**: no insert/normal split, no modal muscle memory to learn
-- **Zero-config**: sensible and light-opinionated defaults out of the box, with ample configuration options if you want to
+- **Zero-config**: sensible and (lightly) opinionated defaults out of the box, with ample configuration options if you want to
 - **Low latency**: designed to work equally well on remote sessions as in local terminals
 - **Large files**: uses a rope buffer, so file size doesn't dictate speed
 - **Multiple buffers**: supports multiple buffers (files), fast buffer switching 
