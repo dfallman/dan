@@ -970,6 +970,37 @@ mod tests {
 	use super::*;
 
 	#[test]
+	fn palette_show_keybindings_shows_help_bar() {
+		use crate::editor::commands::Command;
+		let mut e = Editor::new();
+		assert!(!e.show_help);
+		e.execute(Command::PaletteOpen);
+		assert!(e.palette.open);
+		for ch in "keybind".chars() {
+			e.execute(Command::PaletteInsertChar(ch));
+		}
+		e.execute(Command::PaletteConfirm);
+		assert!(!e.palette.open);
+		assert!(e.show_help, "confirming 'Show keybindings' must enable the help bar");
+
+		// The bar must actually be painted in the next frame.
+		e.terminal_width = 100;
+		e.terminal_height = 30;
+		let mut out: Vec<u8> = Vec::new();
+		crate::render::render(&mut e, &mut out).unwrap();
+		let screen = e.last_screen.as_ref().unwrap();
+		let mut all_text = String::new();
+		for row in 0..screen.height as usize {
+			for col in 0..screen.width as usize {
+				all_text.push(screen.grid[row * screen.width as usize + col].ch);
+			}
+			all_text.push('\n');
+		}
+		assert!(all_text.contains("Help") || all_text.contains("Hjälp"),
+			"help bar should be visible in the frame");
+	}
+
+	#[test]
 	fn sniff_override_queues_info_banner_spaces() {
 		let mut e = Editor::new();
 		e.config.expand_tab = false;

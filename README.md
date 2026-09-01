@@ -64,7 +64,7 @@ Dan uses familiar shortcuts out of the box — `Ctrl-C`/`V` to copy/paste, `Ctrl
 - **POSIX-compliant atomic writes (crash-safe I/O)**: File writes are executed via a temporary sibling file, followed by an `fsync` and atomic `rename`. A system crash or disk-full condition mid-save leaves the original file intact, preserving original file permissions and symlink targets.
 - **Crash recovery**: Periodically checkpoints the active buffer to a hidden `.swp` file every 5 seconds using safe write patterns. Unplanned terminal disconnects or crashed sessions trigger automatic recovery prompts on the next open.
 - **Interactive command palette (`Ctrl-P`)**: A fuzzy-search overlay covering all editor actions, active buffers, and project workspace files to keep operations entirely on the home row.
-- **Multiple buffers**: Concurrent support for multiple active buffers, indexed and managed via the command palette.
+- **Multiple buffers**: Concurrent support for multiple active buffers. `Ctrl-N` opens a new buffer; switching, closing, and saving buffers is handled through the command palette. Quitting with unsaved changes steps through each dirty buffer in turn.
 - **Context-aware syntax highlighting**: Powered by `syntect` with broad language grammar support. Auto-picks OneHalfDark/OneHalfLight from `COLORFGBG` or an OSC colour query when `theme = "default"`, with immediate toggling via `Ctrl-T`.
 - **Background auto-formatter (`Ctrl-L`)**: Pipes buffer contents to external formatters (Prettier, Rustfmt, Ruff) on a background thread. Formatted output is applied transactionally only if the buffer was not modified during execution.
 - **Fuzzy search & destructive replace**: Instant buffer-wide searching with `Ctrl-F`, easily promoted to find-and-replace with `Ctrl-R`. Wrap the query in `/pattern/` for regex (case-sensitive; use `(?i)` for insensitive). Regex replace supports `$0`, `$1`, `$name`, and `$$`.
@@ -90,6 +90,16 @@ Dan uses familiar shortcuts out of the box — `Ctrl-C`/`V` to copy/paste, `Ctrl
 | `Ctrl` + `H` | Toggle help bar |
 | `Ctrl` + `P` | Command palette (actions, buffers, project files) |
 | `Ctrl` + `N` | New buffer |
+
+### Command palette (`Ctrl-P`)
+
+The palette is a fuzzy-search overlay: start typing to filter across editor actions, open buffers, and project files, then `Enter` to run or switch. Every keyboard shortcut is also available here, plus a number of actions that have no dedicated key:
+
+- **Buffers & files**: Open file, reload buffer from disk, close buffer / close others / close all, save all, show recent files. `Ctrl-D` on a highlighted buffer closes it directly (with a save prompt if it has unsaved changes).
+- **Path utilities**: Copy the file's absolute or relative path, reveal in Finder / open containing folder, show buffer info.
+- **Per-buffer format settings**: Switch indentation between spaces and tabs, set tab width (2/4/8), switch line endings between LF and CRLF, trim trailing whitespace, convert existing indentation tabs ↔ spaces.
+- **Text transforms**: Sort lines ascending/descending, deduplicate adjacent lines, convert to UPPERCASE / lowercase / Title Case, reverse the selection.
+- **Misc**: Toggle line numbers, reload configuration, show version, show keybindings.
 
 ### Text editing
 
@@ -246,7 +256,7 @@ cd dan
 cargo build --release
 cp target/release/dan /usr/local/bin/
 # or
-<img width="2180" height="1806" alt="CleanShot 2026-06-04 at 15 12 03@2x" src="https://github.com/user-attachments/assets/3bf61843-f315-4cce-8bdc-c4bea84352c2" />
+cargo install --path .
 ```
 
 ### Windows
