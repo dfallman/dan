@@ -207,7 +207,7 @@ pub fn action_registry() -> Vec<PaletteItem> {
         (ReloadConfiguration, "Reload configuration", None),
         (ShowRecentFiles, "Show recent files", None),
         (ShowVersion, "Show version", None),
-        (ShowKeybindings, "Show keybindings", None),
+        (ShowKeybindings, "Toggle keybindings / help", None),
     ];
     entries.iter().map(|&(id, label, hint)| PaletteItem::Action {
         id,

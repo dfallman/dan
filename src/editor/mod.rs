@@ -982,6 +982,12 @@ mod tests {
 			e.execute(Command::PaletteInsertChar(ch));
 		}
 		assert_eq!(e.palette.filtered.len(), 1, "query must isolate one item");
+		match e.palette.selected_item() {
+			Some(crate::palette::PaletteItem::Action { label, .. }) => {
+				assert_eq!(label, "Toggle keybindings / help");
+			}
+			other => panic!("expected the keybindings action, got {:?}", other),
+		}
 		e
 	}
 
