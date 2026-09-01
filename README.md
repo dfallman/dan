@@ -282,7 +282,7 @@ xattr -d com.apple.quarantine /usr/local/bin/dan
 
 If you'd rather not use `sudo`, put it in `~/bin` or `~/.local/bin` instead and add that directory to `PATH` in your shell profile: `export PATH="$HOME/.local/bin:$PATH"`.
 
-Note: on macOS, consider building from source instead. It's quick and easy and also makes updating Dan a breeze, see **Option 2** below.
+**Note**: on macOS, it's easier to install using Homebrew: `brew install dfallman/tap/dan` or building Dan from source, see below.
 
 ### Linux
 
