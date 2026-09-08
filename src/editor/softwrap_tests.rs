@@ -14,6 +14,9 @@ mod softwrap_motion_tests {
 		e.config.wrap_lines = true;
 		e.config.breakindent = false;
 		e.config.line_numbers = false;
+		// Editor::new() loads the user's real config; a scrollbar there would
+		// steal a column and break the width assumption below.
+		e.config.scrollbar = "none".to_string();
 		e.buffer_mut().insert_str(0, body);
 		e.buffer_mut().cursors.set_cursor(0, 0);
 		assert_eq!(e.text_area_width(), text_width as usize);

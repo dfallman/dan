@@ -6,6 +6,7 @@ pub mod formatter;
 pub mod mode;
 pub(crate) mod mouse;
 mod navigation;
+mod scrollbar;
 mod search;
 mod selection;
 pub(crate) mod layout;
@@ -138,6 +139,16 @@ pub struct Editor {
 	/// True when startup ran an OSC colour query. `main` drains leftover
 	/// replies before the first frame so they are not typed into the buffer.
 	pub osc_attempted: bool,
+	/// Viewport position `(active_buffer, scroll_y, scroll_vrow)` seen by the
+	/// last `note_scroll_activity` call; any change re-stamps the scrollbar.
+	pub scrollbar_seen_pos: (usize, usize, usize),
+	/// When the viewport last moved; drives the "scrolling" auto-hide window.
+	pub scrollbar_last_scroll: Option<std::time::Instant>,
+	/// Active scrollbar thumb drag: rows between the grab point and the thumb top.
+	pub scrollbar_drag: Option<usize>,
+	/// Whether the last frame painted the scrollbar; lets the main loop detect
+	/// that a "scrolling" bar has expired and needs one more frame to vanish.
+	pub scrollbar_drawn_visible: bool,
 }
 
 /// The system clipboard — never opened under `cfg(test)`.
@@ -277,6 +288,10 @@ impl Editor {
 			last_recent_save: std::time::Instant::now(),
 			next_untitled_seq: 2,
 			osc_attempted,
+			scrollbar_seen_pos: (0, 0, 0),
+			scrollbar_last_scroll: None,
+			scrollbar_drag: None,
+			scrollbar_drawn_visible: false,
 		}
 	}
 

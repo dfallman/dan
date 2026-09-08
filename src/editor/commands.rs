@@ -40,6 +40,8 @@ pub enum Command {
 	MouseDown { col: u16, row: u16, extend: bool },
 	MouseDrag { col: u16, row: u16 },
 	MouseUp { col: u16, row: u16 },
+	/// Pointer moved with no button held (only reported while mouse capture is on).
+	MouseMove { col: u16, row: u16 },
 
 	// -- Editing --
 	InsertChar(char),

@@ -388,19 +388,26 @@ fn run_loop(
 				return Ok(());
 			}
 			let did_work = editor.poll_async_tasks();
-			if did_work {
+			// A "scrolling" scrollbar that has just expired needs one more
+			// frame to vanish, without waiting for the next keystroke.
+			let now = std::time::Instant::now();
+			if did_work || editor.scrollbar_needs_redraw(now) {
 				render::render(editor, writer)?;
 			}
 
 			let any_formatting = editor.buffers.iter().any(|b| b.fmt_rx.is_some());
 			let indexing = editor.project_index_rx.is_some();
-			let poll_timeout = if any_formatting {
+			let mut poll_timeout = if any_formatting {
 				Duration::from_millis(25)
 			} else if indexing {
 				Duration::from_millis(200)
 			} else {
 				Duration::from_millis(500)
 			};
+			// Wake exactly when the scrollbar's auto-hide window closes.
+			if let Some(left) = editor.scrollbar_hide_in(now) {
+				poll_timeout = poll_timeout.min(left.max(Duration::from_millis(10)));
+			}
 			if event::poll(poll_timeout)? {
 				break event::read()?;
 			}

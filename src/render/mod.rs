@@ -1,5 +1,6 @@
 pub mod buffer;
 pub mod chrome;
+pub mod scrollbar;
 pub mod text;
 
 use crossterm::{
@@ -103,7 +104,7 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 		} else {
 			0
 		};
-		let taw_tmp = (vp.width as usize).saturating_sub(gw_tmp + 1);
+		let taw_tmp = (vp.width as usize).saturating_sub(gw_tmp + 1 + editor.scrollbar_columns());
 		if taw_tmp > 0 {
 			let opts = editor.wrap_opts();
 			// Find which visual row the cursor is on within its buffer line.
@@ -225,7 +226,7 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 	} else {
 		0
 	};
-	let text_area_width = (vp.width as usize).saturating_sub(gutter_width + 1);
+	let text_area_width = (vp.width as usize).saturating_sub(gutter_width + 1 + editor.scrollbar_columns());
 
 	if !editor.config.wrap_lines {
 		// Compute the cursor's visual column so we can center scroll_x on it.
@@ -296,6 +297,9 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 		);
 	}
 
+	// -- Scrollbar (rightmost column; overlays and status paint over it) --
+	scrollbar::paint(editor, &mut screen, &vp, std::time::Instant::now());
+
 	// -- Render 2D UI Components Orchestrator --
 	if editor.palette.open {
 		if let Some(rect) = chrome::palette_modal_rect(vp.width, vp.height) {
@@ -331,7 +335,7 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 				} else {
 					saved_col
 				};
-				let max_w = (vp.width.saturating_sub(1)) as usize;
+				let max_w = (vp.width as usize).saturating_sub(1 + editor.scrollbar_columns());
 				let outline_x = (gutter_width
 					+ 1 + saved_visual_col.saturating_sub(editor.scroll_x))
 				.min(max_w) as u16;
@@ -420,7 +424,8 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 			};
 			(sy, vc)
 		};
-		let max_w = (vp.width.saturating_sub(1)) as usize;
+		// Never park the cursor on the scrollbar column.
+		let max_w = (vp.width as usize).saturating_sub(1 + editor.scrollbar_columns());
 		let screen_x =
 			(gutter_width + 1 + visual_col.saturating_sub(editor.scroll_x)).min(max_w) as u16;
 		let screen_y = screen_y.min(u16::MAX as usize) as u16;

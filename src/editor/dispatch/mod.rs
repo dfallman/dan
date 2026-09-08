@@ -42,7 +42,8 @@ impl Editor {
 			Command::ScrollViewportUp | Command::ScrollViewportDown => {
 				self.pin_viewport = true;
 			}
-			Command::Noop => {}
+			// Hover is noise too: it must not unpin a wheel-panned viewport.
+			Command::Noop | Command::MouseMove { .. } => {}
 			_ => {
 				self.pin_viewport = false;
 			}
@@ -83,6 +84,7 @@ impl Editor {
 			Command::MouseDown { col, row, extend } => self.cmd_mouse_down(col, row, extend),
 			Command::MouseDrag { col, row } => self.cmd_mouse_drag(col, row),
 			Command::MouseUp { col, row } => self.cmd_mouse_up(col, row),
+			Command::MouseMove { col, row } => self.cmd_mouse_move(col, row),
 			Command::InsertChar(ch) => self.cmd_insert_char(ch),
 			Command::InsertString(s) => self.cmd_insert_string(s),
 			Command::InsertNewline => self.cmd_insert_newline(),

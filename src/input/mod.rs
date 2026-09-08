@@ -91,6 +91,10 @@ fn map_mouse(me: &MouseEvent, mode: Mode) -> Command {
 		},
 		MouseEventKind::ScrollUp => Command::ScrollViewportUp,
 		MouseEventKind::ScrollDown => Command::ScrollViewportDown,
+		MouseEventKind::Moved => Command::MouseMove {
+			col: me.column,
+			row: me.row,
+		},
 		_ => Command::Noop,
 	}
 }
@@ -758,6 +762,12 @@ mod tests {
 				mouse(K::ScrollDown, 0, 0),
 				Mode::Editing,
 				Command::ScrollViewportDown,
+			),
+			(
+				"move",
+				mouse(K::Moved, 7, 2),
+				Mode::Editing,
+				Command::MouseMove { col: 7, row: 2 },
 			),
 			(
 				"right click noop",

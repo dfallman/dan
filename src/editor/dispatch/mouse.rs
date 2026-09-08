@@ -7,6 +7,10 @@ impl Editor {
 		if !self.config.mouse {
 			return;
 		}
+		if self.scrollbar_hit(col, row) {
+			self.scrollbar_drag_start(row);
+			return;
+		}
 		let Some((line, c)) = screen_to_buffer(self, col, row) else {
 			return;
 		};
@@ -52,6 +56,9 @@ impl Editor {
 		if !self.config.mouse {
 			return;
 		}
+		if self.scrollbar_drag_to(row) {
+			return;
+		}
 		let Some((line, c)) = screen_to_buffer(self, col, row) else {
 			return;
 		};
@@ -67,8 +74,16 @@ impl Editor {
 		head.desired_vcol = vcol;
 	}
 
+	pub(crate) fn cmd_mouse_move(&mut self, col: u16, row: u16) {
+		if !self.config.mouse {
+			return;
+		}
+		self.scrollbar_hover_at(col, row, std::time::Instant::now());
+	}
+
 	pub(crate) fn cmd_mouse_up(&mut self, _col: u16, _row: u16) {
 		// Selection already updated during drag; collapsed if never moved.
+		self.scrollbar_drag_end();
 	}
 }
 
@@ -189,6 +204,77 @@ mod tests {
 		assert!(e.buffer().cursors.has_selection());
 		assert_eq!(*e.buffer().cursors.primary(), before);
 		assert_eq!(e.buffer().scroll_y, 2);
+	}
+
+	/// 100 lines, 10-row terminal, no help bar → 9 text rows, 1-row thumb.
+	fn scrollbar_editor() -> Editor {
+		let lines: Vec<String> = (0..100).map(|i| format!("l{i}")).collect();
+		let refs: Vec<&str> = lines.iter().map(|s| s.as_str()).collect();
+		let mut e = editor_with_lines(&refs, 40, 10);
+		e.config.scrollbar = "always".to_string();
+		e
+	}
+
+	#[test]
+	fn scrollbar_track_click_jumps_without_moving_cursor() {
+		let mut e = scrollbar_editor();
+		let cur = e.buffer().cursors.cursor();
+		let x = e.terminal_width - 1;
+		e.execute(Command::MouseDown { col: x, row: 8, extend: false });
+		assert_eq!(e.buffer().scroll_y, 91, "bottom track row → last page");
+		assert_eq!(e.buffer().cursors.cursor(), cur, "cursor must not follow the click");
+		assert!(e.pin_viewport, "viewport must stay where the scrollbar put it");
+		assert!(e.scrollbar_drag.is_some());
+	}
+
+	#[test]
+	fn scrollbar_thumb_drag_scrolls_and_release_ends_drag() {
+		let mut e = scrollbar_editor();
+		let x = e.terminal_width - 1;
+		e.execute(Command::MouseDown { col: x, row: 0, extend: false });
+		assert_eq!(e.buffer().scroll_y, 0);
+		// Dragging off the column still moves the thumb.
+		e.execute(Command::MouseDrag { col: x - 5, row: 4 });
+		assert!(e.buffer().scroll_y > 0 && e.buffer().scroll_y < 91, "{}", e.buffer().scroll_y);
+		assert!(!e.buffer().cursors.has_selection());
+		e.execute(Command::MouseUp { col: x - 5, row: 4 });
+		assert!(e.scrollbar_drag.is_none());
+	}
+
+	#[test]
+	fn mouse_move_keeps_viewport_pinned_and_cursor_put() {
+		let mut e = scrollbar_editor();
+		e.config.scrollbar = "scrolling".to_string();
+		e.execute(Command::ScrollViewportDown);
+		assert!(e.pin_viewport);
+		let cur = e.buffer().cursors.cursor();
+		let x = e.terminal_width - 1;
+		e.execute(Command::MouseMove { col: x, row: 3 });
+		assert!(e.pin_viewport, "hover must not unpin a wheel-panned viewport");
+		assert_eq!(e.buffer().cursors.cursor(), cur);
+		assert!(e.scrollbar_visible_at(std::time::Instant::now()));
+	}
+
+	#[test]
+	fn scrollbar_click_ignored_when_mode_none() {
+		let mut e = scrollbar_editor();
+		e.config.scrollbar = "none".to_string();
+		let x = e.terminal_width - 1;
+		e.execute(Command::MouseDown { col: x, row: 8, extend: false });
+		assert_eq!(e.buffer().scroll_y, 0);
+		assert!(e.scrollbar_drag.is_none());
+		// Falls through to text hit-testing: cursor moves to that row.
+		assert_eq!(e.buffer().cursors.cursor().line, 8);
+	}
+
+	#[test]
+	fn scrollbar_click_ignored_when_mouse_off() {
+		let mut e = scrollbar_editor();
+		e.config.mouse = false;
+		let x = e.terminal_width - 1;
+		e.execute(Command::MouseDown { col: x, row: 8, extend: false });
+		assert_eq!(e.buffer().scroll_y, 0);
+		assert!(e.scrollbar_drag.is_none());
 	}
 
 	#[test]

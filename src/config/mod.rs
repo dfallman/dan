@@ -57,6 +57,18 @@ pub struct Config {
 	pub cursor_blink: bool,
 	/// Optional cursor color as "#RRGGBB" or "#RGB". Invalid values are ignored at use time.
 	pub cursor_color: Option<String>,
+	/// Vertical scrollbar: "none", "always", or "scrolling" (auto-hide ~2s after
+	/// the viewport stops moving or the pointer leaves the bar; the default).
+	/// Unknown values behave as "none".
+	pub scrollbar: String,
+}
+
+/// Parsed form of `Config::scrollbar`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ScrollbarMode {
+	None,
+	Always,
+	Scrolling,
 }
 
 impl Default for Config {
@@ -88,6 +100,7 @@ impl Default for Config {
 			cursor_style: "block".to_string(),
 			cursor_blink: false,
 			cursor_color: None,
+			scrollbar: "scrolling".to_string(),
 		}
 	}
 }
@@ -104,6 +117,15 @@ impl Config {
 			("underscore", true) => SetCursorStyle::BlinkingUnderScore,
 			(_, false) => SetCursorStyle::SteadyBlock,
 			(_, true) => SetCursorStyle::BlinkingBlock,
+		}
+	}
+
+	/// Map `scrollbar` to a [`ScrollbarMode`]. Unknown values behave as `"none"`.
+	pub fn scrollbar_mode(&self) -> ScrollbarMode {
+		match self.scrollbar.as_str() {
+			"always" => ScrollbarMode::Always,
+			"scrolling" => ScrollbarMode::Scrolling,
+			_ => ScrollbarMode::None,
 		}
 	}
 
@@ -333,6 +355,27 @@ mod tests {
 		assert_eq!(c.cursor_style, "line");
 		assert!(c.cursor_blink);
 		assert_eq!(c.cursor_color_rgb(), Some([0xff, 0x88, 0x00]));
+	}
+
+	#[test]
+	fn scrollbar_defaults_to_scrolling() {
+		let c = Config::default();
+		assert_eq!(c.scrollbar, "scrolling");
+		assert_eq!(c.scrollbar_mode(), ScrollbarMode::Scrolling);
+	}
+
+	#[test]
+	fn scrollbar_mode_from_toml() {
+		let cases = [
+			("none", ScrollbarMode::None),
+			("always", ScrollbarMode::Always),
+			("scrolling", ScrollbarMode::Scrolling),
+			("bogus", ScrollbarMode::None),
+		];
+		for (raw, expected) in cases {
+			let c: Config = toml::from_str(&format!("scrollbar = \"{raw}\"")).unwrap();
+			assert_eq!(c.scrollbar_mode(), expected, "scrollbar={raw:?}");
+		}
 	}
 
 	#[test]
