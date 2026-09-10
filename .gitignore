@@ -3,6 +3,8 @@ test-files/
 test.txt
 test-file.rs
 test-file.txt
+/test
+/scratch.rs
 .DS_Store
 /scripts
 /.env
