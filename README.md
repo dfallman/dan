@@ -1,11 +1,11 @@
 # dan
 
-A fast and modern multi-platform terminal text editor. It's a lighter,
-quicker alternative to editors such as Nano, Pico, Vim, Joe, and Micro, written entirely in Rust.
+A fast, modern, and intuitive terminal text editor written entirely in Rust. Designed to be light,
+quick, and very capable, yet not bloated with features you don't need.
 
-Dan needs no configuration, just install and start editing using intuitive, familiar keyboard shortcuts.
-It keeps input latency low even over high-jitter SSH links, and its
-rope-based buffer keeps editing responsive on files far past the point
+Despite being highly configurable, Dan needs no configuration to get started. Just install and start editing using familiar keyboard shortcuts. 
+
+It ships with sensible defaults intended to suit most users and use-cases. Dan keeps input latency low over SSH links and Dan's rope-based buffer keeps editing responsive on files far past the point
 where most editors stall. Try it with 100 MB+ logs, it opens and scrolls without hesitation.
 
 <p align="center">
@@ -59,7 +59,7 @@ cargo install --path .
 
 ## Features
 
-Dan uses familiar shortcuts out of the box — `Ctrl-C`/`V` to copy/paste, `Ctrl-S` to save, `Ctrl-Z`/`Y` to undo/redo, `Ctrl-Q` to quit. Press `Ctrl-H` to toggle the built-in help bar at any time. Mouse is enabled by default: click to place the cursor, drag to select, and use the scroll wheel to move the viewport (set `mouse = false` to disable).
+Dan uses familiar shortcuts out of the box — `Ctrl-C`/`V` to copy/paste, `Ctrl-S` to save, `Ctrl-Z`/`Y` to undo/redo, `Ctrl-Q` to quit. Press `Ctrl-P` to bring up the command palette, from which you can control most things in Dan. Use `Ctrl-H` to toggle the built-in help bar at any time. Mouse is is supported and enabled by default: click to place the cursor, drag to select, and use the scroll wheel to move the viewport (set `mouse = false` to disable).
 
 - **Rope-backed text buffer**: Utilizes a rope structure ensuring $O(\\log N)$ time complexity for insertions and deletions. Memory usage scales with edit volume rather than raw file size, permitting fluid, non-blocking navigation and manipulation of 100MB+ log files.
 - **Optimized terminal I/O & differential rendering**: Implements differential rendering to minimize bandwidth by emitting ANSI escape sequences strictly for modified cells. To sustain $O(1)$ scroll performance in massive files, `dan` maintains a syntax snapshot cache every 200 lines, eliminating the need to re-lex the entire visible range during rapid vertical movement.
