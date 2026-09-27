@@ -9,7 +9,7 @@ It ships with sensible defaults intended to suit most users and use-cases. Dan k
 where most editors stall. Try it with 100 MB+ logs, it opens and scrolls without hesitation.
 
 <p align="center">
-  <img width="800" alt="dan terminal editor" src="https://github.com/user-attachments/assets/ccebe66e-b927-418b-9cf1-4140771d3826" />
+    <img width="800" alt="dan terminal editor" src="https://github.com/user-attachments/assets/ccebe66e-b927-418b-9cf1-4140771d3826" />
 </p>
 
 ### Standout features:
