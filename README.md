@@ -18,6 +18,7 @@ where most editors stall. Try it with 100 MB+ logs, it opens and scrolls without
 - **Low latency**: designed to work equally well on remote sessions as in local terminals
 - **Large files**: uses a rope buffer, so file size doesn't dictate speed
 - **Multiple buffers**: supports multiple buffers (files), fast buffer switching 
+- **Agent-friendly**: follows files that coding agents and other tools change on disk, merging their edits with your unsaved ones and highlighting what changed
 - **Multi-platform**: Linux, macOS, BSD, Windows
 
 ### Key performance metrics:
@@ -36,6 +37,7 @@ where most editors stall. Try it with 100 MB+ logs, it opens and scrolls without
 | Rendering | Differential | Full/partial redraw | Full redraw | Full redraw |
 | Crash recovery | ✅ Auto-swap | ✅ Swap files | ❌ | ❌ |
 | Command palette | ✅ | ❌ (Cmd line) | ❌ | ❌ |
+| Edits made on disk while open | ✅ Live 3-way merge | ⚠️ Reload/warn | ⚠️ Warns on save | ⚠️ Reload prompt |
 | Out-of-box config | Zero-config | High learning curve | Minimal | Minimal |
 
 
@@ -64,6 +66,7 @@ Dan uses familiar shortcuts out of the box — `Ctrl-C`/`V` to copy/paste, `Ctrl
 - **Rope-backed text buffer**: Utilizes a rope structure ensuring $O(\\log N)$ time complexity for insertions and deletions. Memory usage scales with edit volume rather than raw file size, permitting fluid, non-blocking navigation and manipulation of 100MB+ log files.
 - **Optimized terminal I/O & differential rendering**: Implements differential rendering to minimize bandwidth by emitting ANSI escape sequences strictly for modified cells. To sustain $O(1)$ scroll performance in massive files, `dan` maintains a syntax snapshot cache every 200 lines, eliminating the need to re-lex the entire visible range during rapid vertical movement.
 - **POSIX-compliant atomic writes (crash-safe I/O)**: File writes are executed via a temporary sibling file, followed by an `fsync` and atomic `rename`. A system crash or disk-full condition mid-save leaves the original file intact, preserving original file permissions and symlink targets.
+- **Live merge of on-disk changes**: When a coding agent, formatter, or `git checkout` rewrites an open file, Dan folds the change into the buffer within about half a second. A three-way line merge keeps your unsaved edits, asks only when both sides touched the same lines, marks changed lines in the gutter, and makes each update a single undo step. Saves re-check the disk first, so they never overwrite a change you haven't seen. See [Files changed on disk](#files-changed-on-disk).
 - **Crash recovery**: Periodically checkpoints the active buffer to a hidden `.swp` file every 5 seconds using safe write patterns. Unplanned terminal disconnects or crashed sessions trigger automatic recovery prompts on the next open.
 - **Interactive command palette (`Ctrl-P`)**: A fuzzy-search overlay covering all editor actions, active buffers, and project workspace files to keep operations entirely on the home row.
 - **Multiple buffers**: Concurrent support for multiple active buffers. `Ctrl-N` opens a new buffer; switching, closing, and saving buffers is handled through the command palette. Quitting with unsaved changes steps through each dirty buffer in turn.
@@ -97,7 +100,7 @@ Dan uses familiar shortcuts out of the box — `Ctrl-C`/`V` to copy/paste, `Ctrl
 
 The palette is a fuzzy-search overlay: start typing to filter across editor actions, open buffers, and project files, then `Enter` to run or switch. The mouse works too: click a result to run it, scroll the wheel to move through the list, and click outside the palette to dismiss it. Every keyboard shortcut is also available here, plus a number of actions that have no dedicated key:
 
-- **Buffers & files**: Open file, reload buffer from disk, close buffer / close others / close all, save all, show recent files. `Ctrl-D` on a highlighted buffer closes it directly (with a save prompt if it has unsaved changes).
+- **Buffers & files**: Open file, reload buffer from disk, clear change marks, close buffer / close others / close all, save all, show recent files. `Ctrl-D` on a highlighted buffer closes it directly (with a save prompt if it has unsaved changes).
 - **Path utilities**: Copy the file's absolute or relative path, reveal in Finder / open containing folder, show buffer info.
 - **Per-buffer format settings**: Switch indentation between spaces and tabs, set tab width (2/4/8), switch line endings between LF and CRLF, trim trailing whitespace, convert existing indentation tabs ↔ spaces.
 - **Text transforms**: Sort lines ascending/descending, deduplicate adjacent lines, convert to UPPERCASE / lowercase / Title Case, reverse the selection.
@@ -432,11 +435,26 @@ file you have open, Dan updates the buffer within about half a second:
 - **Unsaved edits in the same lines:** Dan asks — `^K` keep mine, `^T` take
   theirs, `Esc` decide later (keeps yours and marks the lines red).
 
-Changed line numbers are highlighted yellow until you save, or until you run
-**Clear change marks** from the command palette. Each update is one undo
-step, so `^Z` backs it out. Saving first checks the disk again and merges
-any change it has not shown you yet. Set `watch_files = false` to turn this
-off.
+Changed line numbers are highlighted yellow (conflicts you deferred are red)
+until you save, or until you run **Clear change marks** from the command
+palette. The marks follow your edits, and each update is one undo step, so
+`^Z` backs it out.
+
+A few more details:
+
+- **Every open buffer is watched**, not just the visible one. A conflict in a
+  background buffer waits and is shown when you switch to it.
+- **Saving checks the disk first.** If the file changed since Dan last looked,
+  the change is merged in and you save again, so a save never overwrites an
+  edit you haven't seen. The same goes for *Save all* and saving on quit.
+- **Deleted or moved files** are reported once, and the buffer is kept and
+  marked as unsaved; saving recreates the file.
+- **Detection is cross-platform polling** of the file's modification time
+  and size (plus its inode on Unix), so it works the same on macOS, Linux,
+  Windows, WSL, and network drives, including tools that save through a
+  temporary file and rename.
+
+Set `watch_files = false` to turn this off.
 
 ## Themes
 
