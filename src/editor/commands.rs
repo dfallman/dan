@@ -124,6 +124,9 @@ pub enum Command {
 
 	RecoverSwapAccept,
 	RecoverSwapDecline,
+	ExternalKeepMine,
+	ExternalTakeTheirs,
+	ExternalDecideLater,
 
 	// -- Palette --
 	PaletteOpen,
@@ -150,6 +153,7 @@ pub enum Command {
 	RevealInFinder,
 	OpenContainingFolder,
 	ShowBufferInfo,
+	ClearChangeMarks,
 
 	// -- Format / Encoding --
 	IndentSpaces,

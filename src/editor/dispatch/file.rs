@@ -8,6 +8,9 @@ impl Editor {
 		if self.buffer().file_path.is_none() {
 			self.execute(Command::SaveAsOpen);
 		} else {
+			if self.disk_blocks_save(self.active_buffer) {
+				return;
+			}
 			self.buffer_mut().commit_edits();
 			let cfg = self.config.clone();
 			match self.buffer_mut().save(&cfg) {
@@ -15,6 +18,32 @@ impl Editor {
 				Err(e) => self.set_status(format!("Save failed: {}", e)),
 			}
 		}
+	}
+
+	/// Every save path calls this before writing buffer `idx`. It folds in
+	/// any disk change not yet seen and refuses while a disk conflict is
+	/// unanswered, so a save never overwrites another program's edit unseen.
+	/// Returns true if the save must stop.
+	pub(crate) fn disk_blocks_save(&mut self, idx: usize) -> bool {
+		if !self.config.watch_files {
+			return false;
+		}
+		let check = self.check_buffer_on_disk(idx);
+		if self.buffers[idx].pending_conflict.is_some() {
+			self.set_status("Changed on disk and in your buffer — choose ^K keep mine or ^T take theirs, then save");
+			// Answer the conflict first; this also leaves a pending quit.
+			if idx == self.active_buffer && matches!(self.mode, Mode::Editing | Mode::ConfirmQuit) {
+				self.quit_cycle_idx = None;
+				self.mode = Mode::Editing;
+				self.raise_conflict_prompt();
+			}
+			return true;
+		}
+		if check == crate::editor::external::DiskCheck::Merged {
+			self.set_status("File changed on disk — merged into your buffer; save again to write");
+			return true;
+		}
+		false
 	}
 
 	pub(crate) fn cmd_quit(&mut self) {
@@ -50,6 +79,9 @@ impl Editor {
 		if self.buffer().file_path.is_none() {
 			self.execute(Command::SaveAsOpen);
 		} else {
+			if self.disk_blocks_save(self.active_buffer) {
+				return;
+			}
 			self.buffer_mut().commit_edits();
 			let cfg = self.config.clone();
 			match self.buffer_mut().save(&cfg) {
@@ -154,6 +186,11 @@ impl Editor {
 			Ok(_) => self.set_status(format!("Opened {}", parent.display())),
 			Err(e) => self.set_status(format!("Open failed: {}", e)),
 		}
+	}
+
+	pub(crate) fn cmd_clear_change_marks(&mut self) {
+		self.buffer_mut().clear_change_marks();
+		self.set_status("Change marks cleared");
 	}
 
 	pub(crate) fn cmd_show_buffer_info(&mut self) {

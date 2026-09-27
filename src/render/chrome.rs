@@ -893,12 +893,12 @@ pub fn build_prompt(editor: &Editor, width: u16, h: u16) -> Option<Vec<Window>> 
 	}
 
 	let bg_col = match editor.mode {
-		Mode::RecoverSwap | Mode::ConfirmQuit => editor.theme.toolbar_bg,
+		Mode::RecoverSwap | Mode::ConfirmQuit | Mode::ConfirmExternalConflict => editor.theme.toolbar_bg,
 		_ => editor.theme.prompt_bg,
 	};
 	
 	let prefix = match editor.mode {
-		Mode::ConfirmQuit | Mode::RecoverSwap => UiFragment {
+		Mode::ConfirmQuit | Mode::RecoverSwap | Mode::ConfirmExternalConflict => UiFragment {
 			text: editor.locale.translate(Message::ToolbarPrefix),
 			fg: editor.theme.prompt_danger_bg,
 			bg: bg_col,
@@ -1001,6 +1001,18 @@ pub fn build_prompt(editor: &Editor, width: u16, h: u16) -> Option<Vec<Window>> 
 			builder = builder.with_cursor(cursor_pos);
 			builder.add_block(OverlayBlock { fragments });
 
+			return Some(builder.build(width, h.saturating_sub(1)));
+		}
+		Mode::ConfirmExternalConflict => {
+			let n = editor.buffer().pending_conflict.as_ref().map_or(0, |p| p.regions.len());
+			let label = editor.locale.translate(Message::PromptExternalTitle);
+			let msg = editor.locale.translate(Message::PromptExternalMsg(n));
+			let mut fragments = vec![
+				UiFragment { bg: editor.theme.prompt_warning_bg, fg: editor.theme.prompt_warning_fg, text: format!(" {} ", label), is_flex: false, is_bold: true },
+				UiFragment { bg: bg_col, fg: editor.theme.prompt_fg, text: " ".to_string(), is_flex: false, is_bold: false },
+			];
+			fragments.extend(parse_hotkeys(&msg, bg_col, editor.theme.prompt_info, Some(editor.theme.prompt_fg), editor.theme.hotkey));
+			builder.add_block(OverlayBlock { fragments });
 			return Some(builder.build(width, h.saturating_sub(1)));
 		}
 		Mode::ConfirmQuit => {

@@ -62,6 +62,13 @@ pub struct Theme {
     // Text Rendering
     pub line_nr: Color,
     pub line_nr_active: Color,
+    /// Gutter colours for lines changed on disk by another program.
+    pub external_change_bg: Color,
+    pub external_change_fg: Color,
+    /// Gutter colours for lines where a disk change conflicted and the user
+    /// deferred the choice.
+    pub external_conflict_bg: Color,
+    pub external_conflict_fg: Color,
     pub eof_marker: Color,
     pub selection_bg: Color,
     pub selection_fg: Color,
@@ -143,6 +150,10 @@ impl Theme {
 
                 line_nr: Color::Grey,
                 line_nr_active: Color::Blue,
+                external_change_bg: Color::Yellow,
+                external_change_fg: Color::AnsiValue(16),
+                external_conflict_bg: Color::Red,
+                external_conflict_fg: Color::AnsiValue(16),
                 eof_marker: Color::Grey,
                 selection_bg: Color::Cyan,
                 selection_fg: Color::AnsiValue(16),
@@ -211,6 +222,10 @@ impl Theme {
                 // keep DarkGrey here.
                 line_nr: Color::DarkGrey,
                 line_nr_active: Color::White,
+                external_change_bg: Color::Yellow,
+                external_change_fg: Color::AnsiValue(16),
+                external_conflict_bg: Color::Red,
+                external_conflict_fg: Color::AnsiValue(16),
                 eof_marker: Color::DarkGrey,
                 selection_bg: Color::Cyan,
                 selection_fg: Color::AnsiValue(16),

@@ -81,6 +81,7 @@ fn line_number_width(total_lines: usize) -> usize {
 
 /// Render the full editor frame to the terminal.
 pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
+	editor.buffer_mut().sync_change_marks();
 	let vp = Viewport::from_editor(editor);
 	let text_height = vp.text_height() as usize;
 

@@ -215,7 +215,7 @@ checksum = "460fbee9c2c2f33933d720630a6a0bac33ba7053db5344fac858d4b8952d77d5"
 
 [[package]]
 name = "dan"
-version = "0.3.16"
+version = "0.3.17"
 dependencies = [
  "arboard",
  "chardetng",
@@ -231,6 +231,7 @@ dependencies = [
  "serde",
  "serde_json",
  "signal-hook",
+ "similar",
  "syntect",
  "syntect-assets",
  "terminal-colorsaurus",
@@ -1085,6 +1086,15 @@ name = "simd-adler32"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "703d5c7ef118737c72f1af64ad2f6f8c5e1921f818cdcb97b8fe6fc69bf66214"
+
+[[package]]
+name = "similar"
+version = "3.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4f66ca1f7aca2474dc10c942eb22feffc897735f54cd1db90138c2fddb490987"
+dependencies = [
+ "bstr",
+]
 
 [[package]]
 name = "smallvec"

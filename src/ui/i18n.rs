@@ -40,6 +40,8 @@ pub enum Message {
     PromptGoToLineHint(usize),
     PromptRecoverTitle,
     PromptRecoverMsg,
+    PromptExternalTitle,
+    PromptExternalMsg(usize),
     PromptSaveAs,
     PromptConfirmOverwrite,
     PromptSaveAsShortcuts,
@@ -115,6 +117,12 @@ impl Locale for EnglishLocale {
             Message::PromptGoToLineHint(lines) => format!("(1-{})", lines),
             Message::PromptRecoverTitle => "Recovery".to_string(),
             Message::PromptRecoverMsg => "Recovery swap file detected. Restore unsaved changes? ^Y Yes, ^N No, ^Q or Esc to quit".to_string(),
+            Message::PromptExternalTitle => "Changed on disk".to_string(),
+            Message::PromptExternalMsg(n) => format!(
+                "{} section{} also edited here. ^K Keep mine, ^T Take theirs, Esc Decide later",
+                n,
+                if n == 1 { "" } else { "s" }
+            ),
             Message::PromptSaveAs => "Save as:".to_string(),
             Message::PromptConfirmOverwrite => "File exists. ^O Overwrite, Esc Cancel".to_string(),
             Message::PromptSaveAsShortcuts => "Type path, ⏎ Save, Esc Cancel".to_string(),
@@ -202,6 +210,11 @@ impl Locale for SwedishLocale {
             Message::PromptRecoverMsg => {
                 "Återställningsfil hittades. Återställ osparade ändringar? ^Y Ja, ^N Nej, ^Q eller Esc för att avsluta".to_string()
             }
+            Message::PromptExternalTitle => "Ändrad på disk".to_string(),
+            Message::PromptExternalMsg(n) => format!(
+                "{} avsnitt ändrade även här. ^K Behåll mina, ^T Ta deras, Esc Bestäm senare",
+                n
+            ),
             Message::PromptSaveAs => "Spara som:".to_string(),
             Message::PromptConfirmOverwrite => {
                 "Filen finns. ^O Skriv över, Esc Avbryt".to_string()
@@ -284,6 +297,8 @@ fn all_message_samples() -> Vec<Message> {
         Message::PromptGoToLineHint(10),
         Message::PromptRecoverTitle,
         Message::PromptRecoverMsg,
+        Message::PromptExternalTitle,
+        Message::PromptExternalMsg(2),
         Message::PromptSaveAs,
         Message::PromptConfirmOverwrite,
         Message::PromptSaveAsShortcuts,

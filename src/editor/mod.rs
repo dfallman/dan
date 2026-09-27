@@ -2,6 +2,7 @@ pub mod commands;
 pub mod cursor;
 mod dispatch;
 mod editing;
+mod external;
 pub mod formatter;
 pub mod mode;
 pub(crate) mod mouse;
@@ -103,6 +104,8 @@ pub struct Editor {
 	pub save_as_pending_path: Option<String>,
 	/// Timestamp of the last autosave run; gates the 5-second autosave cadence.
 	pub last_autosave: std::time::Instant,
+	/// When open files were last checked for external changes.
+	pub last_disk_poll: std::time::Instant,
 	/// Previous frame's screen buffer; used by the differential renderer.
 	pub last_screen: Option<crate::render::buffer::ScreenBuffer>,
 	/// Active UI theme.
@@ -273,6 +276,7 @@ impl Editor {
 			prompt_view_start: std::cell::Cell::new(0),
 			save_as_pending_path: None,
 			last_autosave: std::time::Instant::now(),
+			last_disk_poll: std::time::Instant::now(),
 			last_screen: None,
 			theme: std::sync::Arc::new(crate::ui::theme::Theme::default(is_light_bg)),
 			locale: Box::new(crate::ui::i18n::EnglishLocale),
@@ -512,6 +516,8 @@ impl Editor {
 			}
 			did_work = true;
 		}
+		did_work |= self.poll_disk_changes(std::time::Instant::now());
+		did_work |= self.raise_conflict_prompt();
 		did_work
 	}
 
@@ -1627,6 +1633,15 @@ mod tests {
 		e.execute(Command::InsertString("repl\x1baced".into()));
 		assert_eq!(e.replace_with, "repl\u{241B}aced");
 		assert_eq!(e.buffer().text.to_string_full(), "DOC\n");
+	}
+
+	#[test]
+	fn clear_change_marks_command_empties_marks() {
+		let mut e = Editor::new();
+		e.buffer_mut().insert_str(0, "a\nb\n");
+		e.buffer_mut().change_marks.insert(1, crate::buffer::marks::MarkKind::External);
+		e.execute(crate::editor::commands::Command::ClearChangeMarks);
+		assert!(e.buffer().change_marks.is_empty());
 	}
 
 	#[test]

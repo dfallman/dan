@@ -61,7 +61,7 @@ pub enum ActionId {
     // New commands added in Task 22+; declared here to seed the registry shape.
     NewBuffer,
     OpenFile, ReloadBuffer, CloseBuffer, CloseOthers, CloseAll, SaveAll,
-    CopyPathAbs, CopyPathRel, RevealInFinder, OpenContainingFolder, ShowBufferInfo,
+    CopyPathAbs, CopyPathRel, RevealInFinder, OpenContainingFolder, ShowBufferInfo, ClearChangeMarks,
     IndentSpaces, IndentTabs, TabWidth2, TabWidth4, TabWidth8,
     LineEndingsLF, LineEndingsCRLF,
     TrimTrailingWhitespace, ConvertTabsToSpaces, ConvertSpacesToTabs,
@@ -116,6 +116,7 @@ pub fn action_to_command(id: ActionId) -> Command {
         RevealInFinder => Command::RevealInFinder,
         OpenContainingFolder => Command::OpenContainingFolder,
         ShowBufferInfo => Command::ShowBufferInfo,
+        ClearChangeMarks => Command::ClearChangeMarks,
         // Task 24: format/encoding commands
         IndentSpaces => Command::IndentSpaces,
         IndentTabs => Command::IndentTabs,
@@ -186,6 +187,7 @@ pub fn action_registry() -> Vec<PaletteItem> {
         (RevealInFinder, "Reveal in Finder", None),
         (OpenContainingFolder, "Open containing folder", None),
         (ShowBufferInfo, "Show buffer info", None),
+        (ClearChangeMarks, "Clear change marks", None),
         (IndentSpaces, "Indent: spaces", None),
         (IndentTabs, "Indent: tabs", None),
         (TabWidth2, "Tab width: 2", None),

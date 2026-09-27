@@ -61,6 +61,8 @@ pub struct Config {
 	/// the viewport stops moving or the pointer leaves the bar; the default).
 	/// Unknown values behave as "none".
 	pub scrollbar: String,
+	/// Reload/merge open files changed on disk by other programs.
+	pub watch_files: bool,
 }
 
 /// Parsed form of `Config::scrollbar`.
@@ -101,6 +103,7 @@ impl Default for Config {
 			cursor_blink: false,
 			cursor_color: None,
 			scrollbar: "scrolling".to_string(),
+			watch_files: true,
 		}
 	}
 }

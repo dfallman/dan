@@ -419,6 +419,7 @@ fn run_loop(
 			&& editor.mode != crate::editor::mode::Mode::SaveAs
 			&& editor.mode != crate::editor::mode::Mode::Palette
 			&& editor.mode != crate::editor::mode::Mode::RecoverSwap
+			&& editor.mode != crate::editor::mode::Mode::ConfirmExternalConflict
 		{
 			editor.clear_status();
 			editor.clear_info_banner();
@@ -443,6 +444,7 @@ fn run_loop(
 				&& editor.mode != crate::editor::mode::Mode::SaveAs
 				&& editor.mode != crate::editor::mode::Mode::Palette
 				&& editor.mode != crate::editor::mode::Mode::RecoverSwap
+				&& editor.mode != crate::editor::mode::Mode::ConfirmExternalConflict
 			{
 				editor.clear_status();
 				editor.clear_info_banner();

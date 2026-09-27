@@ -141,13 +141,17 @@ pub fn render_wrap(
 				} else {
 					format!("{:>width$} ", "↳", width = gutter_width)
 				};
-				screen.set_bg(base_bg);
-				screen.set_fg(if buf_line == cursor_line {
-					editor.theme.line_nr_active
+				let (fg, bg) = if vrow_idx == 0 {
+					gutter_colors(editor, buf_line, cursor_line, base_bg)
+				} else if buf_line == cursor_line {
+					(editor.theme.line_nr_active, base_bg)
 				} else {
-					editor.theme.line_nr
-				});
+					(editor.theme.line_nr, base_bg)
+				};
+				screen.set_bg(bg);
+				screen.set_fg(fg);
 				screen.put_str(&gutter);
+				screen.set_bg(base_bg);
 			}
 
 			let mut screen_col: usize = 0;
@@ -340,12 +344,11 @@ pub fn render_nowrap(
 			if show_line_numbers {
 				let line_num = format!("{:>width$} ", line_idx + 1, width = gutter_width);
 				cols_written += line_num.len();
-				screen.set_fg(if line_idx == cursor_line {
-					editor.theme.line_nr_active
-				} else {
-					editor.theme.line_nr
-				});
+				let (fg, bg) = gutter_colors(editor, line_idx, cursor_line, base_bg);
+				screen.set_bg(bg);
+				screen.set_fg(fg);
 				screen.put_str(&line_num);
+				screen.set_bg(base_bg);
 			}
 
 			let line_text = editor.buffer().text.line(line_idx);
@@ -492,11 +495,44 @@ pub fn render_nowrap(
 	}
 }
 
+/// Gutter (fg, bg) for a buffer line: a change mark overrides the normal
+/// and active line-number colours.
+fn gutter_colors(editor: &Editor, line: usize, cursor_line: usize, base_bg: Color) -> (Color, Color) {
+	use crate::buffer::marks::MarkKind;
+	match editor.buffer().change_marks.get(&line) {
+		Some(MarkKind::External) => (editor.theme.external_change_fg, editor.theme.external_change_bg),
+		Some(MarkKind::Conflict) => (editor.theme.external_conflict_fg, editor.theme.external_conflict_bg),
+		None if line == cursor_line => (editor.theme.line_nr_active, base_bg),
+		None => (editor.theme.line_nr, base_bg),
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use crate::buffer::rope::TextRope;
 	use crate::editor::Editor;
 	use std::path::PathBuf;
+
+	#[test]
+	fn change_marks_colour_the_gutter() {
+		use crate::buffer::marks::MarkKind;
+		for wrap in [true, false] {
+			let mut e = Editor::new();
+			e.config.wrap_lines = wrap;
+			e.config.line_numbers = true;
+			e.buffer_mut().text = TextRope::from_str("a\nb\nc\n");
+			e.buffer_mut().change_marks.insert(1, MarkKind::External);
+			e.buffer_mut().change_marks.insert(2, MarkKind::Conflict);
+			let mut out: Vec<u8> = Vec::new();
+			crate::render::render(&mut e, &mut out).unwrap();
+			let scr = e.last_screen.as_ref().unwrap();
+			let w = scr.width as usize;
+			assert_ne!(scr.grid[0].bg, e.theme.external_change_bg, "wrap={wrap}");
+			assert_eq!(scr.grid[w].bg, e.theme.external_change_bg, "wrap={wrap}");
+			assert_eq!(scr.grid[w].fg, e.theme.external_change_fg, "wrap={wrap}");
+			assert_eq!(scr.grid[2 * w].bg, e.theme.external_conflict_bg, "wrap={wrap}");
+		}
+	}
 
 	/// Render two lines where line 0 is markdown emphasis (forced italic by
 	/// `Editor::new`'s markup.italic theme override) and line 1 is plain.

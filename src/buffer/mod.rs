@@ -1,5 +1,9 @@
 pub mod history;
 pub mod rope;
+pub mod merge;
+pub mod disk;
+pub mod marks;
+mod apply;
 
 use std::io;
 use std::path::{Path, PathBuf};
@@ -89,6 +93,26 @@ pub struct Buffer {
 	/// it constructs the buffer (Editor::new for the startup scratch,
 	/// Editor::push_new_untitled for Command::NewBuffer).
 	pub untitled_seq: Option<usize>,
+	/// Last-known on-disk stamp of `file_path`. `None` = unknown: the next
+	/// check reads the file and compares text.
+	pub disk_stamp: Option<disk::DiskStamp>,
+	/// Exact decoded file content as last seen on disk. `None` = the file
+	/// has never been read or written by us (e.g. a new, unsaved path).
+	pub disk_text: Option<TextRope>,
+	/// Merge base for external changes: the disk state as the buffer sees
+	/// it. After a save this is the buffer text, not the saved bytes, so
+	/// on-save transforms (trim, CRLF) never look like user edits.
+	pub disk_base: Option<TextRope>,
+	/// The file was missing at the last check (reported once).
+	pub disk_missing: bool,
+	/// An unanswered keep-mine / take-theirs conflict from an external change.
+	pub pending_conflict: Option<disk::PendingConflict>,
+	/// Gutter marks for lines changed on disk, keyed by buffer line.
+	pub change_marks: std::collections::BTreeMap<usize, marks::MarkKind>,
+	/// Text `change_marks` were last aligned to (see `sync_change_marks`).
+	pub(crate) marks_text: Option<TextRope>,
+	/// `version` when `change_marks` were last aligned.
+	pub(crate) marks_version: u64,
 }
 
 impl Buffer {
@@ -116,63 +140,21 @@ impl Buffer {
 			is_formatting: false,
 			fmt_child_pid: None,
 			untitled_seq: None,
+			disk_stamp: None,
+			disk_text: None,
+			disk_base: None,
+			disk_missing: false,
+			pending_conflict: None,
+			change_marks: Default::default(),
+			marks_text: None,
+			marks_version: 0,
 		}
 	}
 
 	/// Create a buffer from a file, returning the Buffer and its sniffed indentation metrics.
 	pub fn from_file(path: &Path) -> io::Result<(Self, Option<bool>, Option<usize>)> {
-		if path.is_dir() {
-			return Err(io::Error::new(
-				io::ErrorKind::IsADirectory,
-				"Is a directory",
-			));
-		}
-
-		// Refuse pathologically large files before reading them into memory
-		// (P3-H): a multi-GB read can OOM-abort and take every buffer with it.
-		let meta = std::fs::metadata(path)?;
-		if is_too_large(meta.len()) {
-			return Err(io::Error::new(
-				io::ErrorKind::InvalidData,
-				format!(
-					"File too large to open ({} bytes; limit {} bytes)",
-					meta.len(),
-					MAX_FILE_BYTES
-				),
-			));
-		}
-
-		let bytes = std::fs::read(path)?;
-
-		// A UTF-16/UTF-32 byte-order mark up front means the file legitimately
-		// contains NUL bytes (every ASCII char), so it must NOT be rejected by
-		// the NUL binary heuristic below (P4-N). `decode` strips the BOM.
-		let bom_encoding = encoding_rs::Encoding::for_bom(&bytes)
-			.map(|(enc, _)| enc)
-			.filter(|&enc| enc != encoding_rs::UTF_8);
-
-		let (content, encoding) = if let Some(enc) = bom_encoding {
-			let (decoded, _, _) = enc.decode(&bytes);
-			(decoded.into_owned(), enc)
-		} else {
-			// Treat any file containing a NUL byte as binary; refuse to open.
-			if bytes.contains(&0) {
-				return Err(io::Error::new(
-					io::ErrorKind::InvalidData,
-					"File appears to be binary",
-				));
-			}
-
-			if let Ok(s) = std::str::from_utf8(&bytes) {
-				(s.to_string(), encoding_rs::UTF_8)
-			} else {
-				let mut detector = chardetng::EncodingDetector::new();
-				detector.feed(&bytes, true);
-				let enc = detector.guess(None, true);
-				let (dec, _, _) = enc.decode(&bytes);
-				(dec.into_owned(), enc)
-			}
-		};
+		let (content, encoding) = disk::read_decoded(path)?;
+		let disk_stamp = disk::DiskStamp::of(path).ok();
 
 		// --- Smart Indentation Detection ---
 		let mut tabs_count = 0;
@@ -213,8 +195,9 @@ impl Buffer {
 			}
 		}
 
+		let text = TextRope::from_str(&content);
 		let buffer = Self {
-			text: TextRope::from_str(&content),
+			text: text.clone(),
 			history: History::new(),
 			file_path: Some(path.to_path_buf()),
 			dirty: false,
@@ -235,6 +218,14 @@ impl Buffer {
 			is_formatting: false,
 			fmt_child_pid: None,
 			untitled_seq: None,
+			disk_stamp,
+			disk_text: Some(text.clone()),
+			disk_base: Some(text),
+			disk_missing: false,
+			pending_conflict: None,
+			change_marks: Default::default(),
+			marks_text: None,
+			marks_version: 0,
 		};
 
 		Ok((buffer, expand_tab, tab_width))
@@ -278,6 +269,21 @@ impl Buffer {
 		text
 	}
 
+	/// After a successful write of `saved` to `path`: remember it as the
+	/// on-disk state so our own save is never mistaken for an external edit.
+	pub(crate) fn record_saved(&mut self, saved: &str, path: &Path) {
+		self.disk_stamp = disk::DiskStamp::of(path).ok();
+		self.disk_text = Some(if self.text.eq_str(saved) {
+			self.text.clone()
+		} else {
+			TextRope::from_str(saved)
+		});
+		self.disk_base = Some(self.text.clone());
+		self.disk_missing = false;
+		self.pending_conflict = None;
+		self.clear_change_marks();
+	}
+
 	/// Encode `text` using this buffer's stored encoding. Refuses if the
 	/// encoding cannot losslessly represent every character — silently
 	/// substituting `?` (encoding_rs's default) would corrupt the user's
@@ -311,10 +317,11 @@ impl Buffer {
 	/// a partial write (disk-full, crash, kill mid-write) cannot corrupt the
 	/// on-disk file.
 	pub fn save(&mut self, config: &crate::config::Config) -> io::Result<()> {
-		if let Some(ref path) = self.file_path {
+		if let Some(path) = self.file_path.clone() {
 			let text = self.prepare_save_text(config);
 			let encoded_bytes = self.encode_for_save(&text)?;
-			crate::atomic_io::write(path, &encoded_bytes)?;
+			crate::atomic_io::write(&path, &encoded_bytes)?;
+			self.record_saved(&text, &path);
 
 			if let Some(ref swp) = self.swp_path {
 				crate::recovery::cleanup_swap(swp);
@@ -335,6 +342,7 @@ impl Buffer {
 		let text = self.prepare_save_text(config);
 		let encoded_bytes = self.encode_for_save(&text)?;
 		crate::atomic_io::write(path, &encoded_bytes)?;
+		self.record_saved(&text, path);
 
 		// Drop the swap from this buffer's previous identity (a different file,
 		// or an untitled crash-dump path) before adopting the new one.
@@ -633,6 +641,54 @@ mod tests {
 		let out = buf.encode_for_save(&buf.prepare_save_text(&cfg)).unwrap();
 		assert_eq!(out, bytes, "UTF-16LE save must round-trip BOM + code units");
 		std::fs::remove_file(&tmp).ok();
+	}
+
+	fn temp_path(name: &str) -> std::path::PathBuf {
+		let mut p = std::env::temp_dir();
+		p.push(format!("dan_disk_{}_{}", std::process::id(), name));
+		p
+	}
+
+	#[test]
+	fn from_file_records_disk_state() {
+		let p = temp_path("record.txt");
+		std::fs::write(&p, "one\ntwo\n").unwrap();
+		let (buf, _, _) = Buffer::from_file(&p).unwrap();
+		assert!(buf.disk_base.as_ref().unwrap().eq_str("one\ntwo\n"));
+		assert_eq!(buf.disk_stamp, Some(disk::DiskStamp::of(&p).unwrap()));
+		assert!(!buf.disk_missing);
+		std::fs::remove_file(&p).ok();
+	}
+
+	#[test]
+	fn save_updates_disk_state() {
+		let p = temp_path("save.txt");
+		std::fs::write(&p, "one\n").unwrap();
+		let (mut buf, _, _) = Buffer::from_file(&p).unwrap();
+		buf.insert_str(0, "zero\n");
+		buf.save(&crate::config::Config::default()).unwrap();
+		assert!(buf.disk_base.as_ref().unwrap().eq_str("zero\none\n"));
+		assert_eq!(buf.disk_stamp, Some(disk::DiskStamp::of(&p).unwrap()));
+		std::fs::remove_file(&p).ok();
+	}
+
+	#[test]
+	fn read_decoded_rejects_binary() {
+		let p = temp_path("bin.dat");
+		std::fs::write(&p, b"ab\0cd").unwrap();
+		let err = disk::read_decoded(&p).unwrap_err();
+		assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+		std::fs::remove_file(&p).ok();
+	}
+
+	#[test]
+	fn disk_stamp_changes_with_size() {
+		let p = temp_path("stamp.txt");
+		std::fs::write(&p, "a").unwrap();
+		let before = disk::DiskStamp::of(&p).unwrap();
+		std::fs::write(&p, "ab").unwrap();
+		assert_ne!(before, disk::DiskStamp::of(&p).unwrap());
+		std::fs::remove_file(&p).ok();
 	}
 
 	#[test]

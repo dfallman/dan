@@ -157,6 +157,9 @@ impl Editor {
 	pub(crate) fn cmd_palette_close_prompt_save(&mut self) {
 		if let Some(idx) = self.palette.close_prompt_idx {
 			self.active_buffer = idx;
+			if self.disk_blocks_save(idx) {
+				return;
+			}
 			let cfg = self.config.clone();
 			if let Err(e) = self.buffer_mut().save(&cfg) {
 				self.set_status(format!("Save failed: {}", e));
@@ -272,10 +275,12 @@ impl Editor {
 
 	pub(crate) fn cmd_save_all(&mut self) {
 		let mut ok = 0; let mut fail = 0; let mut last_err = String::new();
+		let mut held = 0;
 		let cfg = self.config.clone();
 		for i in 0..self.buffers.len() {
 			if !self.buffers[i].dirty { continue; }
 			if self.buffers[i].file_path.is_none() { continue; }
+			if self.disk_blocks_save(i) { held += 1; continue; }
 			// Save by temporarily switching active.
 			let prev = self.active_buffer;
 			self.active_buffer = i;
@@ -285,7 +290,9 @@ impl Editor {
 			}
 			self.active_buffer = prev;
 		}
-		if fail == 0 {
+		if held > 0 {
+			self.set_status(format!("Saved {}; {} held back — changed on disk, review then save", ok, held));
+		} else if fail == 0 {
 			self.set_status(format!("Saved {} buffer(s)", ok));
 		} else {
 			self.set_status(format!("Saved {}; {} failed: {}", ok, fail, last_err));

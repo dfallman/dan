@@ -15,6 +15,7 @@ mod search;
 mod toggles;
 mod transforms;
 
+use crate::editor::external::Resolution;
 use super::commands::{Command, EditAction};
 use super::Editor;
 
@@ -136,11 +137,15 @@ impl Editor {
 			Command::CancelQuit => self.cmd_cancel_quit(),
 			Command::RecoverSwapAccept => self.cmd_recover_swap_accept(),
 			Command::RecoverSwapDecline => self.cmd_recover_swap_decline(),
+			Command::ExternalKeepMine => self.cmd_external_resolve(Resolution::Mine),
+			Command::ExternalTakeTheirs => self.cmd_external_resolve(Resolution::Theirs),
+			Command::ExternalDecideLater => self.cmd_external_resolve(Resolution::Later),
 			Command::CopyPathAbs => self.cmd_copy_path_abs(),
 			Command::CopyPathRel => self.cmd_copy_path_rel(),
 			Command::RevealInFinder => self.cmd_reveal_in_finder(),
 			Command::OpenContainingFolder => self.cmd_open_containing_folder(),
 			Command::ShowBufferInfo => self.cmd_show_buffer_info(),
+			Command::ClearChangeMarks => self.cmd_clear_change_marks(),
 			Command::PaletteOpen => self.cmd_palette_open(),
 			Command::PaletteCancel => self.cmd_palette_cancel(),
 			Command::PaletteInsertChar(ch) => self.cmd_palette_insert_char(ch),

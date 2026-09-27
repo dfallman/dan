@@ -124,6 +124,39 @@ impl TextRope {
 		self.rope.to_string()
 	}
 
+	/// True if the rope holds exactly `s` — without materialising a String.
+	pub fn eq_str(&self, s: &str) -> bool {
+		self.rope == s
+	}
+
+	/// Lengths in bytes of the common prefix and common suffix of two ropes
+	/// (non-overlapping). Compares chunk slices, so it runs at memcmp speed.
+	pub fn common_affix_bytes(&self, other: &TextRope) -> (usize, usize) {
+		let (la, lb) = (self.rope.len_bytes(), other.rope.len_bytes());
+		let prefix = common_run(self.rope.chunks(), other.rope.chunks(), false);
+		let suffix = common_run(
+			self.rope.chunks_at_byte(la).0.reversed(),
+			other.rope.chunks_at_byte(lb).0.reversed(),
+			true,
+		);
+		(prefix, suffix.min(la.min(lb) - prefix))
+	}
+
+	/// Byte length of the text.
+	pub fn len_bytes(&self) -> usize {
+		self.rope.len_bytes()
+	}
+
+	/// Line containing byte `byte_idx` (clamped to the end).
+	pub fn byte_to_line(&self, byte_idx: usize) -> usize {
+		self.rope.byte_to_line(byte_idx.min(self.rope.len_bytes()))
+	}
+
+	/// True if both ropes hold the same text.
+	pub fn same_text(&self, other: &TextRope) -> bool {
+		self.rope == other.rope
+	}
+
 	/// Replace the entire rope contents. O(1) pointer swap after the caller
 	/// has built `new` (typically via [`from_builder`] / `RopeBuilder`).
 	pub fn replace_with(&mut self, new: TextRope) {
@@ -253,9 +286,74 @@ impl Default for TextRope {
 	}
 }
 
+/// Bytes two chunk streams share from their start (or, with `from_end`,
+/// from their end — the streams then yield chunks back to front).
+fn common_run<'a>(
+	mut a: impl Iterator<Item = &'a str>,
+	mut b: impl Iterator<Item = &'a str>,
+	from_end: bool,
+) -> usize {
+	let (mut ca, mut cb): (&[u8], &[u8]) = (&[], &[]);
+	let mut n = 0;
+	loop {
+		if ca.is_empty() {
+			match a.next() {
+				Some(c) => ca = c.as_bytes(),
+				None => return n,
+			}
+			continue;
+		}
+		if cb.is_empty() {
+			match b.next() {
+				Some(c) => cb = c.as_bytes(),
+				None => return n,
+			}
+			continue;
+		}
+		let k = ca.len().min(cb.len());
+		let (xa, xb) = if from_end {
+			(&ca[ca.len() - k..], &cb[cb.len() - k..])
+		} else {
+			(&ca[..k], &cb[..k])
+		};
+		if xa != xb {
+			let same = if from_end {
+				xa.iter().rev().zip(xb.iter().rev()).take_while(|(x, y)| x == y).count()
+			} else {
+				xa.iter().zip(xb).take_while(|(x, y)| x == y).count()
+			};
+			return n + same;
+		}
+		n += k;
+		if from_end {
+			ca = &ca[..ca.len() - k];
+			cb = &cb[..cb.len() - k];
+		} else {
+			ca = &ca[k..];
+			cb = &cb[k..];
+		}
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	#[test]
+	fn common_affix_bytes_finds_shared_ends() {
+		let t = |a: &str, b: &str| TextRope::from_str(a).common_affix_bytes(&TextRope::from_str(b));
+		assert_eq!(t("abcXdef", "abcYYdef"), (3, 3));
+		assert_eq!(t("same", "same"), (4, 0));
+		assert_eq!(t("", "abc"), (0, 0));
+		assert_eq!(t("aaa", "aaaa"), (3, 0), "prefix and suffix never overlap");
+		assert_eq!(t("é\nb", "é\nc"), (3, 0), "byte counts");
+		// Spans many ropey chunks.
+		let big: String = (0..20_000).map(|i| format!("line {i}\n")).collect();
+		let edited = big.replacen("line 12345\n", "line 12345 edited\n", 1);
+		let (p, s) = t(&big, &edited);
+		assert_eq!(p, big.find("line 12345\n").unwrap() + 10);
+		assert_eq!(p + s, big.len());
+	}
 
 	#[test]
 	fn test_empty() {

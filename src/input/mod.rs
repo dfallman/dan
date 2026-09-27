@@ -36,6 +36,7 @@ pub fn map_event(event: &Event, mode: Mode) -> Command {
 				Mode::ReplacingWith => map_replace_with_key(key),
 				Mode::ReplacingStep => map_replace_step_key(key),
 				Mode::RecoverSwap => map_recover_swap_key(key),
+				Mode::ConfirmExternalConflict => map_external_conflict_key(key),
 				_ => map_key(key),
 			}
 		}
@@ -48,6 +49,7 @@ pub fn map_event(event: &Event, mode: Mode) -> Command {
 					| Mode::ConfirmOverwrite
 					| Mode::ReplacingStep
 					| Mode::RecoverSwap
+					| Mode::ConfirmExternalConflict
 			) {
 				Command::Noop
 			} else {
@@ -167,6 +169,17 @@ fn map_replace_step_key(key: &KeyEvent) -> Command {
 		KeyCode::Char('n') | KeyCode::Char('N') if ctrl => Command::ReplaceActionNo,
 		KeyCode::Char('a') | KeyCode::Char('A') if ctrl => Command::ReplaceActionAll,
 		KeyCode::Esc => Command::ReplaceCancel,
+		_ => Command::Noop,
+	}
+}
+
+/// Keys for the external-change conflict prompt.
+fn map_external_conflict_key(key: &KeyEvent) -> Command {
+	let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+	match key.code {
+		KeyCode::Char('k') | KeyCode::Char('K') if ctrl => Command::ExternalKeepMine,
+		KeyCode::Char('t') | KeyCode::Char('T') if ctrl => Command::ExternalTakeTheirs,
+		KeyCode::Esc => Command::ExternalDecideLater,
 		_ => Command::Noop,
 	}
 }
@@ -427,6 +440,7 @@ mod tests {
 			Mode::ReplacingWith,
 			Mode::ReplacingStep,
 			Mode::RecoverSwap,
+			Mode::ConfirmExternalConflict,
 			Mode::Palette,
 		];
 		for mode in modes {
@@ -631,6 +645,10 @@ mod tests {
 			("recover ctrl+q", key(KeyCode::Char('q'), M::CONTROL), Mode::RecoverSwap, Command::ForceQuitAll),
 			("recover esc", key(KeyCode::Esc, M::NONE), Mode::RecoverSwap, Command::ForceQuitAll),
 			("recover a noop", key(KeyCode::Char('a'), M::NONE), Mode::RecoverSwap, Command::Noop),
+			("ext ctrl+k", key(KeyCode::Char('k'), M::CONTROL), Mode::ConfirmExternalConflict, Command::ExternalKeepMine),
+			("ext ctrl+t", key(KeyCode::Char('t'), M::CONTROL), Mode::ConfirmExternalConflict, Command::ExternalTakeTheirs),
+			("ext esc", key(KeyCode::Esc, M::NONE), Mode::ConfirmExternalConflict, Command::ExternalDecideLater),
+			("ext k noop", key(KeyCode::Char('k'), M::NONE), Mode::ConfirmExternalConflict, Command::Noop),
 		]);
 	}
 

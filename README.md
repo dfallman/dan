@@ -362,6 +362,7 @@ fast_scroll_steps = 10      # Lines jumped per fast-scroll keypress (default: 10
 show_full_path = false      # Show full file path in toolbar (default: false)
 show_whitespace = false     # Show visible markers for spaces/tabs/EOL (default: false; toggle with Ctrl-R)
 scrollbar = "scrolling"     # "none" | "always" | "scrolling" = show while scrolling or hovering the right column (default: "scrolling")
+watch_files = true          # Update open files changed on disk by other programs (default: true)
 cursor_style = "block"      # "block" | "line" | "underscore" (default: "block")
 cursor_blink = false        # Blink the terminal cursor (default: false)
 # cursor_color = "#FF8800"  # Optional; omit to leave the terminal cursor color alone
@@ -419,6 +420,23 @@ A vertical scrollbar can be drawn in the rightmost column of the text area:
 | `"scrolling"` | Appears while the viewport moves or the mouse pointer rests on the scrollbar column, and fades out about two seconds after that stops (default) |
 
 The thumb is drawn as `█` on a `│` track. With the mouse enabled, click the track to jump there or drag the thumb to scroll; in `"scrolling"` mode, hovering over the rightmost column reveals the bar so you can grab it. Enabling the scrollbar reserves one column, so soft-wrapped text is one character narrower; in `"scrolling"` mode the column stays reserved while the bar is hidden so text never reflows when it appears.
+
+## Files changed on disk
+
+When another program (a coding agent, a formatter, `git checkout`) changes a
+file you have open, Dan updates the buffer within about half a second:
+
+- **No unsaved edits:** the new version is loaded in place; your cursor and
+  scroll position stay put.
+- **Unsaved edits elsewhere in the file:** both are kept.
+- **Unsaved edits in the same lines:** Dan asks — `^K` keep mine, `^T` take
+  theirs, `Esc` decide later (keeps yours and marks the lines red).
+
+Changed line numbers are highlighted yellow until you save, or until you run
+**Clear change marks** from the command palette. Each update is one undo
+step, so `^Z` backs it out. Saving first checks the disk again and merges
+any change it has not shown you yet. Set `watch_files = false` to turn this
+off.
 
 ## Themes
 

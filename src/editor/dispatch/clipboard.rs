@@ -135,7 +135,8 @@ impl Editor {
 			Mode::ConfirmQuit
 			| Mode::ConfirmOverwrite
 			| Mode::ReplacingStep
-			| Mode::RecoverSwap => {}
+			| Mode::RecoverSwap
+			| Mode::ConfirmExternalConflict => {}
 		}
 	}
 }
