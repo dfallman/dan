@@ -530,7 +530,7 @@ pub fn build_palette_window(editor: &Editor, vw: u16, vh: u16) -> Vec<Window> {
 	// Row 0: top border
 	windows.push(make_row(
 		0,
-		hline_row('┌', '┐', inner, line, bg),
+		hline_row('╭', '╮', inner, line, bg),
 	));
 
 	// Row 1: query bar
@@ -747,7 +747,7 @@ pub fn build_palette_window(editor: &Editor, vw: u16, vh: u16) -> Vec<Window> {
 	// Bottom border
 	windows.push(make_row(
 		footer_y + 2,
-		hline_row('└', '┘', inner, line, bg),
+		hline_row('╰', '╯', inner, line, bg),
 	));
 
 	windows

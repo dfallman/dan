@@ -154,7 +154,10 @@ mod tests {
 	}
 
 	#[test]
-	fn cursor_at_end_of_exactly_full_wrapped_row_stays_off_the_bar() {
+	fn cursor_at_end_of_exactly_full_wrapped_row_sits_after_last_char() {
+		// The only slot after a full row's last character is the scrollbar
+		// column. Clamping short of it drew the cursor over the last character,
+		// so Right from there looked like a dead keypress.
 		let mut e = editor_with_lines(0, "always");
 		e.config.wrap_lines = true;
 		let _ = last_column(&mut e); // syncs terminal size from the tty if any
@@ -164,11 +167,10 @@ mod tests {
 		let _ = last_column(&mut e);
 		let screen = e.last_screen.as_ref().unwrap();
 		assert_eq!(e.line_len_no_newline(0), taw, "precondition: row exactly full");
-		assert!(
-			screen.term_cursor_x <= screen.width - 2,
-			"cursor x {} overlaps scrollbar at {}",
+		assert_eq!(
 			screen.term_cursor_x,
-			screen.width - 1
+			screen.width - 1,
+			"end-of-row cursor must sit just after the last character"
 		);
 	}
 

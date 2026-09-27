@@ -228,7 +228,7 @@ impl Theme {
                 palette: PaletteTheme {
                     bg: Color::AnsiValue(236),
                     fg: Color::White,
-                    border: Color::White,
+                    border: Color::AnsiValue(244), // mid-grey (#808080)
                     dim: Color::White,
                     accent: primary,
                     hint: Color::White,

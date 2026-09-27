@@ -424,8 +424,11 @@ pub fn render<W: Write>(editor: &mut Editor, w: &mut W) -> io::Result<()> {
 			};
 			(sy, vc)
 		};
-		// Never park the cursor on the scrollbar column.
-		let max_w = (vp.width as usize).saturating_sub(1 + editor.scrollbar_columns());
+		// The end-of-line slot of an exactly full wrapped row is the scrollbar
+		// column; let the cursor sit there (it paints nothing) rather than
+		// drawing it over the row's last character. No-wrap h-scroll keeps the
+		// cursor well inside the text area, so only that slot reaches the bar.
+		let max_w = (vp.width as usize).saturating_sub(1);
 		let screen_x =
 			(gutter_width + 1 + visual_col.saturating_sub(editor.scroll_x)).min(max_w) as u16;
 		let screen_y = screen_y.min(u16::MAX as usize) as u16;
