@@ -425,7 +425,7 @@ impl Buffer {
 	/// entry points; never for buffer-internal text movement. Returns the
 	/// number of chars actually inserted (after sanitization).
 	pub fn insert_paste(&mut self, pos: usize, s: &str) -> usize {
-		let clean = sanitize_paste(s);
+		let clean = normalize_paste_newlines(&sanitize_paste(s));
 		let char_count = clean.chars().count();
 		self.history.start_group(&self.text);
 		let pos = pos.min(self.text.len_chars());
@@ -570,6 +570,29 @@ impl Buffer {
 	}
 }
 
+/// Convert every line break in pasted text to `\n`, the same break Enter
+/// inserts. Terminals send bracketed-paste newlines as bare `\r`, and web
+/// clipboards can carry `\r\n` or U+2028/U+2029. Ropey counts all of these
+/// as line breaks, so without this a paste looks right in dan but saves as
+/// one line for every other tool.
+fn normalize_paste_newlines(s: &str) -> String {
+	let mut out = String::with_capacity(s.len());
+	let mut chars = s.chars().peekable();
+	while let Some(ch) = chars.next() {
+		match ch {
+			'\r' => {
+				if chars.peek() == Some(&'\n') {
+					chars.next();
+				}
+				out.push('\n');
+			}
+			'\u{2028}' | '\u{2029}' => out.push('\n'),
+			_ => out.push(ch),
+		}
+	}
+	out
+}
+
 impl Default for Buffer {
 	fn default() -> Self {
 		Self::new()
@@ -636,6 +659,25 @@ mod tests {
 		assert_eq!(n, 3);
 		// ESC becomes '^' per sanitize.rs; the contract is "no ESC in storage".
 		assert!(!b.text.to_string_full().contains('\x1b'));
+	}
+
+	#[test]
+	fn insert_paste_normalizes_bare_cr_to_lf() {
+		// Terminals deliver bracketed-paste newlines as bare `\r`. Ropey treats
+		// `\r` as a line break, so the paste *looked* multi-line but saved as
+		// one line everywhere else; Enter at a line start then produced an
+		// invisible `\r\n` pair.
+		let mut b = Buffer::new();
+		b.insert_paste(0, "fn a() {\r\tx\r}\r");
+		assert_eq!(b.text.to_string_full(), "fn a() {\n\tx\n}\n");
+	}
+
+	#[test]
+	fn insert_paste_normalizes_crlf_and_unicode_breaks() {
+		let mut b = Buffer::new();
+		let n = b.insert_paste(0, "a\r\nb\u{2028}c\u{2029}d");
+		assert_eq!(b.text.to_string_full(), "a\nb\nc\nd");
+		assert_eq!(n, 7);
 	}
 
 	#[test]
