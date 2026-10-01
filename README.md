@@ -1,7 +1,7 @@
 # dan
 
-A fast, modern, and intuitive terminal text editor written entirely in Rust. Designed to be light,
-quick, and very capable, yet not bloated with features you don't need.
+A fast, modern, and intuitive terminal text editor written entirely in Rust. It's designed to be light,
+quick, and intuitive, yet very capable. 
 
 Despite being highly configurable, Dan needs no configuration to get started. Just install and start editing using familiar keyboard shortcuts. 
 
