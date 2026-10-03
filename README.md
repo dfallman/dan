@@ -97,7 +97,7 @@ Dan uses familiar shortcuts out of the box — `Ctrl-C`/`V` to copy/paste, `Ctrl
 | `Ctrl` + `N` | New buffer |
 
 ### Command palette (`Ctrl-P`)
-The command palette is a fuzzy-search overlay that has every feature of Dan and every open file buffer all there, ready at hand: start typing to filter across editor actions, open buffers, and project files, then `Enter` to run or switch. 
+The command palette is a fuzzy-search overlay that has every feature of Dan, every open file buffer, and all openable files in your current directory all there, ready at hand: start typing to filter across editor actions, open buffers, and file operations, then `Enter` to run or switch. 
 
 <p align="center">
     <img width="600" alt="Dan command palette" src="https://github.com/user-attachments/assets/2f7d6d6a-56f9-4e41-9759-b7b8ad3fef41" />
