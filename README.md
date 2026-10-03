@@ -522,9 +522,8 @@ theme = "DarkNeon"
 
 Formatter output and errors are shown in the status bar.
 
-## Note on AI use
-
-I've been writing code for over 30 years. Lately, LLM agent-enhanced coding practices have rekindled my sense of awe at what's possible. This project has been built using a range of tools. By leveraging advanced LLMs for boilerplate generation, rapid prototyping, and automated unit testing, development efforts were focused on high-level architectural decisions, robust edge-case verification, and low-level performance optimizations.
+## How it's made
+Gitst is written in Rust, with help from tools like Anthropic's Claude Code. I've been writing code for over 30 years, and working with coding agents has rekindled my sense of awe at what code can do. They let me move faster, try more ideas, and test them more thoroughly than I would on my own.
 
 ---
 
