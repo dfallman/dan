@@ -1,28 +1,14 @@
 # dan
 **A fast, modern, and intuitive terminal text editor: light, quick, and intuitive, yet very capable** 
 
-Dan is a modeless terminal editor that, despite being highly configurable if you want, needs no configuration to get started. Just install and start editing using familiar keyboard shortcuts: `dan my-file.txt" 
+Dan is a modeless terminal editor that, despite being highly configurable if you want, needs no configuration to get started. Just install and start editing using familiar keyboard shortcuts: `dan my-file.txt`
 
 <p align="center">
     <img width="800" alt="Dan" src="https://github.com/user-attachments/assets/a872bf6d-98a2-46c6-b18d-837a5d355c8d" />
 </p>
 
 Dan ships with sensible defaults intended to suit most users and use-cases out of the box. It keeps input latency low over SSH links, employs advanced render optimizations, and its modern rope-based buffer 
-keeps editing responsive on files far past the point where most editors stall. Try it with 100 MB+ logs, it opens and scrolls without hesitation. Dan is written entirely in Rust for safety, reliability, and performance.
-
-### Standout features:
-- **Modeless**: no insert/normal split, no modal muscle memory to learn
-- **Zero-config**: sensible and (lightly) opinionated defaults out of the box, with ample configuration options if you want to
-- **Low latency**: designed to work equally well on remote sessions as in local terminals
-- **Large files**: uses a rope buffer, so file size doesn't dictate speed
-- **Multiple buffers**: supports multiple buffers (files), fast buffer switching 
-- **Agent-friendly**: follows files that coding agents and other tools change on disk, merging their edits with your unsaved ones and highlighting what changed
-- **Multi-platform**: Linux, macOS, BSD, Windows
-
-### Key performance metrics:
-- **Memory footprint**: Typically consumes < 20MB RSS
-- **File handling capacity**: Fluid, non-blocking navigation and manipulation of 100MB+ log files
-- **Bandwidth optimization**: Implements aggressive rendering optimizations to minimize transmitted escape sequences
+keeps editing responsive on files far past the point where most editors stall. Try it with 100 MB+ logs, it opens and scrolls without hesitation. Dan is written entirely in Rust for safety, reliability, and performance, and runs on Linux, macOS, BSD, and Windows.
 
 ### Architectural comparison
 
@@ -59,25 +45,79 @@ cargo install --path .
 
 ## Features
 
-Dan uses familiar shortcuts out of the box — `Ctrl-C`/`V` to copy/paste, `Ctrl-S` to save, `Ctrl-Z`/`Y` to undo/redo, `Ctrl-Q` to quit. Press `Ctrl-P` to bring up the command palette, from which you can control most things in Dan. Use `Ctrl-H` to toggle the built-in help bar at any time. Mouse is is supported and enabled by default: click to place the cursor, drag to select, and use the scroll wheel to move the viewport (set `mouse = false` to disable).
+<table>
+<tr>
+<td width="50%" valign="top">
 
-- **Rope-backed text buffer**: Utilizes a rope structure ensuring $O(\\log N)$ time complexity for insertions and deletions. Memory usage scales with edit volume rather than raw file size, permitting fluid, non-blocking navigation and manipulation of 100MB+ log files.
-- **Optimized terminal I/O & differential rendering**: Implements differential rendering to minimize bandwidth by emitting ANSI escape sequences strictly for modified cells. To sustain $O(1)$ scroll performance in massive files, `dan` maintains a syntax snapshot cache every 200 lines, eliminating the need to re-lex the entire visible range during rapid vertical movement.
-- **POSIX-compliant atomic writes (crash-safe I/O)**: File writes are executed via a temporary sibling file, followed by an `fsync` and atomic `rename`. A system crash or disk-full condition mid-save leaves the original file intact, preserving original file permissions and symlink targets.
-- **Live merge of on-disk changes**: When a coding agent, formatter, or `git checkout` rewrites an open file, Dan folds the change into the buffer within about half a second. A three-way line merge keeps your unsaved edits, asks only when both sides touched the same lines, marks changed lines in the gutter, and makes each update a single undo step. Saves re-check the disk first, so they never overwrite a change you haven't seen. See [Files changed on disk](#files-changed-on-disk).
-- **Crash recovery**: Periodically checkpoints the active buffer to a hidden `.swp` file every 5 seconds using safe write patterns. Unplanned terminal disconnects or crashed sessions trigger automatic recovery prompts on the next open.
-- **Interactive command palette (`Ctrl-P`)**: A fuzzy-search overlay covering all editor actions, active buffers, and project workspace files to keep operations entirely on the home row.
-- **Multiple buffers**: Concurrent support for multiple active buffers. `Ctrl-N` opens a new buffer; switching, closing, and saving buffers is handled through the command palette. Quitting with unsaved changes steps through each dirty buffer in turn.
-- **Context-aware syntax highlighting**: Powered by `syntect` with broad language grammar support. Auto-picks OneHalfDark/OneHalfLight from `COLORFGBG` or an OSC colour query when `theme = "default"`, with immediate toggling via `Ctrl-T`.
-- **Background auto-formatter (`Ctrl-L`)**: Pipes buffer contents to external formatters (Prettier, Rustfmt, Ruff) on a background thread. Formatted output is applied transactionally only if the buffer was not modified during execution.
-- **Fuzzy search & destructive replace**: Instant buffer-wide searching with `Ctrl-F`, easily promoted to find-and-replace with `Ctrl-R`. Wrap the query in `/pattern/` for regex (case-sensitive; use `(?i)` for insensitive). Regex replace supports `$0`, `$1`, `$name`, and `$$`.
-- **Unicode & CJK support**: Correct visual alignment, cell measurements, and cursor positioning for double-width characters and complex emoji.
-- **Soft-wrap navigation**: With wrap on, Up/Down/Page/Home/End and scrolling move by *visual* rows (sticky goal column, word-boundary wraps). `Ctrl+Alt+Home/End` jump the logical line; optional `breakindent` indents continuation rows.
-- **Native clipboard integration**: Cross-platform clipboard access using `arboard`, falling back gracefully to an internal in-memory buffer on headless SSH sessions without display servers.
-- **Auto-pairs & wrap-on-type**: Automated closure insertion for brackets and quotes, with contextual wrap behavior when keys are typed over an active selection.
-- **Robust encoding detection**: Scans and parses legacy encodings (Shift-JIS, Windows-1252, etc.) utilizing Byte Order Mark (BOM) sniffing, normalizes to UTF-8 internally, and transparently round-trips to the native encoding on save.
-- **Active content sanitization**: Sanitizes raw terminal escape sequences at render time. Malicious or hostile files containing raw ANSI codes cannot alter terminal chrome or exfiltrate local clipboard states.
-- **Hierarchical configuration**: Evaluates settings through a layered model: core defaults → `~/.config/dan/config.toml` → local workspace `.editorconfig` rules.
+**Familiar from the first keystroke**<br>
+Modeless editing with the shortcuts you already know: `Ctrl-S`, `Ctrl-Z`, and `Ctrl-C`/`V`. The mouse works too, and `Ctrl-H` toggles a help bar.
+
+</td>
+<td width="50%" valign="top">
+
+**One palette for everything**<br>
+`Ctrl-P` fuzzy-searches every action, open buffer, and project file. Open as many buffers as you like with `Ctrl-N`. [More →](#command-palette-ctrl-p)
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+**Works alongside coding agents**<br>
+When an agent, a formatter, or `git checkout` changes an open file, Dan merges it with your unsaved edits and highlights what changed. [More →](#files-changed-on-disk)
+
+</td>
+<td valign="top">
+
+**Hard to lose work**<br>
+Saves are atomic, and a swap file every 5 seconds means a crash or dropped SSH session gets offered back to you on the next open.
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+**Fast on huge files**<br>
+100 MB+ logs open and scroll without stalling, in under 20 MB of memory. Minimal redraws keep it snappy over slow SSH links.
+
+</td>
+<td valign="top">
+
+**Find and replace**<br>
+Incremental search as you type, `/regex/` when you need it, and replacements with capture groups. [More →](#search--replace)
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+**Any text, any terminal**<br>
+Syntax highlighting that follows your terminal's light or dark theme, Unicode and CJK, legacy encodings, and soft-wrap that moves by visual row.
+
+</td>
+<td valign="top">
+
+**Fits your project**<br>
+Zero config to start, `config.toml` when you want it, and `.editorconfig` respected. `Ctrl-L` formats with rustfmt, ruff, or prettier.
+
+</td>
+</tr>
+</table>
+
+<details>
+<summary><b>Under the hood</b></summary>
+
+- **Rope buffer**: $O(\log N)$ inserts and deletes; memory scales with edit volume, not file size.
+- **Differential rendering**: only changed cells are redrawn, and syntax state is cached every 200 lines so fast scrolling never re-lexes the whole view.
+- **Atomic writes**: temp sibling file, then `fsync`, then `rename`. A crash or full disk mid-save leaves the original intact, with permissions and symlink targets preserved.
+- **Three-way line merge** for on-disk changes: you're asked only when both sides touched the same lines, each update is one undo step, and saves re-check the disk first.
+- **Escape-sequence sanitization**: files containing raw ANSI codes can't alter the terminal or reach your clipboard.
+- **Encoding detection**: BOM sniffing for Shift-JIS, Windows-1252, and others; UTF-8 internally, written back in the original encoding.
+- **Clipboard**: native via `arboard`, falling back to an internal buffer on headless SSH sessions.
+- **Background formatter**: output is applied only if the buffer didn't change while it ran.
+- **Layered config**: built-in defaults, then `~/.config/dan/config.toml`, then `.editorconfig`.
+
+</details>
 
 
 ## Keyboard shortcuts
