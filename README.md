@@ -97,12 +97,13 @@ Dan uses familiar shortcuts out of the box — `Ctrl-C`/`V` to copy/paste, `Ctrl
 | `Ctrl` + `N` | New buffer |
 
 ### Command palette (`Ctrl-P`)
+The command palette is a fuzzy-search overlay that has every feature of Dan and every open file buffer all there, ready at hand: start typing to filter across editor actions, open buffers, and project files, then `Enter` to run or switch. 
 
 <p align="center">
     <img width="600" alt="Dan command palette" src="https://github.com/user-attachments/assets/2f7d6d6a-56f9-4e41-9759-b7b8ad3fef41" />
 </p>
 
-The command palette is a fuzzy-search overlay that has every feature of Dan ready at hand: start typing to filter across editor actions, open buffers, and project files, then `Enter` to run or switch. The mouse works too: click a result to run it, scroll the wheel to move through the list, and click outside the palette to dismiss it. Every keyboard shortcut is also available here, plus a number of actions that have no dedicated key:
+The mouse works too: click a result to run it, scroll the wheel to move through the list, and click outside the palette to dismiss it. Every keyboard shortcut is also available here, plus a number of actions that have no dedicated key:
 
 - **Buffers & files**: Open file, reload buffer from disk, clear change marks, close buffer / close others / close all, save all, show recent files. `Ctrl-D` on a highlighted buffer closes it directly (with a save prompt if it has unsaved changes).
 - **Path utilities**: Copy the file's absolute or relative path, reveal in Finder / open containing folder, show buffer info.
