@@ -99,7 +99,7 @@ Dan uses familiar shortcuts out of the box — `Ctrl-C`/`V` to copy/paste, `Ctrl
 ### Command palette (`Ctrl-P`)
 
 <p align="center">
-    <img width="1946" height="1512" alt="CleanShot 2026-10-03 at 15 03 22@2x" src="https://github.com/user-attachments/assets/2f7d6d6a-56f9-4e41-9759-b7b8ad3fef41" />
+    <img width="600" alt="Dan command palette" src="https://github.com/user-attachments/assets/2f7d6d6a-56f9-4e41-9759-b7b8ad3fef41" />
 </p>
 
 The command palette is a fuzzy-search overlay that has every feature of Dan ready at hand: start typing to filter across editor actions, open buffers, and project files, then `Enter` to run or switch. The mouse works too: click a result to run it, scroll the wheel to move through the list, and click outside the palette to dismiss it. Every keyboard shortcut is also available here, plus a number of actions that have no dedicated key:
