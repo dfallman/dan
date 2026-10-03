@@ -523,7 +523,7 @@ theme = "DarkNeon"
 Formatter output and errors are shown in the status bar.
 
 ## How it's made
-Gitst is written in Rust, with help from tools like Anthropic's Claude Code. I've been writing code for over 30 years, and working with coding agents has rekindled my sense of awe at what code can do. They let me move faster, try more ideas, and test them more thoroughly than I would on my own.
+Dan is written in Rust, with help from tools like Anthropic's Claude Code. I've been writing code for over 30 years, and working with coding agents has rekindled my sense of awe at what code can do. They let me move faster, try more ideas, and test them more thoroughly than I would on my own.
 
 ---
 
