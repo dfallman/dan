@@ -1,16 +1,14 @@
 # dan
+**A fast, modern, and intuitive terminal text editor: light, quick, and intuitive, yet very capable** 
 
-A fast, modern, and intuitive terminal text editor written entirely in Rust. It's designed to be light,
-quick, and intuitive, yet very capable. 
-
-Despite being highly configurable, Dan needs no configuration to get started. Just install and start editing using familiar keyboard shortcuts. 
-
-It ships with sensible defaults intended to suit most users and use-cases. Dan keeps input latency low over SSH links and Dan's rope-based buffer keeps editing responsive on files far past the point
-where most editors stall. Try it with 100 MB+ logs, it opens and scrolls without hesitation.
+Dan is a modeless terminal editor that, despite being highly configurable if you want, needs no configuration to get started. Just install and start editing using familiar keyboard shortcuts: `dan my-file.txt" 
 
 <p align="center">
     <img width="800" alt="dan terminal editor" src="https://github.com/user-attachments/assets/ccebe66e-b927-418b-9cf1-4140771d3826" />
 </p>
+
+Dan ships with sensible defaults intended to suit most users and use-cases out of the box. It keeps input latency low over SSH links, employs advanced render optimizations, and its modern rope-based buffer 
+keeps editing responsive on files far past the point where most editors stall. Try it with 100 MB+ logs, it opens and scrolls without hesitation. Dan is written entirely in Rust for safety, reliability, and performance.
 
 ### Standout features:
 - **Modeless**: no insert/normal split, no modal muscle memory to learn
