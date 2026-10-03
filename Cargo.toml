@@ -25,7 +25,7 @@ unicode-width = "0.2"
 unicode-segmentation = "1.12"
 syntect = { version = "5.3.0", default-features = false, features = ["default-fancy"] }
 arboard = "3.4"
-chardetng = "0.1"
+chardetng = "1.0"
 encoding_rs = "0.8"
 editorconfig-parser = "0.0.4"
 terminal-colorsaurus = "1.0.3"
