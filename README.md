@@ -4,7 +4,7 @@
 Dan is a modeless terminal editor that, despite being highly configurable if you want, needs no configuration to get started. Just install and start editing using familiar keyboard shortcuts: `dan my-file.txt" 
 
 <p align="center">
-    <img width="800" alt="dan terminal editor" src="https://github.com/user-attachments/assets/ccebe66e-b927-418b-9cf1-4140771d3826" />
+    <img width="600" alt="Dan" src="https://github.com/user-attachments/assets/a872bf6d-98a2-46c6-b18d-837a5d355c8d" />
 </p>
 
 Dan ships with sensible defaults intended to suit most users and use-cases out of the box. It keeps input latency low over SSH links, employs advanced render optimizations, and its modern rope-based buffer 
