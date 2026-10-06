@@ -1,7 +1,7 @@
 # dan
 **A fast, modern, and intuitive terminal text editor: light, quick, and intuitive, yet very capable** 
 
-Dan is a modeless terminal editor that, despite being highly configurable if you want, needs no configuration to get started. Just install and start editing using familiar keyboard shortcuts: `dan my-file.txt`
+Dan is a modeless terminal editor that, despite being highly configurable, needs no configuration dotfile to get started. Just install Dan and start editing: `dan ~/my-file.txt`. Dan uses [familiar keyboard shortcuts](##keyboard-shortcuts): `Ctrl-S` to save, `Ctrl-Q` to quit, `Ctrl-F` to search, and so on. Hit `Ctrl-H` for an inline help bar and `Ctrl-P` for a command palette from which every feature in Dan is readily available. 
 
 <p align="center">
     <img width="800" alt="Dan" src="https://github.com/user-attachments/assets/a872bf6d-98a2-46c6-b18d-837a5d355c8d" />
