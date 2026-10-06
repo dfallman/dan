@@ -149,6 +149,8 @@ The mouse works too: click a result to run it, scroll the wheel to move through 
 - **Text transforms**: Sort lines ascending/descending, deduplicate adjacent lines, convert to UPPERCASE / lowercase / Title Case, reverse the selection.
 - **Misc**: Toggle line numbers, reload configuration, show version, show keybindings.
 
+**Note for macOS users**: Terminal emulators use escape sequences dating back to the late 70s and some at the time highly influential video display terminals such as VT100. Long story short, this means some "modern" key combinations available in GUI editors can't be distinguished in a terminal. Most notably, Dan (and other terminal apps) uses `Ctrl` where a Mac user might expect `⌘`. Many terminal emulators (including [iTerm2](https://iterm2.com/)) let you remap `⌘` to `Ctrl` if you prefer, although it can create side-issues. Additionally, the built-in Terminal.app is not recommended: a third-party emulator such as [iTerm2](https://iterm2.com/), [Kitty](https://sw.kovidgoyal.net/kitty/), [Ghostty](https://ghostty.dev/), or [WezTerm](https://wez.dev/) will give better results.
+
 ### Text editing
 
 | Key | Action |
@@ -277,14 +279,12 @@ Literal (non-`/…/`) search never expands `$` — a replacement of `$1` inserts
 
 Missing groups expand to an empty string (same as the `regex` crate). Each match is expanded independently; replace-all applies from the current match onward.
 
-**Limits (v1)**
-
+**A few known limitations**
 - No trailing `/flags` after the closing slash — use `(?i)`, `(?m)`, `(?s)` inside the pattern.
 - No lookaround or backreferences (`fancy-regex` features are not enabled).
 - Regex search materializes the buffer once per keystroke; huge files may feel heavier than literal search.
 - Zero-width matches are skipped so next/replace cannot loop forever.
 
-**Note for macOS users**: Terminal emulators use escape sequences dating back to the late 70s and some at the time highly influential video display terminals such as VT100. Long story short, this means some "modern" key combinations available in GUI editors can't be distinguished in a terminal. Most notably, Dan (and other terminal apps) uses `Ctrl` where a Mac user might expect `⌘`. Many terminal emulators (including [iTerm2](https://iterm2.com/)) let you remap `⌘` to `Ctrl` if you prefer, although it can create side-issues. Additionally, the built-in Terminal.app is not recommended: a third-party emulator such as [iTerm2](https://iterm2.com/), [Kitty](https://sw.kovidgoyal.net/kitty/), [Ghostty](https://ghostty.dev/), or [WezTerm](https://wez.dev/) will give better results.
 
 # Installation
 
