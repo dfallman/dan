@@ -209,7 +209,7 @@ Wrap the query in forward slashes to switch from literal search to a regular exp
 /pattern/
 ```
 
-Dan uses the Rust [`regex`](https://docs.rs/regex/) crate (finite automata; no lookaround or backreferences). There is no separate “regex mode” key — the slashes are the switch.
+Dan uses the Rust [`regex`](https://docs.rs/regex/) crate (finite automata; no lookaround or backreferences). There is no separate “regex mode” key or similar, the slashes are the switch.
 
 **When a query counts as regex**
 
@@ -353,7 +353,7 @@ Move-Item dan-*-windows-msvc\dan-*\dan.exe "$env:LOCALAPPDATA\Programs\dan\"
 [Environment]::SetEnvironmentVariable("Path", $env:LOCALAPPDATA + "\Programs\dan;" + [Environment]::GetEnvironmentVariable("Path", "User"), "User")
 ```
 
-SmartScreen may warn the first time you run a downloaded, unsigned executable — choose "More info" → "Run anyway".
+SmartScreen may warn the first time you run a downloaded, unsigned executable. If this happens, pick "More info" → "Run anyway".
 
 ## Option 3: Build from source
 
@@ -445,7 +445,7 @@ The terminal cursor (document, prompts, and command palette) is configured with 
 
 When `cursor_color` is omitted, Dan leaves your terminal's cursor color alone. When set, Dan applies it via OSC 12 at startup and restores the previous color on exit. Most modern emulators honor this; some (including older Terminal.app builds) may ignore it.
 
-Example — blinking orange bar:
+Example: a blinking orange bar cursor
 
 ```toml
 cursor_style = "line"
@@ -557,11 +557,11 @@ theme = "DarkNeon"
 
 ## Formatter
 
-`Ctrl-L` pipes the current buffer to an external formatter in a background thread. The formatted result is applied only if the buffer hasn't changed during formatting — keystrokes made while a slow format runs are not discarded. Dan detects the right formatter based on file type:
+`Ctrl-L` pipes the current buffer to an external formatter in a background thread. The formatted result is applied only if the buffer hasn't changed during formatting. Keystrokes made while a slow format runs are not discarded. Dan detects the right formatter based on file type:
 
-- **Rust**: [rustfmt](https://github.com/rust-lang/rustfmt) — `rustup component add rustfmt`
-- **Python**: [ruff](https://docs.astral.sh/ruff/) — `pip install ruff`
-- **JS / TS / JSON / CSS / HTML**: [prettier](https://prettier.io/) — `npm i -g prettier`
+- **Rust**: [rustfmt](https://github.com/rust-lang/rustfmt): `rustup component add rustfmt`
+- **Python**: [ruff](https://docs.astral.sh/ruff/): `pip install ruff`
+- **JS / TS / JSON / CSS / HTML**: [prettier](https://prettier.io/): `npm i -g prettier`
 
 Formatter output and errors are shown in the status bar.
 
