@@ -78,7 +78,7 @@ Saves are atomic, and a swap file every 5 seconds means a crash or dropped SSH s
 <td valign="top">
 
 **Fast on huge files**<br>
-100 MB+ logs open and scroll without stalling, in under 20 MB of memory. Minimal redraws keep it snappy over slow SSH links.
+100 MB+ logs open and scroll without stalling. Minimal redraws keep it snappy over slow SSH links.
 
 </td>
 <td valign="top">
@@ -107,7 +107,7 @@ Zero config to start, `config.toml` when you want it, and `.editorconfig` respec
 <details>
 <summary><b>Under the hood</b></summary>
 
-- **Rope buffer**: $O(\log N)$ inserts and deletes; memory scales with edit volume, not file size.
+- **Rope buffer**: $O(\log N)$ inserts and deletes, so editing stays fast however large the file.
 - **Differential rendering**: only changed cells are redrawn, and syntax state is cached every 200 lines so fast scrolling never re-lexes the whole view.
 - **Atomic writes**: temp sibling file, then `fsync`, then `rename`. A crash or full disk mid-save leaves the original intact, with permissions and symlink targets preserved.
 - **Three-way line merge** for on-disk changes: you're asked only when both sides touched the same lines, each update is one undo step, and saves re-check the disk first.
