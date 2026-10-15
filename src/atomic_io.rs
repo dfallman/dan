@@ -25,7 +25,8 @@ fn temp_suffix() -> String {
 ///   the link's resolved destination so the symlink itself is preserved
 ///   instead of being replaced by a regular file.
 /// - **Permission preservation (D4.2).** The temp file's mode is set to
-///   match the original target before rename.
+///   match the original target before rename. A new file gets the default
+///   `0o666 & !umask`, like any other newly created file.
 ///
 /// Not yet covered: uid/gid preservation, xattrs, `O_NOFOLLOW`-style
 /// symlink-TOCTOU hardening for the temp file.
@@ -53,8 +54,12 @@ pub fn write(path: &Path, bytes: &[u8]) -> io::Result<()> {
 		options.write(true).create_new(true);
 		#[cfg(unix)]
 		{
+			// Existing file: owner-only until its own mode is copied over
+			// below, so a private file's content is never exposed mid-save.
+			// New file: no mode to copy, so take the default the OS gives any
+			// new file (0o666 & !umask), as `fs::write` would.
 			use std::os::unix::fs::OpenOptionsExt;
-			options.mode(0o600);
+			options.mode(if original_perms.is_some() { 0o600 } else { 0o666 });
 		}
 		let mut f = options.open(&tmp_path)?;
 		f.write_all(bytes)?;
@@ -218,5 +223,25 @@ mod tests {
 		for p in [&link, &mid, &target] {
 			fs::remove_file(p).unwrap();
 		}
+	}
+
+	#[cfg(unix)]
+	#[test]
+	fn new_file_gets_default_permissions_not_owner_only() {
+		// The temp file is opened 0o600 so an existing private file's content
+		// is never exposed mid-save. A new file has no mode to copy, and used
+		// to keep that 0o600: `dan newfile` made files nobody else could read.
+		use std::os::unix::fs::PermissionsExt;
+		let dir = temp_dir();
+		let reference = dir.join("perm_reference.txt");
+		let path = dir.join("perm_new.txt");
+		let _ = fs::remove_file(&reference);
+		let _ = fs::remove_file(&path);
+		fs::write(&reference, b"x").unwrap(); // 0o666 & !umask
+		write(&path, b"x").unwrap();
+		let mode = |p: &Path| fs::metadata(p).unwrap().permissions().mode() & 0o777;
+		assert_eq!(mode(&path), mode(&reference), "got {:o}", mode(&path));
+		fs::remove_file(&reference).unwrap();
+		fs::remove_file(&path).unwrap();
 	}
 }
