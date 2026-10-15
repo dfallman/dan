@@ -104,6 +104,9 @@ pub struct Editor {
 	pub save_as_pending_path: Option<String>,
 	/// Timestamp of the last autosave run; gates the 5-second autosave cadence.
 	pub last_autosave: std::time::Instant,
+	/// Timestamp of the last `autosave` (config) run that writes dirty
+	/// buffers to their files. Unrelated to the swap-file cadence above.
+	pub last_file_autosave: std::time::Instant,
 	/// When open files were last checked for external changes.
 	pub last_disk_poll: std::time::Instant,
 	/// Previous frame's screen buffer; used by the differential renderer.
@@ -276,6 +279,7 @@ impl Editor {
 			prompt_view_start: std::cell::Cell::new(0),
 			save_as_pending_path: None,
 			last_autosave: std::time::Instant::now(),
+			last_file_autosave: std::time::Instant::now(),
 			last_disk_poll: std::time::Instant::now(),
 			last_screen: None,
 			theme: std::sync::Arc::new(crate::ui::theme::Theme::default(is_light_bg)),
@@ -423,6 +427,13 @@ impl Editor {
 				}
 			}
 			self.last_autosave = now;
+		}
+
+		if let Some(interval) = self.config.autosave_interval() {
+			if now.duration_since(self.last_file_autosave) >= interval {
+				did_work |= self.autosave_files();
+				self.last_file_autosave = now;
+			}
 		}
 
 		// Poll formatter receivers on every buffer — a format job may belong

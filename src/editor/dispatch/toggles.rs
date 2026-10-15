@@ -86,6 +86,6 @@ impl Editor {
 	}
 
 	pub(crate) fn cmd_show_version(&mut self) {
-		self.set_status(format!("dan {} ({})", crate::VERSION.trim(), crate::GIT_HASH));
+		self.set_status(format!("dan {} ({})", crate::VERSION, crate::GIT_HASH));
 	}
 }

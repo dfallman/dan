@@ -6,7 +6,8 @@ test-file.txt
 /test
 /scratch.rs
 .DS_Store
-/scripts
+/scripts/*
+!/scripts/release.sh
 /.env
 rustfmt.toml
 *.bak

@@ -20,6 +20,30 @@ impl Editor {
 		}
 	}
 
+	/// Write every dirty file-backed buffer to disk (the `autosave` config
+	/// option). Untitled buffers are left to their swap files, and a buffer
+	/// with an unanswered disk conflict is skipped silently rather than
+	/// re-raising the prompt on every tick. Success is quiet: the dirty
+	/// marker clearing is the feedback. Returns true if anything changed.
+	pub(crate) fn autosave_files(&mut self) -> bool {
+		let cfg = self.config.clone();
+		let mut changed = false;
+		for i in 0..self.buffers.len() {
+			let b = &self.buffers[i];
+			if !b.dirty || b.file_path.is_none() || b.pending_conflict.is_some() {
+				continue;
+			}
+			changed = true;
+			if self.disk_blocks_save(i) {
+				continue;
+			}
+			if let Err(e) = self.buffers[i].save(&cfg) {
+				self.set_status(format!("Autosave failed: {}", e));
+			}
+		}
+		changed
+	}
+
 	/// Every save path calls this before writing buffer `idx`. It folds in
 	/// any disk change not yet seen and refuses while a disk conflict is
 	/// unanswered, so a save never overwrites another program's edit unseen.

@@ -29,6 +29,4 @@ fn main() {
 			println!("cargo:rerun-if-changed=.git/{}", ref_path.trim());
 		}
 	}
-
-	println!("cargo:rerun-if-changed=VERSION");
 }

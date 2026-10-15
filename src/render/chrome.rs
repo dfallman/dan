@@ -812,7 +812,7 @@ pub fn build_help_bar(editor: &Editor, width: u16, h: u16) -> Vec<Window> {
 		fragments: vec![
 			UiFragment { text: " ".to_string(), fg: editor.theme.toolbar_bg, bg: editor.theme.toolbar_bg, is_flex: false, is_bold: false },
 			UiFragment {
-				text: editor.locale.translate(Message::Version(crate::VERSION.trim().to_string(), crate::GIT_HASH.to_string())),
+				text: editor.locale.translate(Message::Version(crate::VERSION.to_string(), crate::GIT_HASH.to_string())),
 				fg: editor.theme.toolbar_fg_dim,
 				bg: editor.theme.toolbar_bg,
 				is_flex: false, is_bold: false,

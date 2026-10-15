@@ -1,9 +1,10 @@
 name: Release
 
 # Build release binaries and attach them to a GitHub release whenever a
-# version tag (e.g. "0.3.2" — no "v" prefix, matching existing tags) is pushed:
+# version tag (e.g. "0.3.2" — no "v" prefix, matching existing tags) is pushed.
+# scripts/release.sh bumps the version, tags, and pushes:
 #
-#   git tag 0.3.7 && git push origin 0.3.7
+#   scripts/release.sh patch
 
 on:
   push:
@@ -44,8 +45,8 @@ jobs:
         run: rustup target add ${{ matrix.target }}
 
       - name: Build (release)
-        # --locked works because the local post-commit hook keeps Cargo.lock's
-        # `dan` version entry in sync with Cargo.toml on every commit.
+        # --locked works because scripts/release.sh bumps Cargo.toml and
+        # Cargo.lock together.
         run: cargo build --release --locked --target ${{ matrix.target }}
 
       - name: Package

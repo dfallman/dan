@@ -47,7 +47,5 @@ jobs:
         echo "version=$version" >> "$GITHUB_OUTPUT"
     - name: Install Rust ${{ steps.msrv.outputs.version }}
       run: rustup toolchain install ${{ steps.msrv.outputs.version }} --profile minimal --no-self-update
-    # No --locked: the commit-msg hook bumps Cargo.toml's version without
-    # regenerating Cargo.lock, so the two legitimately disagree on many commits.
     - name: Check against declared MSRV
-      run: cargo +${{ steps.msrv.outputs.version }} check --all-targets
+      run: cargo +${{ steps.msrv.outputs.version }} check --locked --all-targets

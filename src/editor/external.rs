@@ -515,6 +515,51 @@ mod tests {
 		std::fs::remove_file(&p).ok();
 	}
 
+	fn autosave_due(e: &mut Editor, interval: &str) {
+		e.config.autosave = interval.to_string();
+		e.last_file_autosave = std::time::Instant::now() - std::time::Duration::from_secs(3600);
+	}
+
+	#[test]
+	fn autosave_writes_dirty_buffer_when_due() {
+		let p = temp_file("autosave.txt", "a\n");
+		let mut e = open(&p);
+		e.buffer_mut().insert_str(0, "X");
+		autosave_due(&mut e, "30s");
+		e.poll_async_tasks();
+		assert_eq!(std::fs::read_to_string(&p).unwrap(), "Xa\n");
+		assert!(!e.buffer().dirty);
+		std::fs::remove_file(&p).ok();
+	}
+
+	#[test]
+	fn autosave_waits_for_interval_and_is_off_by_default() {
+		let p = temp_file("autosave_wait.txt", "a\n");
+		let mut e = open(&p);
+		e.buffer_mut().insert_str(0, "X");
+		e.last_file_autosave = std::time::Instant::now() - std::time::Duration::from_secs(3600);
+		e.poll_async_tasks();
+		assert_eq!(std::fs::read_to_string(&p).unwrap(), "a\n", "default is off");
+		e.config.autosave = "5m".to_string();
+		e.last_file_autosave = std::time::Instant::now();
+		e.poll_async_tasks();
+		assert_eq!(std::fs::read_to_string(&p).unwrap(), "a\n", "not due yet");
+		assert!(e.buffer().dirty);
+		std::fs::remove_file(&p).ok();
+	}
+
+	#[test]
+	fn autosave_skips_pending_conflict_without_prompting() {
+		let (mut e, p) = conflicted("autosave_conflict.txt");
+		e.config.autosave = "30s".to_string();
+		let (mode, status) = (e.mode, e.status_msg.clone());
+		e.autosave_files();
+		assert_eq!(std::fs::read_to_string(&p).unwrap(), "a\nDISK\nc\nD\n");
+		assert_eq!(e.mode, mode, "autosave must not raise the conflict prompt");
+		assert_eq!(e.status_msg, status);
+		std::fs::remove_file(&p).ok();
+	}
+
 	#[test]
 	fn palette_close_save_does_not_overwrite_pending_conflict() {
 		let (mut e, p) = conflicted("closesave.txt");

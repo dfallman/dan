@@ -417,6 +417,7 @@ cursor_blink = false        # Blink the terminal cursor (default: false)
 auto_indent = true          # Match indentation of the previous line (default: true)
 auto_close = true           # Auto-insert closing brackets and quotes (default: true)
 syntax_highlight = true     # Enable syntax highlighting (default: true)
+autosave = "none"           # "none" | an interval like "30s", "5m", or "1h": write unsaved files to disk (default: "none")
 
 # Interface
 show_help = true            # Show shortcut bar at the bottom (default: true)

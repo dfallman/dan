@@ -45,8 +45,8 @@ use std::time::Duration;
 
 use crate::editor::Editor;
 
-/// Version from the VERSION file (embedded at compile time).
-pub const VERSION: &str = include_str!("../VERSION");
+/// Version from Cargo.toml (set by scripts/release.sh).
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Short git hash (embedded at compile time by build.rs).
 pub const GIT_HASH: &str = env!("GIT_HASH");
@@ -216,7 +216,7 @@ fn main() -> io::Result<()> {
 	if args.len() > 1 {
 		let flag = args[1].as_str();
 		if matches!(flag, "-v" | "--v" | "--version") {
-			println!("dan {} ({})", VERSION.trim(), GIT_HASH);
+			println!("dan {} ({})", VERSION, GIT_HASH);
 			return Ok(());
 		}
 	}

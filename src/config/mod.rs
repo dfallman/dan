@@ -63,6 +63,11 @@ pub struct Config {
 	pub scrollbar: String,
 	/// Reload/merge open files changed on disk by other programs.
 	pub watch_files: bool,
+	/// Write dirty file-backed buffers to disk on a timer: "none" (the
+	/// default) or a duration such as "30s", "5m", or "1h". A bare integer
+	/// is read as seconds; `false` is the same as "none".
+	#[serde(deserialize_with = "deserialize_autosave")]
+	pub autosave: String,
 }
 
 /// Parsed form of `Config::scrollbar`.
@@ -104,6 +109,7 @@ impl Default for Config {
 			cursor_color: None,
 			scrollbar: "scrolling".to_string(),
 			watch_files: true,
+			autosave: "none".to_string(),
 		}
 	}
 }
@@ -130,6 +136,12 @@ impl Config {
 			"scrolling" => ScrollbarMode::Scrolling,
 			_ => ScrollbarMode::None,
 		}
+	}
+
+	/// Parsed `autosave` interval. `None` means autosave is off: "none",
+	/// "off", "", zero, and unparseable values all disable it.
+	pub fn autosave_interval(&self) -> Option<std::time::Duration> {
+		parse_autosave(&self.autosave)
 	}
 
 	/// Parsed RGB if `cursor_color` is a valid `#RGB` / `#RRGGBB` hex string.
@@ -270,11 +282,79 @@ fn config_path() -> Option<PathBuf> {
 	dirs::config_dir().map(|d| d.join("dan").join("config.toml"))
 }
 
+/// Parse an autosave interval: `<n>` or `<n>s` seconds, `<n>m` minutes,
+/// `<n>h` hours. Anything else, or zero, is `None` (autosave off).
+fn parse_autosave(s: &str) -> Option<std::time::Duration> {
+	let s = s.trim().to_ascii_lowercase();
+	let (num, mult) = match s.char_indices().last()? {
+		(i, 's') => (&s[..i], 1),
+		(i, 'm') => (&s[..i], 60),
+		(i, 'h') => (&s[..i], 3600),
+		_ => (s.as_str(), 1),
+	};
+	let n: u64 = num.trim().parse().ok()?;
+	let secs = n.checked_mul(mult)?;
+	(secs > 0).then(|| std::time::Duration::from_secs(secs))
+}
+
+/// Accept `autosave = "5m"`, `autosave = 30` (seconds), or `autosave = false`
+/// so a natural-looking value doesn't fail the whole config file.
+fn deserialize_autosave<'de, D: serde::Deserializer<'de>>(d: D) -> Result<String, D::Error> {
+	#[derive(Deserialize)]
+	#[serde(untagged)]
+	enum Raw {
+		Str(String),
+		Secs(u64),
+		Bool(#[allow(dead_code)] bool),
+	}
+	Ok(match Raw::deserialize(d)? {
+		Raw::Str(s) => s,
+		Raw::Secs(n) => n.to_string(),
+		Raw::Bool(_) => "none".to_string(),
+	})
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
 
 	use crossterm::cursor::SetCursorStyle;
+
+	#[test]
+	fn autosave_defaults_off() {
+		assert_eq!(Config::default().autosave_interval(), None);
+	}
+
+	#[test]
+	fn autosave_intervals_parse() {
+		use std::time::Duration;
+		for (raw, want) in [
+			("30s", Some(30)),
+			("5m", Some(300)),
+			("1h", Some(3600)),
+			("45", Some(45)),
+			(" 2M ", Some(120)),
+			("none", None),
+			("off", None),
+			("", None),
+			("0s", None),
+			("5x", None),
+			("m", None),
+		] {
+			assert_eq!(parse_autosave(raw), want.map(Duration::from_secs), "{raw:?}");
+		}
+	}
+
+	#[test]
+	fn autosave_from_toml_accepts_string_int_and_bool() {
+		use std::time::Duration;
+		let c: Config = toml::from_str(r#"autosave = "5m""#).unwrap();
+		assert_eq!(c.autosave_interval(), Some(Duration::from_secs(300)));
+		let c: Config = toml::from_str("autosave = 30").unwrap();
+		assert_eq!(c.autosave_interval(), Some(Duration::from_secs(30)));
+		let c: Config = toml::from_str("autosave = false").unwrap();
+		assert_eq!(c.autosave_interval(), None);
+	}
 
 	#[test]
 	fn cursor_defaults() {
