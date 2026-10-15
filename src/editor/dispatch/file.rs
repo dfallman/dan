@@ -148,6 +148,16 @@ impl Editor {
 		self.promote_info_banner();
 	}
 
+	/// Esc in the recovery prompt: edit the file as it is on disk and leave
+	/// the swap for next time. The buffer gets no swap this session, since
+	/// autosave would overwrite the one being kept and a save would delete it.
+	pub(crate) fn cmd_recover_swap_later(&mut self) {
+		self.buffer_mut().swp_path = None;
+		self.mode = Mode::Editing;
+		self.promote_info_banner();
+		self.set_status("Recovery postponed — reopen the file to decide; no crash recovery until then");
+	}
+
 	pub(crate) fn cmd_copy_path_abs(&mut self) {
 		match self.buffer().file_path.clone() {
 			Some(p) => {

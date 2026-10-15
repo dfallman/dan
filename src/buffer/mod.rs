@@ -61,6 +61,8 @@ pub struct Buffer {
 	pub encoding: &'static encoding_rs::Encoding,
 	/// Path of the `.swp` crash-recovery file for this buffer, if any.
 	pub swp_path: Option<PathBuf>,
+	/// Held while this buffer edits its file; see `recovery::SwapLock`.
+	pub swap_lock: Option<crate::recovery::SwapLock>,
 	/// Cursors / selections for this buffer.
 	pub cursors: crate::editor::cursor::CursorSet,
 	/// Viewport scroll offset (top visible line) for this buffer.
@@ -128,6 +130,7 @@ impl Buffer {
 			wrap_edit: crate::editor::layout::WrapEditHint::None,
 			encoding: encoding_rs::UTF_8,
 			swp_path: None,
+			swap_lock: None,
 			cursors: crate::editor::cursor::CursorSet::new(),
 			scroll_y: 0,
 			scroll_vrow: 0,
@@ -199,13 +202,14 @@ impl Buffer {
 		let buffer = Self {
 			text: text.clone(),
 			history: History::new(),
-			file_path: Some(path.to_path_buf()),
+			file_path: Some(crate::utils::absolute_path(path)),
 			dirty: false,
 			version: 0,
 			wrap_cache: crate::editor::layout::WrapCache::default(),
 			wrap_edit: crate::editor::layout::WrapEditHint::None,
 			encoding,
 			swp_path: None,
+			swap_lock: None,
 			cursors: crate::editor::cursor::CursorSet::new(),
 			scroll_y: 0,
 			scroll_vrow: 0,
@@ -336,6 +340,25 @@ impl Buffer {
 		}
 	}
 
+	/// Point crash recovery at `path`: release any previous lock, take this
+	/// file's lock, and adopt its swap. If another running dan holds the
+	/// lock, the buffer runs without a swap (touching that instance's would
+	/// clobber or delete its recovery data) and the holder's PID is returned.
+	pub fn claim_swap(&mut self, path: &Path) -> Option<u32> {
+		self.swap_lock = None;
+		match crate::recovery::lock_file(path) {
+			crate::recovery::LockOutcome::HeldBy(pid) => {
+				self.swp_path = None;
+				Some(pid)
+			}
+			crate::recovery::LockOutcome::Acquired(lock) => {
+				self.swap_lock = lock;
+				self.swp_path = Some(crate::recovery::get_swap_path(path));
+				None
+			}
+		}
+	}
+
 	/// Save the buffer to a specific path (Save As). Uses the same atomic
 	/// temp+rename strategy as `save`.
 	pub fn save_to(&mut self, path: &Path, config: &crate::config::Config) -> io::Result<()> {
@@ -349,10 +372,10 @@ impl Buffer {
 		if let Some(ref swp) = self.swp_path {
 			crate::recovery::cleanup_swap(swp);
 		}
-		self.file_path = Some(path.to_path_buf());
+		self.file_path = Some(crate::utils::absolute_path(path));
 		// Adopt a swap path keyed to the new file so autosave / crash recovery
 		// keeps covering this buffer after Save-As (P0-1).
-		self.swp_path = Some(crate::recovery::get_swap_path(path));
+		self.claim_swap(path);
 
 		self.dirty = false;
 		Ok(())
@@ -377,10 +400,14 @@ impl Buffer {
 
 	/// Get the full path representation for this buffer. Same suffix rule as
 	/// `display_name` for unpathed buffers.
+	/// `$HOME` is shown as `~` to keep the (absolute) path short.
 	pub fn full_path_display(&self) -> String {
 		self.file_path
 			.as_ref()
-			.map(|p| p.display().to_string())
+			.map(|p| match dirs::home_dir().and_then(|h| p.strip_prefix(h).ok().map(Path::to_path_buf)) {
+				Some(rest) => Path::new("~").join(rest).display().to_string(),
+				None => p.display().to_string(),
+			})
 			.unwrap_or_else(|| self.untitled_label())
 	}
 

@@ -6,8 +6,8 @@
 # builds the binaries, publishes the GitHub release, and updates the
 # Homebrew tap.
 #
-#   scripts/release.sh            minor: 0.4.2 -> 0.5.0
-#   scripts/release.sh patch      0.4.2 -> 0.4.3
+#   scripts/release.sh            patch: 0.4.2 -> 0.4.3
+#   scripts/release.sh minor      0.4.2 -> 0.5.0
 #   scripts/release.sh major      0.4.2 -> 1.0.0
 #   scripts/release.sh 0.6.0      that version exactly
 #
@@ -51,7 +51,7 @@ while [ $# -gt 0 ]; do
 		;;
 	esac
 done
-bump="${bump:-minor}"
+bump="${bump:-patch}"
 
 cd "$(git rev-parse --show-toplevel)"
 

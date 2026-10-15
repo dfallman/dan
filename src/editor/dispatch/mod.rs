@@ -137,6 +137,7 @@ impl Editor {
 			Command::CancelQuit => self.cmd_cancel_quit(),
 			Command::RecoverSwapAccept => self.cmd_recover_swap_accept(),
 			Command::RecoverSwapDecline => self.cmd_recover_swap_decline(),
+			Command::RecoverSwapLater => self.cmd_recover_swap_later(),
 			Command::ExternalKeepMine => self.cmd_external_resolve(Resolution::Mine),
 			Command::ExternalTakeTheirs => self.cmd_external_resolve(Resolution::Theirs),
 			Command::ExternalDecideLater => self.cmd_external_resolve(Resolution::Later),

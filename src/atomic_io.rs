@@ -86,13 +86,17 @@ pub fn write(path: &Path, bytes: &[u8]) -> io::Result<()> {
 	Ok(())
 }
 
-/// If `path` is a symlink, return its resolved destination (one hop is
-/// enough — `fs::rename` operates by name, so we only need to know whether
-/// the final component is a symlink and where it points). Relative link
-/// targets are resolved against the symlink's parent.
+/// If `path` is a symlink, return the regular file it finally points to.
+/// Following the whole chain matters: renaming onto an intermediate hop of
+/// `a -> b -> c` would replace link `b` with a regular file. A dangling link
+/// (target not created yet) falls back to one hop, with relative targets
+/// resolved against the symlink's parent.
 fn resolve_symlink_target(path: &Path) -> io::Result<PathBuf> {
 	match fs::symlink_metadata(path) {
 		Ok(md) if md.file_type().is_symlink() => {
+			if let Ok(real) = fs::canonicalize(path) {
+				return Ok(real);
+			}
 			let link = fs::read_link(path)?;
 			if link.is_absolute() {
 				Ok(link)
@@ -187,5 +191,32 @@ mod tests {
 
 		fs::remove_file(&link).unwrap();
 		fs::remove_file(&target).unwrap();
+	}
+
+	#[cfg(unix)]
+	#[test]
+	fn writes_through_symlink_chain_preserves_every_link() {
+		// a -> b -> real: renaming onto `b` (one hop) would replace link b
+		// with a regular file and leave `real` stale.
+		use std::os::unix::fs::symlink;
+		let dir = temp_dir();
+		let target = dir.join("chain_real.txt");
+		let mid = dir.join("chain_b.txt");
+		let link = dir.join("chain_a.txt");
+		fs::write(&target, b"original").unwrap();
+		let _ = fs::remove_file(&mid);
+		let _ = fs::remove_file(&link);
+		symlink(&target, &mid).unwrap();
+		symlink(&mid, &link).unwrap();
+
+		write(&link, b"updated").unwrap();
+
+		assert!(fs::symlink_metadata(&mid).unwrap().file_type().is_symlink(), "middle link was replaced");
+		assert!(fs::symlink_metadata(&link).unwrap().file_type().is_symlink(), "outer link was replaced");
+		assert_eq!(fs::read_to_string(&target).unwrap(), "updated");
+
+		for p in [&link, &mid, &target] {
+			fs::remove_file(p).unwrap();
+		}
 	}
 }

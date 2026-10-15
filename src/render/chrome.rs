@@ -989,7 +989,11 @@ pub fn build_prompt(editor: &Editor, width: u16, h: u16) -> Option<Vec<Window>> 
 		}
 		Mode::RecoverSwap => {
 			let label = editor.locale.translate(Message::PromptRecoverTitle);
-			let msg = editor.locale.translate(Message::PromptRecoverMsg);
+			let msg = editor.locale.translate(if editor.recover_swap_older {
+				Message::PromptRecoverOlderMsg
+			} else {
+				Message::PromptRecoverMsg
+			});
 			
 			let mut fragments = vec![
 				UiFragment { bg: editor.theme.prompt_danger_bg, fg: editor.theme.prompt_danger_fg, text: format!(" {} ", label), is_flex: false, is_bold: true },

@@ -223,9 +223,10 @@ impl Editor {
 		}
 		match crate::buffer::Buffer::from_file(&path) {
 			Ok((mut new_buf, _et, _tw)) => {
-				// Preserve crash-recovery coverage across reload (P0-1):
-				// from_file leaves swp_path None.
-				new_buf.swp_path = Some(crate::recovery::get_swap_path(&path));
+				// Preserve crash-recovery coverage and the file lock across
+				// reload (P0-1): from_file leaves both None.
+				new_buf.swp_path = self.buffer().swp_path.clone();
+				new_buf.swap_lock = self.buffer_mut().swap_lock.take();
 				self.buffers[self.active_buffer] = new_buf;
 				self.set_status(format!("Reloaded {}", path.display()));
 			}

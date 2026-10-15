@@ -88,7 +88,9 @@ pub fn load_recent_files() -> Vec<RecentFile> {
     let Some(path) = recent_files_path() else { return Vec::new() };
     let Ok(content) = std::fs::read_to_string(&path) else { return Vec::new() };
     let mut list: Vec<RecentFile> = serde_json::from_str(&content).unwrap_or_default();
-    list.retain(|r| r.path.exists());
+    // Relative entries (written before paths were stored absolute) can't be
+    // resolved: they'd open whichever same-named file is in the cwd.
+    list.retain(|r| r.path.is_absolute() && r.path.exists());
     list
 }
 

@@ -191,7 +191,7 @@ fn map_recover_swap_key(key: &KeyEvent) -> Command {
 		KeyCode::Char('y') | KeyCode::Char('Y') if ctrl => Command::RecoverSwapAccept,
 		KeyCode::Char('n') | KeyCode::Char('N') if ctrl => Command::RecoverSwapDecline,
 		KeyCode::Char('q') | KeyCode::Char('Q') if ctrl => Command::ForceQuitAll,
-		KeyCode::Esc => Command::ForceQuitAll,
+		KeyCode::Esc => Command::RecoverSwapLater,
 		_ => Command::Noop,
 	}
 }
@@ -643,7 +643,7 @@ mod tests {
 			("recover ctrl+y", key(KeyCode::Char('y'), M::CONTROL), Mode::RecoverSwap, Command::RecoverSwapAccept),
 			("recover ctrl+n", key(KeyCode::Char('n'), M::CONTROL), Mode::RecoverSwap, Command::RecoverSwapDecline),
 			("recover ctrl+q", key(KeyCode::Char('q'), M::CONTROL), Mode::RecoverSwap, Command::ForceQuitAll),
-			("recover esc", key(KeyCode::Esc, M::NONE), Mode::RecoverSwap, Command::ForceQuitAll),
+			("recover esc", key(KeyCode::Esc, M::NONE), Mode::RecoverSwap, Command::RecoverSwapLater),
 			("recover a noop", key(KeyCode::Char('a'), M::NONE), Mode::RecoverSwap, Command::Noop),
 			("ext ctrl+k", key(KeyCode::Char('k'), M::CONTROL), Mode::ConfirmExternalConflict, Command::ExternalKeepMine),
 			("ext ctrl+t", key(KeyCode::Char('t'), M::CONTROL), Mode::ConfirmExternalConflict, Command::ExternalTakeTheirs),

@@ -57,6 +57,9 @@ pub struct Editor {
 	pub status_msg: Option<String>,
 	/// Sniff-override INFO bar (above help/toolbar); cleared on next key.
 	pub info_banner: Option<InfoBanner>,
+	/// The pending recovery swap predates the file's last modification, so
+	/// recovering it would undo newer changes; the prompt warns.
+	pub recover_swap_older: bool,
 	/// Whether the editor should quit.
 	pub should_quit: bool,
 	/// Horizontal scroll offset (first visible column, used when wrap_lines=false).
@@ -257,6 +260,7 @@ impl Editor {
 			mode: Mode::Editing,
 			status_msg: None,
 			info_banner: None,
+			recover_swap_older: false,
 			should_quit: false,
 			scroll_x: 0,
 			sys_clipboard: system_clipboard(),
@@ -419,9 +423,13 @@ impl Editor {
 					if let Some(ref swp) = buf.swp_path {
 						let text_clone = buf.text.clone(); // O(1) Arc shallow clone
 						let p = swp.clone();
+						// Read on this thread: a save/close after this point
+						// retires the write instead of letting it resurrect
+						// the swap.
+						let generation = crate::recovery::swap_generation(&p);
 						std::thread::spawn(move || {
 							let content = text_clone.to_string_full();
-							crate::recovery::write_swap_atomic(&p, &content);
+							crate::recovery::write_swap_if_current(&p, generation, &content);
 						});
 					}
 				}
@@ -537,17 +545,15 @@ impl Editor {
 	/// If a buffer with the same path is already open, just switches to it
 	/// rather than loading a duplicate copy.
 	pub fn open_file(&mut self, path: &std::path::Path) -> std::io::Result<()> {
-		// Already open? Just switch.
-		if let Some(idx) = self
-			.buffers
-			.iter()
-			.position(|b| b.file_path.as_deref() == Some(path))
-		{
+		// Already open? Just switch. Compared by file identity, not spelling:
+		// `foo.md`, `./foo.md`, and `/abs/foo.md` are one file, and two buffers
+		// on it would share a swap and clobber each other on save.
+		if let Some(idx) = self.buffer_index_for(path) {
 			self.active_buffer = idx;
 			return Ok(());
 		}
 
-		let (mut buffer, sniffed_expand_tab, sniffed_tab_width) = Buffer::from_file(path)?;
+		let (buffer, sniffed_expand_tab, sniffed_tab_width) = Buffer::from_file(path)?;
 
 		self.config.apply_editorconfig(path);
 
@@ -564,13 +570,12 @@ impl Editor {
 		let changed = self.config.expand_tab != before_expand
 			|| self.config.tab_width != before_width;
 
-		let swp_path = crate::recovery::get_swap_path(path);
-		let recovering = crate::recovery::check_recovery(&swp_path).is_some();
-
-		if recovering {
-			self.mode = Mode::RecoverSwap;
-		}
-		buffer.swp_path = Some(swp_path);
+		// User has explicitly chosen to open a file — the auto-created startup
+		// scratch (if it's still pristine) has served its placeholder duty.
+		self.maybe_dispose_startup_scratch();
+		self.buffers.push(buffer);
+		self.active_buffer = self.buffers.len() - 1;
+		let recovering = self.attach_swap(path);
 
 		if changed {
 			self.set_info_banner(
@@ -579,14 +584,45 @@ impl Editor {
 				recovering,
 			);
 		}
-
-		// User has explicitly chosen to open a file — the auto-created startup
-		// scratch (if it's still pristine) has served its placeholder duty.
-		self.maybe_dispose_startup_scratch();
-		self.buffers.push(buffer);
-		self.active_buffer = self.buffers.len() - 1;
 		self.push_recent_file(path);
 		Ok(())
+	}
+
+	/// Give the active buffer, just pointed at `path`, its swap and lock, and
+	/// raise the recovery prompt if a swap holds unsaved work. Used for both
+	/// existing files and not-yet-created ones (`dan new.md` after a crash
+	/// must still offer the swap rather than overwrite it). Returns true if
+	/// the prompt was raised.
+	pub fn attach_swap(&mut self, path: &std::path::Path) -> bool {
+		if let Some(pid) = self.buffer_mut().claim_swap(path) {
+			let name = self.buffer().display_name();
+			self.set_status(format!(
+				"{name} is already open in dan (pid {pid}) — editing without crash recovery"
+			));
+			return false;
+		}
+		let Some(swp) = self.buffer().swp_path.clone() else { return false };
+		match crate::recovery::check_recovery(&swp) {
+			None => false,
+			// Identical to the file: nothing to recover (e.g. a swap left by
+			// a save racing the autosave). Drop it rather than prompt.
+			Some(swap) if self.buffer().text.eq_str(&swap) => {
+				crate::recovery::cleanup_swap(&swp);
+				false
+			}
+			Some(_) => {
+				self.recover_swap_older = crate::recovery::swap_older_than(&swp, path);
+				self.mode = Mode::RecoverSwap;
+				true
+			}
+		}
+	}
+
+	/// Index of the buffer editing the same file as `path`, if any.
+	pub fn buffer_index_for(&self, path: &std::path::Path) -> Option<usize> {
+		self.buffers.iter().position(|b| {
+			b.file_path.as_deref().is_some_and(|p| crate::utils::same_file(p, path))
+		})
 	}
 
 	/// Record that `path` was opened just now. Promotes it to the front of the
@@ -594,13 +630,16 @@ impl Editor {
 	/// list dirty so `poll_async_tasks` will persist it.
 	pub fn push_recent_file(&mut self, path: &std::path::Path) {
 		use std::time::{SystemTime, UNIX_EPOCH};
+		// The list is global and outlives this process's cwd, so it must
+		// never hold a relative path.
+		let path = crate::utils::absolute_path(path);
 		let unix = SystemTime::now()
 			.duration_since(UNIX_EPOCH)
 			.map(|d| d.as_secs())
 			.unwrap_or(0);
 		self.recent_files.retain(|r| r.path != path);
 		self.recent_files.push_front(crate::palette::index::RecentFile {
-			path: path.to_path_buf(),
+			path,
 			last_opened_unix: unix,
 		});
 		while self.recent_files.len() > 50 {
@@ -782,6 +821,18 @@ impl Editor {
 			})
 			.collect();
 		crate::crash::publish(entries);
+	}
+
+	/// Write every dirty buffer's swap now, on this thread. For shutdown by
+	/// signal (SIGHUP when the terminal closes, SIGTERM), where the periodic
+	/// background write could be up to 5 s behind and the process exits
+	/// before a spawned writer would finish.
+	pub fn flush_swaps_now(&self) {
+		for buf in self.buffers.iter().filter(|b| b.dirty) {
+			if let Some(ref swp) = buf.swp_path {
+				crate::recovery::write_swap_atomic(swp, &buf.text.to_string_full());
+			}
+		}
 	}
 
 	/// Set a status message.
@@ -1667,5 +1718,231 @@ mod tests {
 		e.execute(Command::InsertString("save".into()));
 		assert_eq!(e.palette.query, "save");
 		assert_eq!(e.buffer().text.to_string_full(), "DOC\n");
+	}
+
+	fn ident_dir(name: &str) -> std::path::PathBuf {
+		let d = std::env::temp_dir().join(format!("dan_ident_{}_{}", name, std::process::id()));
+		let _ = std::fs::remove_dir_all(&d);
+		std::fs::create_dir_all(&d).unwrap();
+		d
+	}
+
+	#[cfg(unix)]
+	#[test]
+	fn open_file_dedupes_by_identity_not_spelling() {
+		// Two spellings of one file used to load two buffers that shared a
+		// swap and overwrote each other on save.
+		let d = ident_dir("dedupe");
+		let real = d.join("real");
+		std::fs::create_dir_all(&real).unwrap();
+		std::os::unix::fs::symlink(&real, d.join("link")).unwrap();
+		let f = real.join("f.txt");
+		std::fs::write(&f, "x\n").unwrap();
+
+		let mut e = Editor::new();
+		e.open_file(&f).unwrap();
+		e.open_file(&real.join(".").join("f.txt")).unwrap();
+		e.open_file(&d.join("link").join("f.txt")).unwrap();
+		assert_eq!(e.buffers.len(), 1, "one file must map to one buffer");
+		std::fs::remove_dir_all(&d).ok();
+	}
+
+	#[test]
+	fn recent_files_are_stored_absolute() {
+		// The recent list is global: a bare "playground.md" from one repo
+		// reopened the same-named file in whatever directory dan ran next.
+		let mut e = Editor::new();
+		e.recent_files.clear();
+		e.push_recent_file(std::path::Path::new("playground.md"));
+		let stored = &e.recent_files[0].path;
+		assert!(stored.is_absolute(), "stored {}", stored.display());
+		assert_eq!(stored, &std::env::current_dir().unwrap().join("playground.md"));
+	}
+
+	#[test]
+	fn open_file_drops_swap_identical_to_disk() {
+		let d = ident_dir("sameswap");
+		let f = d.join("f.txt");
+		std::fs::write(&f, "same\n").unwrap();
+		let swp = crate::recovery::get_swap_path(&f);
+		std::fs::write(&swp, "same\n").unwrap();
+
+		let mut e = Editor::new();
+		e.open_file(&f).unwrap();
+		assert_ne!(e.mode, Mode::RecoverSwap, "nothing to recover, so no prompt");
+		assert!(!swp.exists(), "the redundant swap should be removed");
+		std::fs::remove_dir_all(&d).ok();
+	}
+
+	#[test]
+	fn open_file_offers_swap_that_differs_from_disk() {
+		let d = ident_dir("diffswap");
+		let f = d.join("f.txt");
+		std::fs::write(&f, "saved\n").unwrap();
+		let swp = crate::recovery::get_swap_path(&f);
+		std::fs::write(&swp, "unsaved edits\n").unwrap();
+
+		let mut e = Editor::new();
+		e.open_file(&f).unwrap();
+		assert_eq!(e.mode, Mode::RecoverSwap);
+		std::fs::remove_dir_all(&d).ok();
+	}
+
+	#[test]
+	fn save_as_onto_a_file_open_elsewhere_is_refused() {
+		use crate::editor::commands::Command;
+		let d = ident_dir("saveas");
+		let f = d.join("f.txt");
+		std::fs::write(&f, "theirs\n").unwrap();
+
+		let mut e = Editor::new();
+		e.open_file(&f).unwrap();
+		e.push_new_untitled();
+		e.execute(Command::InsertString("mine".into()));
+		e.save_as_input = f.display().to_string();
+		e.mode = Mode::SaveAs;
+		e.execute(Command::SaveAsConfirm);
+
+		assert_eq!(std::fs::read_to_string(&f).unwrap(), "theirs\n");
+		assert_ne!(e.mode, Mode::ConfirmOverwrite, "must not even offer to overwrite");
+		assert!(e.buffer().file_path.is_none(), "the untitled buffer keeps no path");
+		std::fs::remove_dir_all(&d).ok();
+	}
+
+	#[test]
+	fn flush_swaps_now_writes_dirty_buffers_synchronously() {
+		let d = ident_dir("flush");
+		let swp = d.join("x.swp");
+		let mut e = Editor::new();
+		e.buffer_mut().swp_path = Some(swp.clone());
+		e.execute(crate::editor::commands::Command::InsertString("unsaved".into()));
+		assert!(e.buffer().dirty);
+		e.flush_swaps_now();
+		assert_eq!(std::fs::read_to_string(&swp).unwrap(), "unsaved");
+		std::fs::remove_dir_all(&d).ok();
+	}
+
+	fn swap_case(name: &str, disk: &str, swap: &str) -> (std::path::PathBuf, std::path::PathBuf, std::path::PathBuf) {
+		let d = ident_dir(name);
+		let f = d.join("f.txt");
+		std::fs::write(&f, disk).unwrap();
+		let swp = crate::recovery::get_swap_path(&f);
+		std::fs::write(&swp, swap).unwrap();
+		(d, f, swp)
+	}
+
+	#[test]
+	fn esc_in_recovery_prompt_keeps_the_swap_for_next_time() {
+		use crate::editor::commands::Command;
+		let (d, f, swp) = swap_case("later", "disk\n", "unsaved\n");
+		let mut e = Editor::new();
+		e.open_file(&f).unwrap();
+		assert_eq!(e.mode, Mode::RecoverSwap);
+		e.execute(Command::RecoverSwapLater);
+		assert_eq!(e.mode, Mode::Editing);
+		assert!(!e.should_quit, "Esc must no longer quit the editor");
+		assert_eq!(e.buffer().text.to_string_full(), "disk\n");
+
+		// Editing, swap flushes, and saving must all leave the kept swap alone.
+		e.execute(Command::InsertString("x".into()));
+		e.flush_swaps_now();
+		e.execute(Command::Save);
+		assert_eq!(std::fs::read_to_string(&swp).unwrap(), "unsaved\n");
+		std::fs::remove_dir_all(&d).ok();
+		crate::recovery::cleanup_swap(&swp);
+	}
+
+	#[test]
+	fn recovery_prompt_warns_when_swap_is_older_than_file() {
+		let (d, f, swp) = swap_case("older", "newer on disk\n", "old swap\n");
+		let past = std::time::SystemTime::now() - std::time::Duration::from_secs(60);
+		std::fs::File::options().write(true).open(&swp).unwrap().set_modified(past).unwrap();
+		let mut e = Editor::new();
+		e.open_file(&f).unwrap();
+		assert_eq!(e.mode, Mode::RecoverSwap);
+		assert!(e.recover_swap_older);
+
+		let (d2, f2, _) = swap_case("newer", "disk\n", "fresh swap\n");
+		let mut e = Editor::new();
+		e.open_file(&f2).unwrap();
+		assert!(!e.recover_swap_older);
+		std::fs::remove_dir_all(&d).ok();
+		std::fs::remove_dir_all(&d2).ok();
+	}
+
+	#[test]
+	fn new_file_offers_swap_left_by_a_crash_before_first_save() {
+		let d = ident_dir("newfile");
+		let f = d.join("never-saved.md");
+		let swp = crate::recovery::get_swap_path(&f);
+		std::fs::write(&swp, "typed before the crash\n").unwrap();
+
+		let mut e = Editor::new();
+		e.buffer_mut().file_path = Some(f.clone());
+		e.attach_swap(&f);
+		assert_eq!(e.mode, Mode::RecoverSwap);
+		e.execute(crate::editor::commands::Command::RecoverSwapAccept);
+		assert_eq!(e.buffer().text.to_string_full(), "typed before the crash\n");
+		std::fs::remove_dir_all(&d).ok();
+	}
+
+	#[test]
+	fn quit_prompt_discard_removes_the_swap() {
+		// ^F in the quit prompt is an explicit "throw this away": its swap
+		// must go, or the next open offers the discarded content back.
+		use crate::editor::commands::Command;
+		let d = ident_dir("discard");
+		let f = d.join("f.txt");
+		std::fs::write(&f, "a\n").unwrap();
+		let mut e = Editor::new();
+		e.open_file(&f).unwrap();
+		e.execute(Command::InsertString("edit".into()));
+		e.flush_swaps_now();
+		let swp = e.buffer().swp_path.clone().unwrap();
+		assert!(swp.exists());
+		e.execute(Command::Quit);
+		assert_eq!(e.mode, Mode::ConfirmQuit);
+		e.execute(Command::ForceQuit);
+		assert!(!swp.exists(), "discarded content must not be offered for recovery");
+		std::fs::remove_dir_all(&d).ok();
+	}
+
+	#[cfg(unix)]
+	#[test]
+	fn file_open_in_another_dan_gets_no_swap_and_no_prompt() {
+		let (d, f, swp) = swap_case("othdan", "disk\n", "the other dan's live edits\n");
+		// Stand-in for another dan: a child copy of this test binary holding
+		// the file's lock (same exe name, so it passes the liveness check).
+		let mut child = std::process::Command::new(std::env::current_exe().unwrap())
+			.args(["--ignored", "--exact", "recovery::tests::lock_holder_sleeper", "-q"])
+			.stdout(std::process::Stdio::null())
+			.spawn()
+			.unwrap();
+		let lock_path = {
+			let crate::recovery::LockOutcome::Acquired(Some(lock)) = crate::recovery::lock_file(&f) else {
+				panic!("lock should be free");
+			};
+			let p = crate::recovery::tests::lock_path_of(&lock);
+			std::mem::forget(lock);
+			p
+		};
+		std::fs::write(&lock_path, child.id().to_string()).unwrap();
+
+		let mut e = Editor::new();
+		e.open_file(&f).unwrap();
+		assert_eq!(e.mode, Mode::Editing, "the other instance's swap is not a crash leftover");
+		assert!(e.buffer().swp_path.is_none());
+		assert!(e.status_msg.as_deref().unwrap_or("").contains("already open in dan"));
+		e.execute(crate::editor::commands::Command::InsertString("x".into()));
+		e.flush_swaps_now();
+		e.close_buffer(e.active_buffer).unwrap();
+		assert_eq!(std::fs::read_to_string(&swp).unwrap(), "the other dan's live edits\n");
+		assert!(lock_path.exists(), "closing must not release a lock we don't hold");
+
+		child.kill().ok();
+		child.wait().ok();
+		std::fs::remove_file(&lock_path).ok();
+		crate::recovery::cleanup_swap(&swp);
+		std::fs::remove_dir_all(&d).ok();
 	}
 }

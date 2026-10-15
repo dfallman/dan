@@ -124,6 +124,7 @@ pub enum Command {
 
 	RecoverSwapAccept,
 	RecoverSwapDecline,
+	RecoverSwapLater,
 	ExternalKeepMine,
 	ExternalTakeTheirs,
 	ExternalDecideLater,

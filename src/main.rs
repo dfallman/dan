@@ -232,13 +232,16 @@ fn main() -> io::Result<()> {
 				std::process::exit(1);
 			}
 		} else {
-			// Create a new buffer with the target path for saving
-			editor.buffer_mut().file_path = Some(path.to_path_buf());
-			// Swap path keyed to the target so autosave / crash recovery cover
-			// edits to a not-yet-existing file (P0-1).
-			editor.buffer_mut().swp_path = Some(crate::recovery::get_swap_path(path));
+			// Create a new buffer with the target path for saving. Stored
+			// absolute so identity checks and the recent list don't depend
+			// on the directory dan was launched from.
+			editor.buffer_mut().file_path = Some(crate::utils::absolute_path(path));
 			editor.config.apply_editorconfig(path); // Apply layout rules perfectly even for new files!
 			editor.set_status(format!("[New File] {}", args[1]));
+			// Swap + lock keyed to the target so autosave / crash recovery
+			// cover edits to a not-yet-existing file (P0-1), and a swap left
+			// by a crash before its first save is offered, not overwritten.
+			editor.attach_swap(path);
 		}
 	} else {
 		// No file argument: greet the user with the palette open. The startup
@@ -363,10 +366,13 @@ fn run_loop(
 ) -> io::Result<()> {
 	loop {
 		// A SIGTERM/SIGHUP/SIGQUIT triggers graceful shutdown via the
-		// existing terminal-restoration path in `main`. The most-recent
-		// state should already be in the autosave swap-file (5s cadence).
+		// existing terminal-restoration path in `main`. Flush swaps first and
+		// skip the render: the periodic swap can be 5 s stale, and after a
+		// SIGHUP the TTY is gone, so a render would error out of the loop.
 		if shutdown_signal.load(Ordering::Relaxed) {
+			editor.flush_swaps_now();
 			editor.should_quit = true;
+			break;
 		}
 
 		render::render(editor, writer)?;
@@ -384,6 +390,7 @@ fn run_loop(
 		// soon as stdin is readable.
 		let evt = loop {
 			if shutdown_signal.load(Ordering::Relaxed) {
+				editor.flush_swaps_now();
 				editor.should_quit = true;
 				return Ok(());
 			}

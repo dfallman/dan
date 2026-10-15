@@ -106,6 +106,13 @@ impl Editor {
 					return;
 				}
 			}
+			// Saving onto a file another buffer is editing would leave two
+			// buffers on one file, sharing a swap and overwriting each other.
+			if let Some(other) = self.buffer_index_for(path).filter(|&i| i != self.active_buffer) {
+				let name = self.buffers[other].display_name();
+				self.set_status(format!("{} is open in another buffer — close it first", name));
+				return;
+			}
 			// Check if file already exists — ask for overwrite confirmation.
 			if path.exists() {
 				self.save_as_pending_path = Some(path_str);

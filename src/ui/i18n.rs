@@ -40,6 +40,7 @@ pub enum Message {
     PromptGoToLineHint(usize),
     PromptRecoverTitle,
     PromptRecoverMsg,
+    PromptRecoverOlderMsg,
     PromptExternalTitle,
     PromptExternalMsg(usize),
     PromptSaveAs,
@@ -116,7 +117,8 @@ impl Locale for EnglishLocale {
             Message::PromptGoToLine => "Goto row:".to_string(),
             Message::PromptGoToLineHint(lines) => format!("(1-{})", lines),
             Message::PromptRecoverTitle => "Recovery".to_string(),
-            Message::PromptRecoverMsg => "Recovery swap file detected. Restore unsaved changes? ^Y Yes, ^N No, ^Q or Esc to quit".to_string(),
+            Message::PromptRecoverMsg => "Recovery swap file detected. Restore unsaved changes? ^Y Yes, ^N No, Esc Later, ^Q Quit".to_string(),
+            Message::PromptRecoverOlderMsg => "Swap is older than the file — restoring may undo newer changes. Restore? ^Y Yes, ^N No, Esc Later, ^Q Quit".to_string(),
             Message::PromptExternalTitle => "Changed on disk".to_string(),
             Message::PromptExternalMsg(n) => format!(
                 "{} section{} also edited here. ^K Keep mine, ^T Take theirs, Esc Decide later",
@@ -208,7 +210,10 @@ impl Locale for SwedishLocale {
             Message::PromptGoToLineHint(lines) => format!("(1-{})", lines),
             Message::PromptRecoverTitle => "Återställning".to_string(),
             Message::PromptRecoverMsg => {
-                "Återställningsfil hittades. Återställ osparade ändringar? ^Y Ja, ^N Nej, ^Q eller Esc för att avsluta".to_string()
+                "Återställningsfil hittades. Återställ osparade ändringar? ^Y Ja, ^N Nej, Esc Senare, ^Q Avsluta".to_string()
+            }
+            Message::PromptRecoverOlderMsg => {
+                "Återställningsfilen är äldre än filen — att återställa kan ångra nyare ändringar. Återställ? ^Y Ja, ^N Nej, Esc Senare, ^Q Avsluta".to_string()
             }
             Message::PromptExternalTitle => "Ändrad på disk".to_string(),
             Message::PromptExternalMsg(n) => format!(
@@ -297,6 +302,7 @@ fn all_message_samples() -> Vec<Message> {
         Message::PromptGoToLineHint(10),
         Message::PromptRecoverTitle,
         Message::PromptRecoverMsg,
+        Message::PromptRecoverOlderMsg,
         Message::PromptExternalTitle,
         Message::PromptExternalMsg(2),
         Message::PromptSaveAs,
