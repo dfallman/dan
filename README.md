@@ -1,13 +1,13 @@
 # dan
 **A modern, multi-platform terminal text editor that's light, quick, and intuitive, yet _very_ capable** 
 
-Dan is a modeless terminal editor that, despite being [highly configurable](#configuration), needs no dotfile to get started. [Install Dan](#installation) and start editing: `dan ~/my-file.txt`. It uses [familiar keyboard shortcuts](#keyboard-shortcuts): `Ctrl-S` to save, `Ctrl-Q` to quit, `Ctrl-F` to search. Hit `Ctrl-H` for an inline help bar and `Ctrl-P` for a command palette from which [every feature](#features) in Dan is readily available. 
+Dan is a modeless terminal editor that, despite being [highly configurable](#configuration), needs no dotfile to get started. [Install Dan](#installation) and start editing: `dan ~/my-file.txt`. It uses [familiar keyboard shortcuts](#keyboard-shortcuts) such as `Ctrl-P` for a command palette from which [all commands and features](#features) of Dan are at hand. 
 
 <p align="center">
     <img width="800" alt="Dan" src="https://github.com/user-attachments/assets/a872bf6d-98a2-46c6-b18d-837a5d355c8d" />
 </p>
 
-Dan ships with [sensible defaults](#configuration) intended to suit most users and use-cases out of the box. [Under the hood](#Features), it keeps input latency low over SSH links, employs advanced render optimizations, and its modern rope-based buffer keeps editing responsive on files far past the point where most editors stall, and it employs atomic writes and advanced crash recovery. Try Dan with 100 MB+ logs, it opens and scrolls without hesitation. Dan is written entirely in Rust for safety, reliability, and performance, and runs on Linux, macOS, BSD, and Windows.
+Dan ships with [sensible defaults](#configuration) intended to suit most users and use-cases out of the box. [Under the hood](#Features), it recognizes and, if it can, automatically merges changes elsewhere to an open buffer; keeps input latency low over SSH links; employs advanced render optimizations; and its modern rope-based buffer keeps editing responsive on files far past the point where most editors stall, and it employs atomic writes and advanced crash recovery. Try Dan with 100 MB+ logs, it opens and scrolls without hesitation. Dan is written entirely in Rust for safety, reliability, and performance, and runs on Linux, macOS, BSD, and Windows.
 
 ### Architectural comparison
 
@@ -388,7 +388,7 @@ Copy-Item target\release\dan.exe ~/.cargo/bin/
 
 # Configuration
 
-Dan works without any configuration file. To customize it, create `~/.config/dan/config.toml` (on Windows: `C:\Users\<username>\AppData\Roaming\dan\config.toml`) and add the options you want to change. Full defaults are shown below for reference.
+Dan works without any configuration file and does not create one by default. To customize Dan, create the file `~/.config/dan/config.toml` (on Windows: `C:\Users\<username>\AppData\Roaming\dan\config.toml`) and add the options you want to change below (or, jyst copy and paste the entire file). The below settings are the defaults.
 
 ```
 dan ~/.config/dan/config.toml
