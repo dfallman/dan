@@ -1,13 +1,13 @@
 # dan
-**A modern, multi-platform terminal text editor that's light, quick, and intuitive, yet _very_ capable** 
+**Dan is a modern terminal text editor built for performance, safety, and security** 
 
-Dan is a modeless terminal editor that, despite being [highly configurable](#configuration), needs no dotfile to get started. [Install Dan](#installation) and start editing: `dan ~/my-file.txt`. It uses [familiar keyboard shortcuts](#keyboard-shortcuts) such as `Ctrl-P` for a command palette from which [all commands and features](#features) of Dan are at hand. 
+Dan is a modeless, multi-platform terminal text editor that's intuitive and easy to use and that, despite being [highly configurable](#configuration), needs no dotfile to get started. Just [Install Dan](#installation) and start editing: `dan ~/my-file.txt`. It uses [familiar keyboard shortcuts](#keyboard-shortcuts) and [sensible defaults](#configuration). 
 
 <p align="center">
     <img width="800" alt="Dan" src="https://github.com/user-attachments/assets/a872bf6d-98a2-46c6-b18d-837a5d355c8d" />
 </p>
 
-Dan ships with [sensible defaults](#configuration) intended to suit most users and use-cases out of the box. [Under the hood](#Features), it recognizes and, if it can, automatically merges changes elsewhere to an open buffer; keeps input latency low over SSH links; employs advanced render optimizations; and its modern rope-based buffer keeps editing responsive on files far past the point where most editors stall, and it employs atomic writes and advanced crash recovery. Try Dan with 100 MB+ logs, it opens and scrolls without hesitation. Dan is written entirely in Rust for safety, reliability, and performance, and runs on Linux, macOS, BSD, and Windows.
+Try Dan with 100 MB+ logs, it opens and scrolls without hesitation. Dan is written entirely in Rust for safety, reliability, and performance, and runs on Linux, macOS, BSD, and Windows.
 
 ### Architectural comparison
 
@@ -388,7 +388,7 @@ Copy-Item target\release\dan.exe ~/.cargo/bin/
 
 # Configuration
 
-Dan works without any configuration file and does not create one by default. To customize Dan, create the file `~/.config/dan/config.toml` (on Windows: `C:\Users\<username>\AppData\Roaming\dan\config.toml`) and add the options you want to change below (or, jyst copy and paste the entire file). The below settings are the defaults.
+Dan works without any configuration file and does not create one by default. To customize Dan, create the file `~/.config/dan/config.toml` (on Windows: `C:\Users\<username>\AppData\Roaming\dan\config.toml`) and add the options you want to change below (or, just copy and paste the entire file). The below settings are the defaults.
 
 ```
 dan ~/.config/dan/config.toml
