@@ -62,7 +62,7 @@ Modeless editing with the shortcuts you already know: `Ctrl-S`, `Ctrl-Z`, and `C
 <tr>
 <td valign="top">
 
-**Works alongside coding agents**<br>
+**Works alongside coding agents and team members**<br>
 When an agent, a formatter, or `git checkout` changes an open file, Dan merges it with your unsaved edits and highlights what changed. [More →](#files-changed-on-disk)
 
 </td>
