@@ -7,7 +7,7 @@ Dan is modeless and multi-platform: it works on macOS, Linux, and Windows. It's 
     <img width="800" alt="Dan" src="https://github.com/user-attachments/assets/a872bf6d-98a2-46c6-b18d-837a5d355c8d" />
 </p>
 
-Try Dan with 100 MB+ logs, it opens and scrolls without hesitation. Dan is written entirely in Rust for safety, reliability, and performance, and runs on Linux, macOS, BSD, and Windows.
+Try Dan with 100 MB+ logs, it opens and scrolls without hesitation. Dan is written entirely in [Rust](https://rust-lang.org/).
 
 ### Architectural comparison
 
