@@ -1,7 +1,7 @@
 # dan
 **Dan is a modern terminal text editor built for performance, safety, and security** 
 
-Dan is a modeless, multi-platform terminal text editor that's intuitive and easy to use and that, despite being [highly configurable](#configuration), needs no dotfile to get started. Just [Install Dan](#installation) and start editing: `dan ~/my-file.txt`. It uses [familiar keyboard shortcuts](#keyboard-shortcuts) and [sensible defaults](#configuration). 
+Dan is modeless and multi-platform. It's intuitive and easy to use, and, despite being [highly configurable](#configuration), needs no dotfile to get started. Just [Install Dan](#installation) and start editing: `dan ~/my-file.txt`. It uses [familiar keyboard shortcuts](#keyboard-shortcuts) and [sensible defaults](#configuration). 
 
 <p align="center">
     <img width="800" alt="Dan" src="https://github.com/user-attachments/assets/a872bf6d-98a2-46c6-b18d-837a5d355c8d" />
